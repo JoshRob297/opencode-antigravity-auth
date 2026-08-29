@@ -55,7 +55,7 @@
         "@vitest/ui": "^3.0.0",
         "typescript": "^5.0.0",
         "vitest": "^3.0.0",
-        "zod-to-json-schema": "^3.25.1"
+        "zod-to-json-schema": "^3.25.2"
     },
     "dependencies": {
         "@opencode-ai/plugin": "^0.15.30",
