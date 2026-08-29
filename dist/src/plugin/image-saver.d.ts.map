@@ -1,0 +1,1 @@
+{"version":3,"file":"image-saver.d.ts","sourceRoot":"","sources":["../../../src/plugin/image-saver.ts"],"names":[],"mappings":"AAAA;;;;GAIG;AA0CH;;;;;;GAMG;AACH,wBAAgB,eAAe,CAAC,UAAU,EAAE,MAAM,EAAE,QAAQ,EAAE,MAAM,GAAG,MAAM,CAgB5E;AAED;;;;;;GAMG;AACH,wBAAgB,gBAAgB,CAAC,UAAU,EAAE;IAAE,QAAQ,CAAC,EAAE,MAAM,CAAC;IAAC,IAAI,CAAC,EAAE,MAAM,CAAA;CAAE,GAAG,MAAM,GAAG,IAAI,CAkBhG"}
