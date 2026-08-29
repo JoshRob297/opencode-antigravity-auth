@@ -10,34 +10,29 @@ opencode auth login  # Run again to add more accounts
 
 ## Load Balancing Behavior
 
-- **Sticky account selection** — Sticks to the same account until rate-limited (preserves Anthropic's prompt cache)
+- **Sticky account selection** — Sticks to the same account until rate-limited (preserves prompt caching)
 - **Per-model-family limits** — Rate limits tracked separately for Claude and Gemini models
-- **Antigravity-first for Gemini** — All Gemini requests use Antigravity quota first, then automatically fall back to Gemini CLI when exhausted across all accounts
+- **Account rotation** — Smooth automatic failover to next available account upon rate limiting
 - **Smart retry threshold** — Short rate limits (≤5s) are retried on same account
 - **Exponential backoff** — Increasing delays for consecutive rate limits
 
 ---
 
-## Dual Quota Pools
+## Quota Pools & Windows
 
-For Gemini models, the plugin accesses **two independent quota pools** per account:
+For Antigravity models, the plugin monitors official **5-hour** and **Weekly** usage windows per account:
 
-| Quota Pool | When Used |
-|------------|-----------|
-| **Antigravity** | Default for all requests |
-| **Gemini CLI** | Automatic fallback between Antigravity and Gemini CLI in both directions |
+| Window | Frequency | Description |
+|--------|-----------|-------------|
+| **5h Window** | Every 5 hours | Rolling burst bucket for immediate development sprints |
+| **Weekly Window** | Every 7 days | Macro limit for weekly development capacity |
 
-This effectively **doubles your Gemini quota** through automatic fallback between Antigravity and Gemini CLI pools.
+### How Account Rotation Works
 
-### How Quota Fallback Works
-
-1. Request uses Antigravity quota on current account
-2. If rate-limited, plugin checks if ANY other account has Antigravity available
-3. If yes → switch to that account (stay on Antigravity)
-4. If no (all accounts exhausted) → fall back to Gemini CLI quota on current account
-5. Model names are automatically transformed (e.g., `gemini-3-flash` → `gemini-3-flash-preview`)
-
-Automatic fallback between pools is always enabled for Gemini requests.
+1. Request uses current active account
+2. If rate-limited or quota is exhausted, plugin checks if ANY other account is available
+3. If yes → switches to the next healthy account automatically
+4. Model names and variant thinking configs are preserved seamlessly across rotations
 
 ---
 
@@ -142,7 +137,7 @@ Accounts are stored in `~/.config/opencode/antigravity-accounts.json`:
 |-------|-------------|
 | `email` | Google account email |
 | `refreshToken` | OAuth refresh token (auto-managed) |
-| `projectId` | Optional. Required for Gemini CLI models. See [Troubleshooting](TROUBLESHOOTING.md#gemini-cli-permission-error). |
+| `projectId` | Optional Google Cloud project ID (auto-discovered). |
 | `enabled` | Optional. Set to `false` to disable account rotation. Defaults to `true`. |
 | `activeIndex` | Currently active account index |
 | `activeIndexByFamily` | Per-model-family active account (claude/gemini tracked separately) |

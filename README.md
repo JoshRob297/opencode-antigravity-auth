@@ -1,4 +1,4 @@
-# Antigravity + Gemini CLI OAuth Plugin for OpenCode (Revived & Extended)
+# Antigravity OAuth Plugin for OpenCode (Revived & Extended)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/JoshRob297/opencode-antigravity-auth/actions/workflows/ci.yml/badge.svg)](https://github.com/JoshRob297/opencode-antigravity-auth/actions/workflows/ci.yml)
@@ -16,7 +16,7 @@
 | 🚀 **Gemini 3.7 Flash Support** | Backend returned `404 NOT_FOUND` (rewritten as *"enable preview access"* or `429`) when invoking `gemini-3.7-flash`. | Discovered that Google restricts 3.7 Flash strictly to official CLI signatures. The plugin now dynamically presents the official Antigravity CLI client signature (`antigravity/cli/...`), unlocking full native access to **Gemini 3.7 Flash (Low/Medium/High)**. |
 | 🛠️ **IAM 403 Permission Denied Fix** | Requests failed with `403 IAM_PERMISSION_DENIED` on `projects/rising-fact-p41fc` for instances requiring `cloudaicompanion.instances.completeTask`. | Fixed two core bugs in `project.ts`: corrected `metadata.platform` from invalid `MACOS/WINDOWS` enums to `PLATFORM_UNSPECIFIED` and updated the discovery User-Agent, allowing automatic resolution and persistence of the account's real `managedProjectId`. |
 | ⚡ **Gemini 3.6 Flash & 3.5 Flash** | Native multi-tier backend model resolution (`gemini-3.6-flash-{low,medium,high}` and `gemini-3.5-flash-{low,high}`). | Multi-tier thinking resolution support built into `model-resolver.ts`. |
-| 🧹 **Clean CI & Community Standards** | Upstream had broken npm publishing actions and no rulesets. | Replaced with clean, automated Node.js CI with **1,010 tests passing**, security policies, and Dependabot groups. |
+| 🧹 **Clean CI & Community Standards** | Upstream had broken npm publishing actions and no rulesets. | Replaced with clean, automated Node.js CI with **1,026 tests passing**, security policies, and Dependabot groups. |
 
 ---
 
@@ -26,7 +26,7 @@ Enable OpenCode to authenticate against **Antigravity** (Google's IDE) via OAuth
 
 - **Gemini 3.7 Flash, 3.6 Flash, 3.1 Pro/Flash**, and **Claude Opus 4.6, Sonnet 4.6** via Google OAuth
 - **Multi-account support** — add multiple Google accounts, auto-rotates when rate-limited
-- **Dual quota system** — access both Antigravity and Gemini CLI quotas from one plugin
+- **Native Quota Tool (`antigravity_quota`)** — dual-window 5h and Weekly quota tracking with progress bars
 - **Thinking models** — extended thinking for Claude and Gemini 3 with configurable budgets / thinking levels
 - **Google Search grounding** — enable web search for Gemini models (auto or always-on)
 - **Auto-recovery** — handles session errors and tool failures automatically
@@ -245,7 +245,7 @@ Permission 'cloudaicompanion.companions.generateChat' denied on resource
 '//cloudaicompanion.googleapis.com/projects/rising-fact-p41fc/locations/global'
 ```
 
-**Cause:** Plugin falls back to a default project ID when no valid project is found. This works for Antigravity but fails for Gemini CLI models.
+**Cause:** Plugin falls back to a default project ID when no valid project is found. Fixed in v1.7.0+ by automatic discovery of the account's real `managedProjectId`.
 
 **Solution:**
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
@@ -535,7 +535,6 @@ Most users don't need to configure anything — defaults work well.
 |--------|---------|--------------
 | `keep_thinking` | `false` | Preserve Claude's thinking across turns. **Warning:** enabling may degrade model stability. |
 | `session_recovery` | `true` | Auto-recover from tool errors |
-| `cli_first` | `false` | Route Gemini models to Gemini CLI first (Claude and image models stay on Antigravity). |
 
 ### Account Rotation
 
@@ -599,7 +598,7 @@ See the full [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for solutions to c
 - Auth problems and token refresh
 - "Model not found" errors
 - Session recovery
-- Gemini CLI permission errors
+- IAM and Google Cloud project permission errors
 - Safari OAuth issues
 - Plugin compatibility
 - Migration guides

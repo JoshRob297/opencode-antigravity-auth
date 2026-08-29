@@ -188,7 +188,7 @@ Claude rejects unsupported JSON Schema features. The plugin uses an **allowlist 
 
 1. **Sticky selection** - Same account until rate limited (preserves cache)
 2. **Per-model-family** - Claude/Gemini rate limits tracked separately
-3. **Dual quota (Gemini)** - Antigravity + Gemini CLI headers
+3. **Dual-window tracking** - Official 5-hour and Weekly quota windows
 4. **Automatic failover** - On 429, switch to next available account
 
 ### Account Storage

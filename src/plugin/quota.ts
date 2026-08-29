@@ -118,10 +118,11 @@ export function shortEmail(email: string): string {
 }
 
 export function progressBar(percent: number, width = 10): string {
-  const filled = Math.round((Math.max(0, Math.min(100, percent)) / 100) * width);
+  const clamped = Math.max(0, Math.min(100, percent));
+  const filled = Math.round((clamped / 100) * width);
   const empty = width - filled;
   const bar = "█".repeat(filled) + "░".repeat(empty);
-  return `[${bar}] ${percent.toFixed(0)}%`;
+  return `[${bar}] ${clamped.toFixed(0)}%`;
 }
 
 function buildAuthFromAccount(account: AccountMetadataV3): OAuthAuthDetails {
@@ -161,15 +162,15 @@ export async function fetchQuotaSummary(
   projectId?: string,
 ): Promise<CloudCodeQuotaSummaryResponse> {
   const endpoint = ANTIGRAVITY_ENDPOINT_PROD;
-  const quotaUserAgent = getAntigravityHeaders()["User-Agent"] || "antigravity";
+  const antigravityHeaders = getAntigravityHeaders();
   const body = projectId ? { project: projectId } : {};
 
   const response = await fetchWithTimeout(`${endpoint}/v1internal:retrieveUserQuotaSummary`, {
     method: "POST",
     headers: {
+      ...antigravityHeaders,
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
-      "User-Agent": quotaUserAgent,
     },
     body: JSON.stringify(body),
   });
@@ -186,15 +187,15 @@ export async function fetchAvailableModels(
   projectId?: string,
 ): Promise<FetchAvailableModelsResponse> {
   const endpoint = ANTIGRAVITY_ENDPOINT_PROD;
-  const quotaUserAgent = getAntigravityHeaders()["User-Agent"] || "antigravity";
+  const antigravityHeaders = getAntigravityHeaders();
   const body = projectId ? { project: projectId } : {};
 
   const response = await fetchWithTimeout(`${endpoint}/v1internal:fetchAvailableModels`, {
     method: "POST",
     headers: {
+      ...antigravityHeaders,
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
-      "User-Agent": quotaUserAgent,
     },
     body: JSON.stringify(body),
   });
@@ -448,6 +449,10 @@ export async function checkAccountsQuota(
 }
 
 export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string {
+  if (results.length === 0) {
+    return "# ☁️ Antigravity Quota Status\n\nNo accounts configured.\n";
+  }
+
   let output = "# ☁️ Antigravity Quota Status\n\n";
   const errors: string[] = [];
 
@@ -456,6 +461,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
   if (hasGroups) {
     interface AccountGroupRow {
       email: string;
+      disabled?: boolean;
       fiveHour?: { percentage: number; resetIn: string };
       weekly?: { percentage: number; resetIn: string };
     }
@@ -482,6 +488,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
 
         groupMap.get(groupKey)!.push({
           email: result.email || `account-${result.index + 1}`,
+          disabled: result.disabled,
           fiveHour: g.fiveHour ? { percentage: g.fiveHour.remainingPercentage, resetIn: g.fiveHour.timeUntilResetFormatted } : undefined,
           weekly: g.weekly ? { percentage: g.weekly.remainingPercentage, resetIn: g.weekly.timeUntilResetFormatted } : undefined,
         });
@@ -510,7 +517,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
         const fiveHourReset = acc.fiveHour ? acc.fiveHour.resetIn : "-";
         const weeklyBar = acc.weekly ? progressBar(acc.weekly.percentage) : "N/A";
         const weeklyReset = acc.weekly ? acc.weekly.resetIn : "-";
-        const email = shortEmail(acc.email);
+        const email = `${shortEmail(acc.email)}${acc.disabled ? " (disabled)" : ""}`;
 
         const fBarCol = fiveHourBar.padEnd(20, " ");
         const fResetCol = fiveHourReset.padEnd(12, " ");
@@ -523,7 +530,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
     }
   } else {
     // Fallback model list format
-    const familyMap = new Map<string, Map<string, { percentage: number; resetIn: string }>>();
+    const familyMap = new Map<string, Map<string, { percentage: number; resetIn: string; disabled?: boolean }>>();
 
     for (const result of results) {
       if (result.status === "error" || !result.models) {
@@ -548,6 +555,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
           accountMap.set(accKey, {
             percentage: model.remainingPercentage,
             resetIn: model.timeUntilResetFormatted,
+            disabled: result.disabled,
           });
         }
       }
@@ -568,6 +576,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
         email,
         percentage: info.percentage,
         resetIn: info.resetIn,
+        disabled: info.disabled,
       }));
 
       const sorted = accountsList.sort((a, b) => b.percentage - a.percentage);
@@ -575,7 +584,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
       for (const acc of sorted) {
         const bar = progressBar(acc.percentage).padEnd(20, " ");
         const reset = acc.resetIn.padEnd(12, " ");
-        const email = shortEmail(acc.email);
+        const email = `${shortEmail(acc.email)}${acc.disabled ? " (disabled)" : ""}`;
         output += `${bar}${reset}${email}\n`;
       }
       output += "```\n\n";
