@@ -273,14 +273,14 @@ export const AntigravityConfigSchema = z.object({
     /**
      * Scheduling mode for rate limit behavior.
      *
-     * - `cache_first`: Wait for same account to recover (preserves prompt cache). Default.
-     * - `balance`: Switch account immediately on rate limit. Maximum availability.
+     * - `balance`: Switch account immediately on rate limit. Maximum availability (Default).
+     * - `cache_first`: Wait for same account to recover (preserves prompt cache).
      * - `performance_first`: Round-robin distribution for maximum throughput.
      *
      * Env override: OPENCODE_ANTIGRAVITY_SCHEDULING_MODE
-     * @default "cache_first"
+     * @default "balance"
      */
-    scheduling_mode: SchedulingModeSchema.default('cache_first'),
+    scheduling_mode: SchedulingModeSchema.default('balance'),
     /**
      * Maximum seconds to wait for same account in cache_first mode.
      * If the account's rate limit reset time exceeds this, switch accounts.
@@ -404,7 +404,7 @@ export const DEFAULT_CONFIG = {
     account_selection_strategy: 'hybrid',
     pid_offset_enabled: false,
     switch_on_first_rate_limit: true,
-    scheduling_mode: 'cache_first',
+    scheduling_mode: 'balance',
     max_cache_first_wait_seconds: 60,
     failure_ttl_seconds: 3600,
     default_retry_after_seconds: 60,

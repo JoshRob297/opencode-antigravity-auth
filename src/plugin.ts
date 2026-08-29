@@ -1059,8 +1059,8 @@ function formatWaitTime(ms: number): string {
 }
 
 // Progressive rate limit retry delays
-const FIRST_RETRY_DELAY_MS = 1000;      // 1s - first 429 quick retry on same account
-const SWITCH_ACCOUNT_DELAY_MS = 5000;   // 5s - delay before switching to another account
+const FIRST_RETRY_DELAY_MS = 500;       // 500ms - first 429 quick retry on same account (transient RPM)
+const SWITCH_ACCOUNT_DELAY_MS = 500;    // 500ms - instant fast failover to another account
 
 /**
  * Rate limit state tracking with time-window deduplication.
@@ -2155,15 +2155,20 @@ export const createAntigravityPlugin = (providerId: string) => async (
 
                   const accountLabel = account.email || `Account ${account.index + 1}`;
 
-                  // Progressive retry for standard 429s: 1st 429 → 1s then switch (if enabled) or retry same
+                  // Progressive retry for standard 429s: 1st 429 → fast failover or quick retry
+                  if (rateLimitReason === "QUOTA_EXHAUSTED" && accountCount > 1) {
+                    accountManager.markRateLimitedWithReason(account, family, headerStyle, model, rateLimitReason, serverRetryMs, config.failure_ttl_seconds * 1000);
+                    accountManager.requestSaveToDisk();
+                    pushDebug(`QUOTA_EXHAUSTED on account ${account.index}, immediate failover to next account`);
+                    await showToast(`Quota exhausted on ${account.email || `Account ${account.index + 1}`}. Switching account...`, "warning");
+                    shouldSwitchAccount = true;
+                    break;
+                  }
+
                   if (attempt === 1 && rateLimitReason !== "QUOTA_EXHAUSTED") {
-                    await showToast(`Rate limited. Quick retry in 1s...`, "warning");
-                    await sleep(FIRST_RETRY_DELAY_MS, abortSignal);
-                    
-                    // CacheFirst mode: wait for same account if within threshold (preserves prompt cache)
+                    // CacheFirst mode: wait for same account ONLY if explicitly requested and no other account is ready
                     if (config.scheduling_mode === 'cache_first') {
                       const maxCacheFirstWaitMs = config.max_cache_first_wait_seconds * 1000;
-                      // effectiveDelayMs is the backoff calculated for this account
                       if (effectiveDelayMs <= maxCacheFirstWaitMs) {
                         pushDebug(`cache_first: waiting ${effectiveDelayMs}ms for same account to recover`);
                         await showToast(`⏳ Waiting ${Math.ceil(effectiveDelayMs / 1000)}s for same account (prompt cache preserved)...`, "info");
@@ -2173,7 +2178,6 @@ export const createAntigravityPlugin = (providerId: string) => async (
                         i -= 1;
                         continue;
                       }
-                      // Wait time exceeds threshold, fall through to switch
                       pushDebug(`cache_first: wait ${effectiveDelayMs}ms exceeds max ${maxCacheFirstWaitMs}ms, switching account`);
                     }
                     
@@ -2182,6 +2186,9 @@ export const createAntigravityPlugin = (providerId: string) => async (
                       shouldSwitchAccount = true;
                       break;
                     }
+                    
+                    await showToast(`Rate limited. Quick retry in ${FIRST_RETRY_DELAY_MS}ms...`, "warning");
+                    await sleep(FIRST_RETRY_DELAY_MS, abortSignal);
                     
                     // Same endpoint retry for first RPM hit
                     i -= 1; 
@@ -2198,7 +2205,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
                       // Check if any other account has Antigravity quota for this model
                       if (hasOtherAccountWithAntigravity(account)) {
                         pushDebug(`antigravity exhausted on account ${account.index}, but available on others. Switching account.`);
-                        await showToast(`Rate limited again. Switching account in 5s...`, "warning");
+                        await showToast(`Rate limited on ${account.email || `Account ${account.index + 1}`}. Switching account...`, "warning");
                         await sleep(SWITCH_ACCOUNT_DELAY_MS, abortSignal);
                         shouldSwitchAccount = true;
                         break;
@@ -2250,9 +2257,9 @@ export const createAntigravityPlugin = (providerId: string) => async (
 
                   if (accountCount > 1) {
                     const quotaMsg = bodyInfo.quotaResetTime 
-                      ? ` (quota resets ${bodyInfo.quotaResetTime})`
+                      ? ` (resets ${bodyInfo.quotaResetTime})`
                       : ``;
-                    await showToast(`Rate limited again. Switching account in 5s...${quotaMsg}`, "warning");
+                    await showToast(`Switching to next account...${quotaMsg}`, "warning");
                     await sleep(SWITCH_ACCOUNT_DELAY_MS, abortSignal);
                   } else {
                     // Single account: exponential backoff (1s, 2s, 4s, 8s... max 60s)
