@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.0] - 2026-08-29
+
+### Added
+
+- **Native Dual-Window Quota Tool (`antigravity_quota`)** - Embedded the official `antigravity_quota` tool directly into the auth plugin. Connects to `/v1internal:retrieveUserQuotaSummary` providing official **5-hour** and **Weekly** usage windows with progress bars and reset countdowns across all accounts.
+- **Enhanced CLI Quota Inspection (`opencode auth login`)** - Completely updated the interactive quota visualizer to show dual-window quota groups with color-coded progress bars for Gemini and Claude models.
+- **Unit Test Suite Expansion** - Added `src/plugin/quota.test.ts` covering duration formatters, percentage bars, and markdown report generation (1,010 passing tests).
+
 ## [1.7.0] - 2026-08-28
 
 ### Added

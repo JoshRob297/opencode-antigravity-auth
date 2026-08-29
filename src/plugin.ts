@@ -44,7 +44,7 @@ import { AccountManager, type ModelFamily, parseRateLimitReason, calculateBackof
 import { createAutoUpdateCheckerHook } from "./hooks/auto-update-checker";
 import { loadConfig, initRuntimeConfig, type AntigravityConfig } from "./plugin/config";
 import { createSessionRecoveryHook, getRecoverySuccessToast } from "./plugin/recovery";
-import { checkAccountsQuota } from "./plugin/quota";
+import { checkAccountsQuota, formatQuotaReportMarkdown } from "./plugin/quota";
 import { initDiskSignatureCache } from "./plugin/cache";
 import { createProactiveRefreshQueue, type ProactiveRefreshQueue } from "./plugin/refresh-queue";
 import { initLogger, createLogger } from "./plugin/logger";
@@ -157,8 +157,8 @@ async function triggerAsyncQuotaRefreshForAccount(
     
     const results = await checkAccountsQuota([singleAccount], client, providerId);
     
-    if (results[0]?.status === "ok" && results[0]?.quota?.groups) {
-      accountManager.updateQuotaCache(accountIndex, results[0].quota.groups);
+    if (results[0]?.status === "ok" && results[0]?.cachedQuota) {
+      accountManager.updateQuotaCache(accountIndex, results[0].cachedQuota);
       accountManager.requestSaveToDisk();
     }
   } catch (err) {
@@ -1389,10 +1389,31 @@ export const createAntigravityPlugin = (providerId: string) => async (
     },
   });
 
+  // Create antigravity_quota tool with dual-window quota report
+  const antigravityQuotaTool = tool({
+    description: "Get antigravity quota for all accounts",
+    args: {},
+    async execute(_args, _ctx) {
+      log.debug("Antigravity Quota tool called");
+      try {
+        const storage = await loadAccounts();
+        if (!storage || !storage.accounts || storage.accounts.length === 0) {
+          return "❌ Error: No Google Antigravity accounts found in configuration. Please run `opencode auth login` first.";
+        }
+
+        const quotaResults = await checkAccountsQuota(storage.accounts, client, providerId);
+        return formatQuotaReportMarkdown(quotaResults);
+      } catch (error) {
+        return `Error retrieving Antigravity quota: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    },
+  });
+
   return {
     event: eventHandler,
     tool: {
       google_search: googleSearchTool,
+      antigravity_quota: antigravityQuotaTool,
     },
     auth: {
     provider: providerId,
@@ -2597,7 +2618,6 @@ export const createAntigravityPlugin = (providerId: string) => async (
                       reset: '\x1b[0m',
                     };
 
-                    // Get color based on remaining percentage
                     const getColor = (remaining?: number): string => {
                       if (typeof remaining !== 'number') return colors.reset;
                       if (remaining < 0.2) return colors.red;
@@ -2605,7 +2625,6 @@ export const createAntigravityPlugin = (providerId: string) => async (
                       return colors.green;
                     };
 
-                    // Helper to create colored progress bar
                     const createProgressBar = (remaining?: number, width: number = 20): string => {
                       if (typeof remaining !== 'number') return '░'.repeat(width) + ' ???';
                       const filled = Math.round(remaining * width);
@@ -2616,83 +2635,40 @@ export const createAntigravityPlugin = (providerId: string) => async (
                       return `${bar} ${pct}`;
                     };
 
-                    // Helper to format reset time with days support
-                    const formatReset = (resetTime?: string): string => {
-                      if (!resetTime) return '';
-                      const ms = Date.parse(resetTime) - Date.now();
-                      if (ms <= 0) return ' (resetting...)';
-                      
-                      const hours = ms / (1000 * 60 * 60);
-                      if (hours >= 24) {
-                        const days = Math.floor(hours / 24);
-                        const remainingHours = Math.floor(hours % 24);
-                        if (remainingHours > 0) {
-                          return ` (resets in ${days}d ${remainingHours}h)`;
+                    if (res.groups && res.groups.length > 0) {
+                      res.groups.forEach((g) => {
+                        console.log(`\n  ┌─ ${g.displayName}`);
+                        if (g.fiveHour) {
+                          const bar = createProgressBar(g.fiveHour.remainingFraction);
+                          const reset = ` (resets in ${g.fiveHour.timeUntilResetFormatted})`;
+                          const labelCol = "5h Window".padEnd(20);
+                          console.log(`  │  ├─ ${labelCol} ${bar}${reset}`);
                         }
-                        return ` (resets in ${days}d)`;
-                      }
-                      return ` (resets in ${formatWaitTime(ms)})`;
-                    };
-
-                    // Display Gemini CLI Quota first (as requested - swap order)
-                    const hasGeminiCli = res.geminiCliQuota && res.geminiCliQuota.models.length > 0;
-                    console.log(`\n  ┌─ Gemini CLI Quota`);
-                    if (!hasGeminiCli) {
-                      const errorMsg = res.geminiCliQuota?.error || "No Gemini CLI quota available";
-                      console.log(`  │  └─ ${errorMsg}`);
-                    } else {
-                      const models = res.geminiCliQuota!.models;
-                      models.forEach((model, idx) => {
-                        const isLast = idx === models.length - 1;
+                        if (g.weekly) {
+                          const bar = createProgressBar(g.weekly.remainingFraction);
+                          const reset = ` (resets in ${g.weekly.timeUntilResetFormatted})`;
+                          const labelCol = "Weekly Window".padEnd(20);
+                          console.log(`  │  └─ ${labelCol} ${bar}${reset}`);
+                        }
+                      });
+                    } else if (res.models && res.models.length > 0) {
+                      console.log(`\n  ┌─ Available Models Quota`);
+                      res.models.forEach((m, idx) => {
+                        const isLast = idx === res.models!.length - 1;
                         const connector = isLast ? "└─" : "├─";
-                        const bar = createProgressBar(model.remainingFraction);
-                        const reset = formatReset(model.resetTime);
-                        const modelName = model.modelId.padEnd(29);
+                        const bar = createProgressBar(m.remainingFraction);
+                        const reset = ` (resets in ${m.timeUntilResetFormatted})`;
+                        const modelName = m.label.padEnd(29);
                         console.log(`  │  ${connector} ${modelName} ${bar}${reset}`);
                       });
-                    }
-
-                    // Display Antigravity Quota second
-                    const hasAntigravity = res.quota && Object.keys(res.quota.groups).length > 0;
-                    console.log(`  │`);
-                    console.log(`  └─ Antigravity Quota`);
-                    if (!hasAntigravity) {
-                      const errorMsg = res.quota?.error || "No quota information available";
-                      console.log(`     └─ ${errorMsg}`);
                     } else {
-                      const groups = res.quota!.groups;
-                      const groupEntries = [
-                        { name: "Claude", data: groups.claude },
-                        { name: "Gemini 3 Pro", data: groups["gemini-pro"] },
-                        { name: "Gemini 3 Flash", data: groups["gemini-flash"] },
-                      ].filter(g => g.data);
-                      
-                      groupEntries.forEach((g, idx) => {
-                        const isLast = idx === groupEntries.length - 1;
-                        const connector = isLast ? "└─" : "├─";
-                        const bar = createProgressBar(g.data!.remainingFraction);
-                        const reset = formatReset(g.data!.resetTime);
-                        const modelName = g.name.padEnd(29);
-                        console.log(`     ${connector} ${modelName} ${bar}${reset}`);
-                      });
+                      console.log(`  └─ No quota information available`);
                     }
                     console.log("");
-
-                    // Cache quota data for soft quota protection
-                    if (res.quota?.groups) {
-                      const acc = existingStorage.accounts[res.index];
-                      if (acc) {
-                        acc.cachedQuota = res.quota.groups;
-                        acc.cachedQuotaUpdatedAt = Date.now();
-                        storageUpdated = true;
-                      }
-                    }
 
                     if (res.updatedAccount) {
                       existingStorage.accounts[res.index] = {
                         ...res.updatedAccount,
-                        cachedQuota: res.quota?.groups,
-                        cachedQuotaUpdatedAt: Date.now(),
                       };
                       storageUpdated = true;
                     }
