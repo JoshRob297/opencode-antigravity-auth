@@ -171,6 +171,8 @@ describe("fetchAccountQuotaDetails", () => {
     projectId: "proj1",
     managedProjectId: "managed1",
     enabled: true,
+    addedAt: Date.now(),
+    lastUsed: Date.now(),
   };
 
   beforeEach(() => {
@@ -249,7 +251,7 @@ describe("fetchAccountQuotaDetails", () => {
         refresh: "",
         expires: Date.now() + 3600000,
       },
-      effectiveProjectId: undefined,
+      effectiveProjectId: "p1",
     });
 
     global.fetch = vi.fn(async () => {
@@ -299,7 +301,7 @@ describe("fetchAccountQuotaDetails", () => {
         refresh: "token123",
         expires: Date.now() + 3600000,
       },
-      effectiveProjectId: undefined,
+      effectiveProjectId: "p1",
     });
 
     global.fetch = vi.fn(async () => {
@@ -331,8 +333,8 @@ describe("fetchAccountQuotaDetails", () => {
 
     expect(result.status).toBe("disabled");
     expect(result.disabled).toBe(true);
-    expect(result.groups?.[0].weekly?.remainingFraction).toBe(1);
-    expect(result.groups?.[0].fiveHour?.remainingFraction).toBe(0);
+    expect(result.groups?.[0]?.weekly?.remainingFraction).toBe(1);
+    expect(result.groups?.[0]?.fiveHour?.remainingFraction).toBe(0);
     expect(result.cachedQuota?.claude?.remainingFraction).toBe(0);
   });
 
@@ -415,7 +417,7 @@ describe("fetchAccountQuotaDetails", () => {
 
     vi.mocked(ensureProjectContext).mockResolvedValueOnce({
       auth: { type: "oauth", access: "access", refresh: "token123" },
-      effectiveProjectId: undefined,
+      effectiveProjectId: "p1",
     });
 
     global.fetch = vi.fn(async (url: string) => {
@@ -450,8 +452,8 @@ describe("checkAccountsQuota", () => {
   it("iterates all accounts and calls logQuotaFetch", async () => {
     const client = createMockClient();
     const accounts: AccountMetadataV3[] = [
-      { email: "acc1@test.com", refreshToken: "t1" },
-      { email: "acc2@test.com", refreshToken: "t2" },
+      { email: "acc1@test.com", refreshToken: "t1", addedAt: 0, lastUsed: 0 },
+      { email: "acc2@test.com", refreshToken: "t2", addedAt: 0, lastUsed: 0 },
     ];
 
     vi.mocked(refreshAccessToken).mockResolvedValue({
@@ -462,7 +464,7 @@ describe("checkAccountsQuota", () => {
     });
     vi.mocked(ensureProjectContext).mockResolvedValue({
       auth: { type: "oauth", access: "acc", refresh: "t" },
-      effectiveProjectId: undefined,
+      effectiveProjectId: "p1",
     });
     global.fetch = vi.fn(async () => {
       return new Response(JSON.stringify({ groups: [] }), { status: 200 });
@@ -472,8 +474,8 @@ describe("checkAccountsQuota", () => {
 
     expect(logQuotaFetch).toHaveBeenCalledWith("start", 2);
     expect(results.length).toBe(2);
-    expect(results[0].email).toBe("acc1@test.com");
-    expect(results[1].email).toBe("acc2@test.com");
+    expect(results[0]?.email).toBe("acc1@test.com");
+    expect(results[1]?.email).toBe("acc2@test.com");
   });
 });
 
