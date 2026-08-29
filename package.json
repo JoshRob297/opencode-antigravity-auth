@@ -53,7 +53,7 @@
         "@types/proper-lockfile": "^4.1.4",
         "@vitest/coverage-v8": "^3.0.0",
         "@vitest/ui": "^3.0.0",
-        "typescript": "^5.0.0",
+        "typescript": "^7.0.2",
         "vitest": "^3.0.0",
         "zod-to-json-schema": "^3.25.1"
     },
