@@ -183,7 +183,7 @@ describe("loadAccounts", () => {
 
 describe("saveAccounts", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("saves valid storage to disk", async () => {
