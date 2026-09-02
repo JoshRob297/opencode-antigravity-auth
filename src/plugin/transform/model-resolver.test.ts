@@ -6,6 +6,7 @@ import {
   resolveAntigravityGemini35FlashBackendModel,
   resolveAntigravityGemini36FlashBackendModel,
   resolveAntigravityGemini37FlashBackendModel,
+  resolveAntigravityGemini38FlashBackendModel,
 } from "./model-resolver";
 
 describe("resolveModelWithTier", () => {
@@ -331,6 +332,28 @@ describe("Issue #103: resolveModelForHeaderStyle", () => {
       const result = resolveModelForHeaderStyle("claude-opus-4-6-thinking", "antigravity");
       expect(result.actualModel).toBe("claude-opus-4-6-thinking");
     });
+  });
+});
+
+describe("resolveAntigravityGemini38FlashBackendModel", () => {
+  it("resolves gemini-3.8-flash with default low tier", () => {
+    expect(resolveAntigravityGemini38FlashBackendModel("gemini-3.8-flash")).toBe("gemini-3.8-flash-low");
+  });
+
+  it("resolves gemini-3.8-flash-medium", () => {
+    expect(resolveAntigravityGemini38FlashBackendModel("gemini-3.8-flash-medium")).toBe("gemini-3.8-flash-medium");
+  });
+
+  it("resolves gemini-3.8-flash-high with antigravity- prefix", () => {
+    expect(resolveAntigravityGemini38FlashBackendModel("antigravity-gemini-3.8-flash-high")).toBe("gemini-3.8-flash-high");
+  });
+
+  it("overrides tier with thinkingLevel parameter", () => {
+    expect(resolveAntigravityGemini38FlashBackendModel("gemini-3.8-flash", "high")).toBe("gemini-3.8-flash-high");
+  });
+
+  it("returns undefined for non-matching model", () => {
+    expect(resolveAntigravityGemini38FlashBackendModel("gemini-3.7-flash-medium")).toBeUndefined();
   });
 });
 

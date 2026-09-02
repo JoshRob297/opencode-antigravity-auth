@@ -4,7 +4,7 @@
  * Re-exports transform functions and types for request transformation.
  */
 export type { ModelFamily, ThinkingTier, TransformContext, TransformResult, TransformDebugInfo, RequestPayload, ThinkingConfig, ResolvedModel, GoogleSearchConfig, } from "./types";
-export { resolveModelWithTier, resolveModelWithVariant, resolveModelForHeaderStyle, resolveAntigravityGemini35FlashBackendModel, resolveAntigravityGemini36FlashBackendModel, resolveAntigravityGemini37FlashBackendModel, getModelFamily, MODEL_ALIASES, THINKING_TIER_BUDGETS, GEMINI_3_THINKING_LEVELS, } from "./model-resolver";
+export { resolveModelWithTier, resolveModelWithVariant, resolveModelForHeaderStyle, resolveAntigravityGemini35FlashBackendModel, resolveAntigravityGemini36FlashBackendModel, resolveAntigravityGemini37FlashBackendModel, resolveAntigravityGemini38FlashBackendModel, getModelFamily, MODEL_ALIASES, THINKING_TIER_BUDGETS, GEMINI_3_THINKING_LEVELS, } from "./model-resolver";
 export type { VariantConfig } from "./model-resolver";
 export { isClaudeModel, isClaudeThinkingModel, configureClaudeToolConfig, buildClaudeThinkingConfig, ensureClaudeMaxOutputTokens, appendClaudeThinkingHint, normalizeClaudeTools, applyClaudeTransforms, CLAUDE_THINKING_MAX_OUTPUT_TOKENS, CLAUDE_INTERLEAVED_THINKING_HINT, } from "./claude";
 export type { ClaudeTransformOptions, ClaudeTransformResult } from "./claude";

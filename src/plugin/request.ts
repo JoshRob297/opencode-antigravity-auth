@@ -66,6 +66,7 @@ import {
   resolveAntigravityGemini35FlashBackendModel,
   resolveAntigravityGemini36FlashBackendModel,
   resolveAntigravityGemini37FlashBackendModel,
+  resolveAntigravityGemini38FlashBackendModel,
   isClaudeModel,
   isClaudeThinkingModel,
   CLAUDE_THINKING_MAX_OUTPUT_TOKENS,
@@ -845,6 +846,11 @@ export function prepareAntigravityRequest(
         } as Record<string, unknown>;
 
         if (headerStyle === "antigravity") {
+          const gemini38FlashBackendModel = resolveAntigravityGemini38FlashBackendModel(rawModel, tierThinkingLevel);
+          if (gemini38FlashBackendModel) {
+            effectiveModel = gemini38FlashBackendModel;
+            wrappedBody.model = gemini38FlashBackendModel;
+          }
           const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
           if (gemini37FlashBackendModel) {
             effectiveModel = gemini37FlashBackendModel;
@@ -962,6 +968,10 @@ export function prepareAntigravityRequest(
         }
 
         if (headerStyle === "antigravity") {
+          const gemini38FlashBackendModel = resolveAntigravityGemini38FlashBackendModel(rawModel, tierThinkingLevel);
+          if (gemini38FlashBackendModel) {
+            effectiveModel = gemini38FlashBackendModel;
+          }
           const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
           if (gemini37FlashBackendModel) {
             effectiveModel = gemini37FlashBackendModel;
@@ -1583,12 +1593,12 @@ export function prepareAntigravityRequest(
     const fingerprintHeaders = buildFingerprintHeaders(fingerprint);
 
     let userAgent = fingerprintHeaders["User-Agent"] || selectedHeaders["User-Agent"];
-    // Gemini 3.7 Flash is only served to the official Antigravity CLI user agent.
+    // Gemini 3.7/3.8 Flash are only served to the official Antigravity CLI user agent.
     // With the generic `antigravity/<ver> <platform>/<arch>` UA the backend
     // returns 404 NOT_FOUND (rewritten as "enable preview features").
     // Verified with agy v1.1.12: UA `antigravity/cli/<ver> (aidev_client; ...)`
-    // returns 200 with modelVersion gemini-3.7-flash for low/medium/high.
-    if (/gemini-3\.7-flash/i.test(effectiveModel)) {
+    // returns 200 with modelVersion gemini-3.7-flash / gemini-3.8-flash for low/medium/high.
+    if (/gemini-3\.[78]-flash/i.test(effectiveModel)) {
       userAgent = "antigravity/cli/1.1.12 (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)";
     }
     headers.set("User-Agent", userAgent);

@@ -66,6 +66,12 @@ export declare function resolveAntigravityGemini36FlashBackendModel(model: strin
  */
 export declare function resolveAntigravityGemini37FlashBackendModel(model: string, thinkingLevel?: string): string | undefined;
 /**
+ * Resolves Gemini 3.8 Flash to backend model ID with tier suffix.
+ * Backend expects gemini-3.8-flash-{low|medium|high} — valid when the
+ * request carries the official Antigravity CLI User-Agent (see request.ts).
+ */
+export declare function resolveAntigravityGemini38FlashBackendModel(model: string, thinkingLevel?: string): string | undefined;
+/**
  * Resolves a model name with optional tier suffix and quota prefix to its actual API model name
  * and corresponding thinking configuration.
  *

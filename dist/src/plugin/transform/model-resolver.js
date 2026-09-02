@@ -56,6 +56,7 @@ const GEMINI_35_FLASH_HIGH_MODEL = "gemini-3-flash-agent";
 const GEMINI_35_FLASH_REGEX = /^gemini-3\.5-flash(?:-(low|high))?$/i;
 const GEMINI_36_FLASH_REGEX = /^gemini-3\.6-flash(?:-(low|medium|high))?$/i;
 const GEMINI_37_FLASH_REGEX = /^gemini-3\.7-flash(?:-(low|medium|high))?$/i;
+const GEMINI_38_FLASH_REGEX = /^gemini-3\.8-flash(?:-(low|medium|high))?$/i;
 // ANTIGRAVITY_ONLY_MODELS removed - all models now default to antigravity
 /**
  * Image generation models - always route to Antigravity.
@@ -157,6 +158,21 @@ export function resolveAntigravityGemini37FlashBackendModel(model, thinkingLevel
     const level = (thinkingLevel ?? match[1] ?? "low").toLowerCase();
     const validLevel = ["low", "medium", "high"].includes(level) ? level : "low";
     return `gemini-3.7-flash-${validLevel}`;
+}
+/**
+ * Resolves Gemini 3.8 Flash to backend model ID with tier suffix.
+ * Backend expects gemini-3.8-flash-{low|medium|high} — valid when the
+ * request carries the official Antigravity CLI User-Agent (see request.ts).
+ */
+export function resolveAntigravityGemini38FlashBackendModel(model, thinkingLevel) {
+    const modelWithoutQuota = model.replace(QUOTA_PREFIX_REGEX, "");
+    const match = modelWithoutQuota.match(GEMINI_38_FLASH_REGEX);
+    if (!match) {
+        return undefined;
+    }
+    const level = (thinkingLevel ?? match[1] ?? "low").toLowerCase();
+    const validLevel = ["low", "medium", "high"].includes(level) ? level : "low";
+    return `gemini-3.8-flash-${validLevel}`;
 }
 /**
  * Resolves a model name with optional tier suffix and quota prefix to its actual API model name
