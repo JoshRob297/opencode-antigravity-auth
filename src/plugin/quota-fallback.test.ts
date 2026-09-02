@@ -1,6 +1,10 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { HeaderStyle, ModelFamily } from "./accounts";
 
+vi.mock("@opencode-ai/plugin", () => ({
+  tool: vi.fn(),
+}));
+
 type ResolveQuotaFallbackHeaderStyle = (input: {
   family: ModelFamily;
   headerStyle: HeaderStyle;
@@ -29,10 +33,6 @@ let getHeaderStyleFromUrl: GetHeaderStyleFromUrl | undefined;
 let resolveHeaderRoutingDecision: ResolveHeaderRoutingDecision | undefined;
 
 beforeAll(async () => {
-  vi.mock("@opencode-ai/plugin", () => ({
-    tool: vi.fn(),
-  }));
-
   const { __testExports } = await import("../plugin");
   resolveQuotaFallbackHeaderStyle = (__testExports as {
     resolveQuotaFallbackHeaderStyle?: ResolveQuotaFallbackHeaderStyle;
