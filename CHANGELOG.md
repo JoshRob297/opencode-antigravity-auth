@@ -10,6 +10,7 @@
 ### Changed
 
 - **Default Scheduling Mode to `balance`** - When multiple accounts are configured, the plugin now fails over immediately (500ms) to the next account with quota instead of spinning on an exhausted account. `QUOTA_EXHAUSTED` triggers instant account rotation.
+- **Vitest upgraded to v4** - Bumped the vitest group (vitest, @vitest/coverage-v8, @vitest/ui) from 3.2.4 to 4.1.11. Fixed Vitest 4 test isolation (`resetAllMocks` in `persist-account-pool.test.ts`) and hoisted a nested `vi.mock` to top level (`quota-fallback.test.ts`).
 
 ### Tests
 
