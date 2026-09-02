@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.9.0] - 2026-09-02
+
+### Added
+
+- **Gemini 3.8 Flash Support** - Added `resolveAntigravityGemini38FlashBackendModel` in `model-resolver.ts` (→ `gemini-3.8-flash-{low,medium,high}`), wired it into both request paths in `request.ts`, and extended the CLI User-Agent spoofing regex to `/gemini-3\.[78]-flash/i`. Unlocks **Gemini 3.8 Flash (Low/Medium/High)** — verified against daily endpoints (200 with CLI UA); prod still 429 (rollout in progress).
+- **Gemini 3.8 Model Definition** - Registered `antigravity-gemini-3.8-flash` in `config/models.ts` (context 1M / output 65536, low/medium/high thinking variants).
+
+### Changed
+
+- **Default Scheduling Mode to `balance`** - When multiple accounts are configured, the plugin now fails over immediately (500ms) to the next account with quota instead of spinning on an exhausted account. `QUOTA_EXHAUSTED` triggers instant account rotation.
+
+### Tests
+
+- 1,031 passing tests (36 suites). Added `resolveAntigravityGemini38FlashBackendModel` coverage and updated the models snapshot.
+
 ## [1.8.0] - 2026-08-29
 
 ### Added
