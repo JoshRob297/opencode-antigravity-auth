@@ -1010,8 +1010,14 @@ function extractRateLimitBodyInfo(body: unknown): RateLimitBodyInfo {
         if (typeof quotaResetDelay === "string") {
           retryDelayMs = parseDurationToMs(quotaResetDelay);
         } else if (quotaResetTime) {
-          // If delay duration is omitted but absolute timestamp is present, calculate delta
-          const parsedMs = Date.parse(quotaResetTime);
+          // Parse ISO string, epoch milliseconds, or epoch seconds
+          let parsedMs = Date.parse(quotaResetTime);
+          if (isNaN(parsedMs)) {
+            const numeric = Number(quotaResetTime);
+            if (!isNaN(numeric) && numeric > 0) {
+              parsedMs = numeric < 1e11 ? numeric * 1000 : numeric;
+            }
+          }
           if (!isNaN(parsedMs) && parsedMs > Date.now()) {
             retryDelayMs = parsedMs - Date.now();
           }
@@ -1656,6 +1662,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
                   softQuotaToastShown = true;
                 }
                 
+                cumulativeBlockedWaitMs += softQuotaWaitMs;
                 await sleep(softQuotaWaitMs, abortSignal);
                 continue;
               }
