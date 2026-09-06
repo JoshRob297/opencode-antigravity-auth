@@ -99,7 +99,8 @@ export declare class AccountManager {
      * Should be called AFTER request completion, not during account selection.
      */
     markAccountUsed(accountIndex: number): void;
-    markRateLimitedWithReason(account: ManagedAccount, family: ModelFamily, headerStyle: HeaderStyle, model: string | null | undefined, reason: RateLimitReason, retryAfterMs?: number | null, failureTtlMs?: number): number;
+    markRateLimitedWithReason(account: ManagedAccount, family: ModelFamily, headerStyle: HeaderStyle, model: string | null | undefined, reason: RateLimitReason, retryAfterMs?: number | null, failureTtlMs?: number, // Default 1 hour TTL
+    absoluteResetAtMs?: number | null): number;
     markRequestSuccess(account: ManagedAccount): void;
     clearAllRateLimitsForFamily(family: ModelFamily, model?: string | null): void;
     shouldTryOptimisticReset(family: ModelFamily, model?: string | null): boolean;
@@ -133,6 +134,15 @@ export declare class AccountManager {
     updateFromAuth(account: ManagedAccount, auth: OAuthAuthDetails): void;
     toAuthDetails(account: ManagedAccount): OAuthAuthDetails;
     getMinWaitTimeForFamily(family: ModelFamily, model?: string | null, headerStyle?: HeaderStyle, strict?: boolean): number;
+    /**
+     * Get human-readable reasons why accounts are currently blocked for a given family/model.
+     * Distinguishes between rate-limits (with reset times), cooldowns, and disabled states.
+     */
+    getAllBlockedReasons(family: ModelFamily, model?: string | null, headerStyle?: HeaderStyle): Array<{
+        email: string;
+        reason: string;
+        waitMs: number | null;
+    }>;
     getAccounts(): ManagedAccount[];
     saveToDisk(): Promise<void>;
     requestSaveToDisk(): void;

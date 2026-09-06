@@ -643,6 +643,7 @@ export class AccountManager {
     reason: RateLimitReason,
     retryAfterMs?: number | null,
     failureTtlMs: number = 3600_000, // Default 1 hour TTL
+    absoluteResetAtMs?: number | null,
   ): number {
     const now = nowMs();
     
@@ -655,11 +656,17 @@ export class AccountManager {
     account.consecutiveFailures = failures;
     account.lastFailureTime = now;
     
-    const backoffMs = calculateBackoffMs(reason, failures - 1, retryAfterMs);
+    let effectiveWaitMs: number;
+    if (absoluteResetAtMs && absoluteResetAtMs > now) {
+      effectiveWaitMs = absoluteResetAtMs - now;
+    } else {
+      effectiveWaitMs = calculateBackoffMs(reason, failures - 1, retryAfterMs);
+    }
+
     const key = getQuotaKey(family, headerStyle, model);
-    account.rateLimitResetTimes[key] = now + backoffMs;
+    account.rateLimitResetTimes[key] = now + effectiveWaitMs;
     
-    return backoffMs;
+    return effectiveWaitMs;
   }
 
   markRequestSuccess(account: ManagedAccount): void {
@@ -948,23 +955,34 @@ export class AccountManager {
   ): number {
     const available = this.accounts.filter((a) => {
       clearExpiredRateLimits(a);
-      return a.enabled !== false && (strict && headerStyle
-        ? !isRateLimitedForHeaderStyle(a, family, headerStyle, model)
-        : !isRateLimitedForFamily(a, family, model));
+      const isLimited = strict && headerStyle
+        ? isRateLimitedForHeaderStyle(a, family, headerStyle, model)
+        : isRateLimitedForFamily(a, family, model);
+      return a.enabled !== false && !isLimited && !this.isAccountCoolingDown(a);
     });
     if (available.length > 0) {
       return 0;
     }
 
+    const now = nowMs();
     const waitTimes: number[] = [];
     for (const a of this.accounts) {
+      if (a.enabled === false) {
+        continue;
+      }
+
+      // Check account-level cooldown (auth/network/project/validation errors)
+      if (a.coolingDownUntil !== undefined && a.coolingDownUntil > now) {
+        waitTimes.push(a.coolingDownUntil - now);
+      }
+
       if (family === "claude") {
         const t = a.rateLimitResetTimes.claude;
-        if (t !== undefined) waitTimes.push(Math.max(0, t - nowMs()));
+        if (t !== undefined) waitTimes.push(Math.max(0, t - now));
       } else if (strict && headerStyle) {
         const key = getQuotaKey(family, headerStyle, model);
         const t = a.rateLimitResetTimes[key];
-        if (t !== undefined) waitTimes.push(Math.max(0, t - nowMs()));
+        if (t !== undefined) waitTimes.push(Math.max(0, t - now));
       } else {
         // For Gemini, account becomes available when EITHER pool expires for this model/family
         const antigravityKey = getQuotaKey(family, "antigravity", model);
@@ -974,14 +992,71 @@ export class AccountManager {
         const t2 = a.rateLimitResetTimes[cliKey];
         
         const accountWait = Math.min(
-          t1 !== undefined ? Math.max(0, t1 - nowMs()) : Infinity,
-          t2 !== undefined ? Math.max(0, t2 - nowMs()) : Infinity
+          t1 !== undefined ? Math.max(0, t1 - now) : Infinity,
+          t2 !== undefined ? Math.max(0, t2 - now) : Infinity
         );
         if (accountWait !== Infinity) waitTimes.push(accountWait);
       }
     }
 
     return waitTimes.length > 0 ? Math.min(...waitTimes) : 0;
+  }
+
+  /**
+   * Get human-readable reasons why accounts are currently blocked for a given family/model.
+   * Distinguishes between rate-limits (with reset times), cooldowns, and disabled states.
+   */
+  getAllBlockedReasons(
+    family: ModelFamily,
+    model?: string | null,
+    headerStyle: HeaderStyle = "antigravity",
+  ): Array<{ email: string; reason: string; waitMs: number | null }> {
+    const now = nowMs();
+    return this.accounts.map((a, idx) => {
+      const label = a.email || `Account ${idx + 1}`;
+      if (a.enabled === false) {
+        const reasonStr = a.verificationRequired
+          ? `verification required (${a.verificationRequiredReason || "visit accounts.google.com"})`
+          : "account disabled";
+        return { email: label, reason: reasonStr, waitMs: null };
+      }
+
+      if (this.isAccountCoolingDown(a)) {
+        const remainingMs = Math.max(0, (a.coolingDownUntil ?? now) - now);
+        const remSec = Math.ceil(remainingMs / 1000);
+        return {
+          email: label,
+          reason: `cooling down (${a.cooldownReason ?? "error"}, ${remSec}s remaining)`,
+          waitMs: remainingMs,
+        };
+      }
+
+      // Check rate limit reset time
+      const quotaKey = getQuotaKey(family, headerStyle, model);
+      let resetTime = a.rateLimitResetTimes[quotaKey];
+      if (family === "gemini" && resetTime === undefined) {
+        const fallbackKey = getQuotaKey(family, "antigravity", model);
+        resetTime = a.rateLimitResetTimes[fallbackKey];
+      }
+
+      if (resetTime !== undefined && resetTime > now) {
+        const remainingMs = resetTime - now;
+        const remSec = Math.ceil(remainingMs / 1000);
+        const durationStr = remSec >= 3600
+          ? `${(remSec / 3600).toFixed(1)}h`
+          : remSec >= 60
+          ? `${Math.ceil(remSec / 60)}m`
+          : `${remSec}s`;
+        const resetDate = new Date(resetTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return {
+          email: label,
+          reason: `quota/rate-limited (resets at ~${resetDate}, in ${durationStr})`,
+          waitMs: remainingMs,
+        };
+      }
+
+      return { email: label, reason: "temporarily unavailable", waitMs: null };
+    });
   }
 
   getAccounts(): ManagedAccount[] {

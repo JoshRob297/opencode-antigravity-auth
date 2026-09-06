@@ -822,11 +822,19 @@ function extractRateLimitBodyInfo(body) {
             if (metadata && typeof metadata === "object") {
                 const quotaResetDelay = metadata.quotaResetDelay;
                 const quotaResetTime = metadata.quotaResetTimeStamp;
+                let retryDelayMs = null;
                 if (typeof quotaResetDelay === "string") {
-                    const quotaResetDelayMs = parseDurationToMs(quotaResetDelay);
-                    if (quotaResetDelayMs !== null) {
-                        return { retryDelayMs: quotaResetDelayMs, message, quotaResetTime, reason };
+                    retryDelayMs = parseDurationToMs(quotaResetDelay);
+                }
+                else if (quotaResetTime) {
+                    // If delay duration is omitted but absolute timestamp is present, calculate delta
+                    const parsedMs = Date.parse(quotaResetTime);
+                    if (!isNaN(parsedMs) && parsedMs > Date.now()) {
+                        retryDelayMs = parsedMs - Date.now();
                     }
+                }
+                if (retryDelayMs !== null || quotaResetTime) {
+                    return { retryDelayMs, message, quotaResetTime, reason };
                 }
             }
         }
@@ -1260,6 +1268,7 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                         // This ensures we wait and retry when all accounts are rate-limited
                         const quietMode = config.quiet_mode;
                         const toastScope = config.toast_scope;
+                        let cumulativeBlockedWaitMs = 0;
                         // Helper to show toast without blocking on abort (respects quiet_mode and toast_scope)
                         const showToast = async (message, variant) => {
                             // Always log to debug regardless of toast filtering
@@ -1333,10 +1342,10 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                     continue;
                                 }
                                 const strictWait = !allowQuotaFallback;
-                                // All accounts are rate-limited - wait and retry
+                                // All accounts are rate-limited / blocked - inspect reasons and wait times
                                 const waitMs = accountManager.getMinWaitTimeForFamily(family, model, preferredHeaderStyle, strictWait) || 60_000;
                                 const waitSecValue = Math.max(1, Math.ceil(waitMs / 1000));
-                                pushDebug(`all-rate-limited family=${family} accounts=${accountCount} waitMs=${waitMs}`);
+                                pushDebug(`all-rate-limited family=${family} accounts=${accountCount} waitMs=${waitMs} accumWaitMs=${cumulativeBlockedWaitMs}`);
                                 if (isDebugEnabled()) {
                                     logAccountContext("All accounts rate-limited", {
                                         index: -1,
@@ -1345,21 +1354,38 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                     });
                                     logRateLimitSnapshot(family, accountManager.getAccountsSnapshot());
                                 }
-                                // If wait time exceeds max threshold, return error immediately instead of hanging
-                                // 0 means disabled (wait indefinitely)
-                                const maxWaitMs = (config.max_rate_limit_wait_seconds ?? 300) * 1000;
-                                if (maxWaitMs > 0 && waitMs > maxWaitMs) {
+                                const blockedReasons = accountManager.getAllBlockedReasons(family, model, preferredHeaderStyle);
+                                const reasonsFormatted = blockedReasons
+                                    .map((r) => `  - ${r.email}: ${r.reason}`)
+                                    .join("\n");
+                                // FAST FAILOVER / EARLY TERMINATION:
+                                // 1. If wait exceeds max single wait (default 300s / 5m)
+                                // 2. OR cumulative time spent waiting across attempts exceeds max_all_blocked_wait_seconds (default 120s / 2m)
+                                const maxSingleWaitMs = (config.max_rate_limit_wait_seconds ?? 300) * 1000;
+                                const maxCumulativeWaitMs = (config.max_all_blocked_wait_seconds ?? 120) * 1000;
+                                const singleWaitExceeded = maxSingleWaitMs > 0 && waitMs > maxSingleWaitMs;
+                                const cumulativeWaitExceeded = maxCumulativeWaitMs > 0 && (cumulativeBlockedWaitMs + waitMs) > maxCumulativeWaitMs;
+                                if (singleWaitExceeded || cumulativeWaitExceeded) {
                                     const waitTimeFormatted = formatWaitTime(waitMs);
-                                    await showToast(`Rate limited for ${waitTimeFormatted}. Try again later or add another account.`, "error");
-                                    // Return a proper rate limit error response
-                                    throw new Error(`All ${accountCount} account(s) rate-limited for ${family}. ` +
-                                        `Quota resets in ${waitTimeFormatted}. ` +
-                                        `Add more accounts with \`opencode auth login\` or wait and retry.`);
+                                    const stopReason = singleWaitExceeded
+                                        ? `Minimum reset wait (${waitTimeFormatted}) exceeds threshold (${formatWaitTime(maxSingleWaitMs)})`
+                                        : `Cumulative retry wait (${formatWaitTime(cumulativeBlockedWaitMs + waitMs)}) exceeded limit (${formatWaitTime(maxCumulativeWaitMs)})`;
+                                    const terminationMessage = `[Antigravity] All ${accountCount} account(s) are blocked for ${family}.\n\n` +
+                                        `Reason: ${stopReason}.\n` +
+                                        `Status per account:\n${reasonsFormatted}\n\n` +
+                                        `Suggestions:\n` +
+                                        `• Switch to another model or provider (e.g. OpenCode Go / DeepSeek / Claude)\n` +
+                                        `• Run \`antigravity_quota\` to check exact quota windows\n` +
+                                        `• Add another account with \`opencode auth login\`\n` +
+                                        `• Wait ~${waitTimeFormatted} for quota to reset and retry.`;
+                                    await showToast(`⛔ All accounts blocked for ${family}. Switch model or wait for reset.`, "error");
+                                    throw new Error(terminationMessage);
                                 }
                                 if (!rateLimitToastShown) {
                                     await showToast(`All ${accountCount} account(s) rate-limited for ${family}. Waiting ${waitSecValue}s...`, "warning");
                                     rateLimitToastShown = true;
                                 }
+                                cumulativeBlockedWaitMs += waitMs;
                                 // Wait for the rate-limit cooldown to expire, then retry
                                 await sleep(waitMs, abortSignal);
                                 continue;
@@ -1725,9 +1751,17 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                             await logResponseBody(debugContext, response, 429);
                                             getHealthTracker().recordRateLimit(account.index);
                                             const accountLabel = account.email || `Account ${account.index + 1}`;
+                                            // Extract absolute timestamp if provided by Google RPC metadata
+                                            let absoluteResetAtMs = null;
+                                            if (bodyInfo.quotaResetTime) {
+                                                const parsed = Date.parse(bodyInfo.quotaResetTime);
+                                                if (!isNaN(parsed) && parsed > Date.now()) {
+                                                    absoluteResetAtMs = parsed;
+                                                }
+                                            }
                                             // Progressive retry for standard 429s: 1st 429 → fast failover or quick retry
                                             if (rateLimitReason === "QUOTA_EXHAUSTED" && accountCount > 1) {
-                                                accountManager.markRateLimitedWithReason(account, family, headerStyle, model, rateLimitReason, serverRetryMs, config.failure_ttl_seconds * 1000);
+                                                accountManager.markRateLimitedWithReason(account, family, headerStyle, model, rateLimitReason, serverRetryMs, config.failure_ttl_seconds * 1000, absoluteResetAtMs);
                                                 accountManager.requestSaveToDisk();
                                                 pushDebug(`QUOTA_EXHAUSTED on account ${account.index}, immediate failover to next account`);
                                                 await showToast(`Quota exhausted on ${account.email || `Account ${account.index + 1}`}. Switching account...`, "warning");
@@ -1741,7 +1775,7 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                                     if (effectiveDelayMs <= maxCacheFirstWaitMs) {
                                                         pushDebug(`cache_first: waiting ${effectiveDelayMs}ms for same account to recover`);
                                                         await showToast(`⏳ Waiting ${Math.ceil(effectiveDelayMs / 1000)}s for same account (prompt cache preserved)...`, "info");
-                                                        accountManager.markRateLimitedWithReason(account, family, headerStyle, model, rateLimitReason, serverRetryMs);
+                                                        accountManager.markRateLimitedWithReason(account, family, headerStyle, model, rateLimitReason, serverRetryMs, config.failure_ttl_seconds * 1000, absoluteResetAtMs);
                                                         await sleep(effectiveDelayMs, abortSignal);
                                                         // Retry same endpoint after wait
                                                         i -= 1;
@@ -1750,7 +1784,7 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                                     pushDebug(`cache_first: wait ${effectiveDelayMs}ms exceeds max ${maxCacheFirstWaitMs}ms, switching account`);
                                                 }
                                                 if (config.switch_on_first_rate_limit && accountCount > 1) {
-                                                    accountManager.markRateLimitedWithReason(account, family, headerStyle, model, rateLimitReason, serverRetryMs, config.failure_ttl_seconds * 1000);
+                                                    accountManager.markRateLimitedWithReason(account, family, headerStyle, model, rateLimitReason, serverRetryMs, config.failure_ttl_seconds * 1000, absoluteResetAtMs);
                                                     shouldSwitchAccount = true;
                                                     break;
                                                 }
@@ -1760,7 +1794,7 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                                 i -= 1;
                                                 continue;
                                             }
-                                            accountManager.markRateLimitedWithReason(account, family, headerStyle, model, rateLimitReason, serverRetryMs, config.failure_ttl_seconds * 1000);
+                                            accountManager.markRateLimitedWithReason(account, family, headerStyle, model, rateLimitReason, serverRetryMs, config.failure_ttl_seconds * 1000, absoluteResetAtMs);
                                             accountManager.requestSaveToDisk();
                                             // For Gemini, preserve preferred quota across accounts before fallback
                                             if (family === "gemini") {
@@ -2014,6 +2048,7 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                             const existingStorage = await loadAccounts();
                             if (existingStorage && existingStorage.accounts.length > 0) {
                                 let menuResult;
+                                let cumulativeBlockedWaitMs = 0;
                                 while (true) {
                                     const now = Date.now();
                                     const existingAccounts = existingStorage.accounts.map((acc, idx) => {

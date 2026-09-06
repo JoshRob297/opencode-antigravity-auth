@@ -1841,6 +1841,93 @@ describe("AccountManager", () => {
       vi.useRealTimers();
     });
   });
+  describe("absoluteResetAtMs support in markRateLimitedWithReason", () => {
+    it("uses exact future timestamp when provided", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(100_000);
+
+      const stored: AccountStorageV4 = {
+        version: 4,
+        accounts: [
+          { refreshToken: "r1", projectId: "p1", addedAt: 1, lastUsed: 0 },
+        ],
+        activeIndex: 0,
+      };
+
+      const manager = new AccountManager(undefined, stored);
+      const account = manager.getAccounts()[0]!;
+
+      const absoluteFutureMs = 100_000 + 7_200_000; // 2 hours in future
+      const wait = manager.markRateLimitedWithReason(
+        account,
+        "gemini",
+        "antigravity",
+        null,
+        "QUOTA_EXHAUSTED",
+        null,
+        3600_000,
+        absoluteFutureMs,
+      );
+
+      expect(wait).toBe(7_200_000);
+      expect(account.rateLimitResetTimes["gemini-antigravity"]).toBe(absoluteFutureMs);
+
+      vi.useRealTimers();
+    });
+  });
+
+  describe("getMinWaitTimeForFamily with cooldowns", () => {
+    it("accounts for coolingDownUntil when calculating wait time", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(10_000);
+
+      const stored: AccountStorageV4 = {
+        version: 4,
+        accounts: [
+          { refreshToken: "r1", projectId: "p1", addedAt: 1, lastUsed: 0, coolingDownUntil: 40_000, cooldownReason: "auth-failure" },
+        ],
+        activeIndex: 0,
+      };
+
+      const manager = new AccountManager(undefined, stored);
+      const wait = manager.getMinWaitTimeForFamily("claude");
+      expect(wait).toBe(30_000);
+
+      vi.useRealTimers();
+    });
+  });
+
+  describe("getAllBlockedReasons", () => {
+    it("reports rate-limits, cooldowns, and disabled accounts accurately", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(10_000);
+
+      const stored: AccountStorageV4 = {
+        version: 4,
+        accounts: [
+          { email: "user1@example.com", refreshToken: "r1", addedAt: 1, lastUsed: 0, rateLimitResetTimes: { claude: 70_000 } },
+          { email: "user2@example.com", refreshToken: "r2", addedAt: 1, lastUsed: 0, coolingDownUntil: 30_000, cooldownReason: "network-error" },
+          { email: "user3@example.com", refreshToken: "r3", addedAt: 1, lastUsed: 0, enabled: false, verificationRequired: true },
+        ],
+        activeIndex: 0,
+      };
+
+      const manager = new AccountManager(undefined, stored);
+      const reasons = manager.getAllBlockedReasons("claude");
+
+      expect(reasons).toHaveLength(3);
+      expect(reasons[0]?.reason).toContain("quota/rate-limited");
+      expect(reasons[0]?.waitMs).toBe(60_000);
+
+      expect(reasons[1]?.reason).toContain("cooling down (network-error");
+      expect(reasons[1]?.waitMs).toBe(20_000);
+
+      expect(reasons[2]?.reason).toContain("verification required");
+      expect(reasons[2]?.waitMs).toBeNull();
+
+      vi.useRealTimers();
+    });
+  });
 });
 
 describe("resolveQuotaGroup", () => {

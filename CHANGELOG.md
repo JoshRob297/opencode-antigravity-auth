@@ -4,6 +4,9 @@
 
 ### Added
 
+- **Server-Data-Driven Quota Exits** - The plugin now captures `metadata.quotaResetTimeStamp` / `quotaResetDelay` from Google RPC error details and stores exact future reset timestamps instead of synthetic backoff counters.
+- **Fail-Fast on All-Accounts-Blocked** - Added `max_all_blocked_wait_seconds` (default 120s). When all accounts are rate-limited or exhausted, retries stop cleanly with a descriptive message detailing status per account and inviting the user to switch models/providers or view windows via `antigravity_quota`.
+- **`getAllBlockedReasons` Helper** - Reports human-readable blocked states per account (quota reset countdowns, cooldown reasons, verification status).
 - **Gemini 3.8 Flash Support** - Added `resolveAntigravityGemini38FlashBackendModel` in `model-resolver.ts` (→ `gemini-3.8-flash-{low,medium,high}`), wired it into both request paths in `request.ts`, and extended the CLI User-Agent spoofing regex to `/gemini-3\.[78]-flash/i`. Unlocks **Gemini 3.8 Flash (Low/Medium/High)** — verified against daily endpoints (200 with CLI UA); prod still 429 (rollout in progress).
 - **Gemini 3.8 Model Definition** - Registered `antigravity-gemini-3.8-flash` in `config/models.ts` (context 1M / output 65536, low/medium/high thinking variants).
 
@@ -14,7 +17,7 @@
 
 ### Tests
 
-- 1,031 passing tests (36 suites). Added `resolveAntigravityGemini38FlashBackendModel` coverage and updated the models snapshot.
+- 1,034 passing tests (36 suites). Added unit tests for exact server timestamp tracking, cooldown wait times, and blocked account diagnosis.
 
 ## [1.8.0] - 2026-08-29
 

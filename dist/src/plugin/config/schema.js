@@ -228,6 +228,15 @@ export const AntigravityConfigSchema = z.object({
      */
     max_rate_limit_wait_seconds: z.number().min(0).max(3600).default(300),
     /**
+     * Maximum cumulative time in seconds to spend waiting across all retries
+     * when all accounts are blocked before terminating with a clear model-switch invitation.
+     *
+     * Set to 0 to disable (rely solely on max_rate_limit_wait_seconds).
+     *
+     * @default 120 (2 minutes)
+     */
+    max_all_blocked_wait_seconds: z.number().min(0).max(3600).default(120),
+    /**
      * @deprecated Kept only for backward compatibility.
      * This flag is ignored at runtime.
      * Gemini requests always fall back between Antigravity and Gemini CLI quotas.
@@ -399,6 +408,7 @@ export const DEFAULT_CONFIG = {
     proactive_refresh_buffer_seconds: 1800,
     proactive_refresh_check_interval_seconds: 300,
     max_rate_limit_wait_seconds: 300,
+    max_all_blocked_wait_seconds: 120,
     quota_fallback: false,
     cli_first: false,
     account_selection_strategy: 'hybrid',

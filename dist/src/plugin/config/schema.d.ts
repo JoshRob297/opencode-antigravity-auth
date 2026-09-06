@@ -88,6 +88,7 @@ export declare const AntigravityConfigSchema: z.ZodObject<{
     proactive_refresh_buffer_seconds: z.ZodDefault<z.ZodNumber>;
     proactive_refresh_check_interval_seconds: z.ZodDefault<z.ZodNumber>;
     max_rate_limit_wait_seconds: z.ZodDefault<z.ZodNumber>;
+    max_all_blocked_wait_seconds: z.ZodDefault<z.ZodNumber>;
     quota_fallback: z.ZodDefault<z.ZodBoolean>;
     cli_first: z.ZodDefault<z.ZodBoolean>;
     account_selection_strategy: z.ZodDefault<z.ZodEnum<{
