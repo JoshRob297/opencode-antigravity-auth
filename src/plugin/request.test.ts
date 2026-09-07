@@ -1243,5 +1243,34 @@ it("removes x-api-key header", () => {
         ),
       ).rejects.toMatchObject({ message: "THINKING_RECOVERY_NEEDED" });
     });
+
+    it("rethrows MODEL_TURN_RECOVERY_NEEDED for outer retry handling", async () => {
+      const response = new Response(
+        JSON.stringify({
+          error: {
+            code: 400,
+            message: "Requests ending with a model turn are not supported.",
+            status: "INVALID_ARGUMENT",
+          },
+        }),
+        {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        },
+      );
+
+      await expect(
+        transformAntigravityResponse(
+          response,
+          true,
+          undefined,
+          "antigravity-gemini-3.8-flash",
+          "test-project",
+          "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:streamGenerateContent?alt=sse",
+          "gemini-3.8-flash-low",
+          "session-1",
+        ),
+      ).rejects.toMatchObject({ message: "MODEL_TURN_RECOVERY_NEEDED" });
+    });
   });
 });

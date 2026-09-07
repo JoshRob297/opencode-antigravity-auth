@@ -1926,6 +1926,11 @@ export async function transformAntigravityResponse(
       throw error;
     }
 
+    // Propagate model-turn recovery so plugin.ts can retry with sanitized payload
+    if (error instanceof Error && error.message === "MODEL_TURN_RECOVERY_NEEDED") {
+      throw error;
+    }
+
     logAntigravityDebugResponse(debugContext, response, {
       error,
       note: "Failed to transform Antigravity response",
