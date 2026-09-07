@@ -8,17 +8,19 @@
 
 ---
 
-### 🌟 What's New & Changed in this Fork (v1.9.0)
+### 🌟 What's New & Changed in this Fork (v1.10.0)
 
 | Enhancement | What Was Broken Upstream | How This Fork Fixes It |
 |---|---|---|
 | 🆕 **Gemini 3.8 Flash Support** | Backend restricted the newest `gemini-3.8-flash` model to official CLI signatures. | Added `resolveAntigravityGemini38FlashBackendModel` (→ `gemini-3.8-flash-{low,medium,high}`) and extended the CLI User-Agent spoofing regex to `/gemini-3\.[78]-flash/i`, unlocking **Gemini 3.8 Flash (Low/Medium/High)**. |
+| 🛡️ **Dangling Model Turn Sanitization** | Interrupted tools or aborted sessions caused Gemini to reject requests with `400 "Requests ending with a model turn are not supported"`. | Added automatic `sanitizeEndingModelTurn` pipeline for Gemini payloads + one-shot retry propagation (`MODEL_TURN_RECOVERY_NEEDED`). |
+| ⏱️ **Server-Data-Driven Quota Exits** | Quota exhaustion retried blindly with backoff counters even when the server specified hours of wait time. | Captures `metadata.quotaResetTimeStamp` / `quotaResetDelay` from Google RPC errors, stores exact future reset timestamps, and enforces `max_all_blocked_wait_seconds` (default 120s) with clear model-switch suggestions. |
 | 📊 **Native Dual-Window Quota Tool** | Quota required a separate external plugin or returned flat model lists. | Embedded the official `antigravity_quota` tool directly into the auth plugin with full **5h Window + Weekly Window** tracking and progress bars via `/v1internal:retrieveUserQuotaSummary`. |
 | 🚀 **Gemini 3.7 Flash Support** | Backend returned `404 NOT_FOUND` (rewritten as *"enable preview access"* or `429`) when invoking `gemini-3.7-flash`. | Discovered that Google restricts 3.7 Flash strictly to official CLI signatures. The plugin now dynamically presents the official Antigravity CLI client signature (`antigravity/cli/...`), unlocking full native access to **Gemini 3.7 Flash (Low/Medium/High)**. |
 | ⚡ **Fast Multi-Account Failover** | On quota exhaustion the plugin would spin waiting on the same account (60s+ backoffs). | Default scheduling mode changed to `balance` with immediate `QUOTA_EXHAUSTED` failover (500ms) to the next account with quota. |
 | 🛠️ **IAM 403 Permission Denied Fix** | Requests failed with `403 IAM_PERMISSION_DENIED` on `projects/rising-fact-p41fc` for instances requiring `cloudaicompanion.instances.completeTask`. | Fixed two core bugs in `project.ts`: corrected `metadata.platform` from invalid `MACOS/WINDOWS` enums to `PLATFORM_UNSPECIFIED` and updated the discovery User-Agent, allowing automatic resolution and persistence of the account's real `managedProjectId`. |
 | ⚡ **Gemini 3.6 Flash & 3.5 Flash** | Native multi-tier backend model resolution (`gemini-3.6-flash-{low,medium,high}` and `gemini-3.5-flash-{low,high}`). | Multi-tier thinking resolution support built into `model-resolver.ts`. |
-| 🧹 **Clean CI & Community Standards** | Upstream had broken npm publishing actions and no rulesets. | Replaced with clean, automated Node.js CI with **1,034 tests passing**, security policies, and Dependabot groups. |
+| 🧹 **Clean CI & Community Standards** | Upstream had broken npm publishing actions and no rulesets. | Replaced with clean, automated Node.js CI with **1,042 tests passing**, security policies, and Dependabot groups. |
 
 ---
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.9.0] - 2026-09-02
+## [1.10.0] - 2026-09-02
 
 ### Added
 
@@ -8,17 +8,26 @@
 - **Trailing Model Turn Sanitization** - Gemini histories ending with a dangling `functionCall` (interrupted tools, ESC, crashed subagents, parallel sessions) now get placeholder `functionResponse`s injected before sending, fixing the `400 "Requests ending with a model turn are not supported"`. Applied to both wrapped and non-wrapped request paths, with a one-shot retry (`MODEL_TURN_RECOVERY_NEEDED`) and session-level detection (`model_turn_end`).
 - **Fail-Fast on All-Accounts-Blocked** - Added `max_all_blocked_wait_seconds` (default 120s). When all accounts are rate-limited or exhausted, retries stop cleanly with a descriptive message detailing status per account and inviting the user to switch models/providers or view windows via `antigravity_quota`.
 - **`getAllBlockedReasons` Helper** - Reports human-readable blocked states per account (quota reset countdowns, cooldown reasons, verification status).
+
+### Changed
+
+- **Upgraded Core Dependencies** - Bumped `@opencode-ai/plugin` to `1.18.26`, `zod` to `4.5.4`, and `@types/node` to `26.4.1`.
+- **Vitest upgraded to v4** - Bumped the vitest group (vitest, @vitest/coverage-v8, @vitest/ui) from 3.2.4 to 4.1.11. Fixed Vitest 4 test isolation (`resetAllMocks` in `persist-account-pool.test.ts`) and hoisted a nested `vi.mock` to top level (`quota-fallback.test.ts`).
+
+### Tests
+
+- 1,042 passing tests (36 suites). Added unit tests for exact server timestamp tracking, cooldown wait times, blocked account diagnosis, and trailing model turn sanitization (incl. MODEL_TURN_RECOVERY_NEEDED propagation).
+
+## [1.9.0] - 2026-09-02
+
+### Added
+
 - **Gemini 3.8 Flash Support** - Added `resolveAntigravityGemini38FlashBackendModel` in `model-resolver.ts` (→ `gemini-3.8-flash-{low,medium,high}`), wired it into both request paths in `request.ts`, and extended the CLI User-Agent spoofing regex to `/gemini-3\.[78]-flash/i`. Unlocks **Gemini 3.8 Flash (Low/Medium/High)** — verified against daily endpoints (200 with CLI UA); prod still 429 (rollout in progress).
 - **Gemini 3.8 Model Definition** - Registered `antigravity-gemini-3.8-flash` in `config/models.ts` (context 1M / output 65536, low/medium/high thinking variants).
 
 ### Changed
 
 - **Default Scheduling Mode to `balance`** - When multiple accounts are configured, the plugin now fails over immediately (500ms) to the next account with quota instead of spinning on an exhausted account. `QUOTA_EXHAUSTED` triggers instant account rotation.
-- **Vitest upgraded to v4** - Bumped the vitest group (vitest, @vitest/coverage-v8, @vitest/ui) from 3.2.4 to 4.1.11. Fixed Vitest 4 test isolation (`resetAllMocks` in `persist-account-pool.test.ts`) and hoisted a nested `vi.mock` to top level (`quota-fallback.test.ts`).
-
-### Tests
-
-- 1,042 passing tests (36 suites). Added unit tests for exact server timestamp tracking, cooldown wait times, blocked account diagnosis, and trailing model turn sanitization (incl. MODEL_TURN_RECOVERY_NEEDED propagation).
 
 ## [1.8.0] - 2026-08-29
 
