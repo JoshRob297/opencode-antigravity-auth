@@ -37,6 +37,7 @@ import {
   fixToolResponseGrouping,
   validateAndFixClaudeToolPairing,
   applyToolPairingFixes,
+  sanitizeEndingModelTurn,
   injectParameterSignatures,
   injectToolHardeningInstruction,
   isThinkingCapableModel,
@@ -918,6 +919,10 @@ export function prepareAntigravityRequest(
 
             // Step 3: Apply tool pairing fixes (ID assignment, response matching, orphan recovery)
             applyToolPairingFixes(req as Record<string, unknown>, true);
+          } else if (Array.isArray((req as any).contents)) {
+            // Gemini models: sanitize trailing model turns with dangling
+            // functionCalls (400 "Requests ending with a model turn are not supported").
+            (req as any).contents = sanitizeEndingModelTurn((req as any).contents);
           }
         }
 
@@ -1397,9 +1402,11 @@ export function prepareAntigravityRequest(
         }
 
         // For Claude models, ensure functionCall/tool use parts carry IDs (required by Anthropic).
+        // For Gemini models, the same pass repairs orphaned tool calls and injects
+        // placeholder responses so the history never ends on a dangling model turn.
         // We use a two-pass approach: first collect all functionCalls and assign IDs,
         // then match functionResponses to their corresponding calls using a FIFO queue per function name.
-        if (isClaude && Array.isArray(requestPayload.contents)) {
+        if (Array.isArray(requestPayload.contents)) {
           let toolCallCounter = 0;
           // Track pending call IDs per function name as a FIFO queue
           const pendingCallIdsByName = new Map<string, string[]>();
@@ -1459,6 +1466,13 @@ export function prepareAntigravityRequest(
           // create ID mismatches between calls and responses.
           // Ported from LLM-API-Key-Proxy's _fix_tool_response_grouping()
           requestPayload.contents = fixToolResponseGrouping(requestPayload.contents as any[]);
+
+          // Fourth pass (Gemini): guarantee the history does not end with a model
+          // turn holding a dangling functionCall (400 "Requests ending with a model
+          // turn are not supported"). Claude keeps its own messages[]-based fix.
+          if (!isClaude) {
+            requestPayload.contents = sanitizeEndingModelTurn(requestPayload.contents as any[]);
+          }
         }
 
         // Fourth pass: Fix Claude format tool pairing (defense in depth)
@@ -1779,6 +1793,16 @@ export async function transformAntigravityResponse(
         // Check if this is a recoverable thinking error - throw to trigger retry
         if (errorType === "thinking_block_order") {
           const recoveryError = new Error("THINKING_RECOVERY_NEEDED");
+          (recoveryError as any).recoveryType = errorType;
+          (recoveryError as any).originalError = errorBody;
+          (recoveryError as any).debugInfo = debugInfo;
+          throw recoveryError;
+        }
+
+        // Detect "history ends with a dangling model turn" (400) - throw to trigger
+        // a retry whose payload is sanitized via sanitizeEndingModelTurn.
+        if (errorType === "model_turn_end") {
+          const recoveryError = new Error("MODEL_TURN_RECOVERY_NEEDED");
           (recoveryError as any).recoveryType = errorType;
           (recoveryError as any).originalError = errorBody;
           (recoveryError as any).debugInfo = debugInfo;

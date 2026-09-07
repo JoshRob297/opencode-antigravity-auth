@@ -94,6 +94,13 @@ export function detectErrorType(error: unknown): RecoveryErrorType {
     return "tool_result_missing";
   }
 
+  // model_turn_end: Gemini rejects histories that end with a model turn holding
+  // a functionCall without a functionResponse (400 "Requests ending with a model
+  // turn are not supported"). Recovered by sanitizing the payload before retry.
+  if (message.includes("ending with a model turn") || message.includes("model turn")) {
+    return "model_turn_end";
+  }
+
   // thinking_block_order: Happens when thinking blocks are corrupted
   if (
     message.includes("thinking") &&

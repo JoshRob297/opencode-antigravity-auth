@@ -101,7 +101,7 @@ export interface ResumeConfig {
         modelID: string;
     };
 }
-export type RecoveryErrorType = "tool_result_missing" | "thinking_block_order" | "thinking_disabled_violation" | null;
+export type RecoveryErrorType = "tool_result_missing" | "thinking_block_order" | "thinking_disabled_violation" | "model_turn_end" | null;
 export interface ToolUsePart {
     type: "tool_use";
     id: string;

@@ -1624,6 +1624,8 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                             while (!shouldSwitchAccount) {
                                 // Flag to force thinking recovery on retry after API error
                                 let forceThinkingRecovery = false;
+                                // Flag to force payload sanitization (trailing model turn) on retry
+                                let forceModelTurnFix = false;
                                 // Track if token was consumed (for hybrid strategy refund on error)
                                 let tokenConsumed = false;
                                 // Track capacity retries per endpoint to prevent infinite loops
@@ -1988,6 +1990,31 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                             const recoveryError = error;
                                             const originalError = recoveryError.originalError || { error: { message: "Thinking recovery triggered" } };
                                             const recoveryMessage = `${originalError.error?.message || "Session recovery failed"}\n\n[RECOVERY] Thinking block corruption could not be resolved. Try starting a new session.`;
+                                            return new Response(JSON.stringify({
+                                                type: "error",
+                                                error: {
+                                                    type: "unrecoverable_error",
+                                                    message: recoveryMessage
+                                                }
+                                            }), {
+                                                status: 400,
+                                                headers: { "Content-Type": "application/json" }
+                                            });
+                                        }
+                                        // Handle "history ends with a model turn" (400) - retry once with sanitized payload
+                                        if (error instanceof Error && error.message === "MODEL_TURN_RECOVERY_NEEDED") {
+                                            if (!forceModelTurnFix) {
+                                                pushDebug("model-turn-recovery: API error detected, retrying with sanitized payload");
+                                                forceModelTurnFix = true;
+                                                i = -1; // Will become 0 after loop increment, restart endpoint loop
+                                                continue;
+                                            }
+                                            // Already retried with sanitization - surface the error clearly
+                                            const recoveryError = error;
+                                            const originalError = recoveryError.originalError || { error: { message: "History ends with a model turn" } };
+                                            const rawMessage = originalError.error?.message || "History ends with a model turn";
+                                            const recoveryMessage = `${rawMessage}\n\n[RECOVERY] Conversation history still ends with an unresolved tool call.\n` +
+                                                `Use /undo to remove the last incomplete tool turn, or start a new session.`;
                                             return new Response(JSON.stringify({
                                                 type: "error",
                                                 error: {

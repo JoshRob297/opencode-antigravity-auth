@@ -2209,12 +2209,14 @@ export function matchResponseIdsToContents(contents, pendingCallIdsByName) {
     });
 }
 /**
- * Applies all tool fixes to a request payload for Claude models.
+ * Applies all tool fixes to a request payload.
  * This includes:
  * 1. Tool ID assignment for functionCalls
  * 2. Response ID matching for functionResponses
  * 3. Orphan recovery via fixToolResponseGrouping
  * 4. Claude format pairing fix via validateAndFixClaudeToolPairing
+ *
+ * Works for BOTH Gemini (contents[]) and Claude (messages[]) formats.
  *
  * @param payload - Request payload object
  * @param isClaude - Whether this is a Claude model request
@@ -2223,10 +2225,8 @@ export function matchResponseIdsToContents(contents, pendingCallIdsByName) {
 export function applyToolPairingFixes(payload, isClaude) {
     let contentsFixed = false;
     let messagesFixed = false;
-    if (!isClaude) {
-        return { contentsFixed, messagesFixed };
-    }
-    // Fix Gemini format (contents[])
+    // Fix Gemini format (contents[]) - applies to both Gemini and Claude requests
+    // since Claude requests may also carry Gemini-style contents in wrapped bodies.
     if (Array.isArray(payload.contents)) {
         // First pass: assign IDs to functionCalls
         const { contents: contentsWithIds, pendingCallIdsByName } = assignToolIdsToContents(payload.contents);
@@ -2240,7 +2240,7 @@ export function applyToolPairingFixes(payload, isClaude) {
         });
     }
     // Fix Claude format (messages[])
-    if (Array.isArray(payload.messages)) {
+    if (isClaude && Array.isArray(payload.messages)) {
         payload.messages = validateAndFixClaudeToolPairing(payload.messages);
         messagesFixed = true;
         log.debug("Applied tool pairing fixes to messages[]", {
@@ -2248,6 +2248,59 @@ export function applyToolPairingFixes(payload, isClaude) {
         });
     }
     return { contentsFixed, messagesFixed };
+}
+/**
+ * Sanitizes a Gemini-style contents array so it does NOT end with a model turn.
+ *
+ * The Antigravity backend rejects requests whose history ends with a model
+ * turn that contains a functionCall without a matching functionResponse
+ * (HTTP 400 "Requests ending with a model turn are not supported").
+ *
+ * This happens after interrupted tool executions (ESC, aborted subagents,
+ * parallel sessions) where the last assistant message keeps a dangling
+ * tool call. The fix reuses the existing orphan-recovery pipeline:
+ * 1. Assign deterministic IDs to any functionCalls missing them
+ * 2. Match existing functionResponses to their calls
+ * 3. Inject placeholder functionResponses for still-pending calls
+ *
+ * @param contents - Gemini-style contents array
+ * @returns Sanitized contents that no longer end with an orphaned model turn
+ */
+export function sanitizeEndingModelTurn(contents) {
+    if (!Array.isArray(contents) || contents.length === 0) {
+        return contents;
+    }
+    const last = contents[contents.length - 1];
+    if (!last || typeof last !== "object") {
+        return contents;
+    }
+    const role = last.role;
+    if (role !== "model" && role !== "assistant") {
+        return contents;
+    }
+    const parts = Array.isArray(last.parts)
+        ? last.parts
+        : [];
+    const hasFunctionCall = parts.some((p) => p && typeof p === "object" && p.functionCall);
+    if (!hasFunctionCall) {
+        return contents;
+    }
+    const payload = { contents: [...contents] };
+    applyToolPairingFixes(payload, false);
+    const fixed = Array.isArray(payload.contents) ? payload.contents : contents;
+    // Last-resort guarantee: if we still end with a model turn holding a
+    // functionCall, drop that trailing turn so the request is accepted.
+    const lastAfter = fixed[fixed.length - 1];
+    const partsAfter = Array.isArray(lastAfter?.parts) ? lastAfter.parts : [];
+    const stillEndsWithCall = (lastAfter?.role === "model" || lastAfter?.role === "assistant") &&
+        partsAfter.some((p) => p?.functionCall);
+    if (stillEndsWithCall) {
+        log.debug("sanitizeEndingModelTurn: dropping trailing orphan model turn", {
+            lastRole: lastAfter?.role,
+        });
+        return fixed.slice(0, -1);
+    }
+    return fixed;
 }
 // ============================================================================
 // SYNTHETIC CLAUDE SSE RESPONSE

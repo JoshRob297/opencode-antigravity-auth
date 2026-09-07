@@ -251,12 +251,14 @@ export declare function assignToolIdsToContents(contents: any[]): {
  */
 export declare function matchResponseIdsToContents(contents: any[], pendingCallIdsByName: Map<string, string[]>): any[];
 /**
- * Applies all tool fixes to a request payload for Claude models.
+ * Applies all tool fixes to a request payload.
  * This includes:
  * 1. Tool ID assignment for functionCalls
  * 2. Response ID matching for functionResponses
  * 3. Orphan recovery via fixToolResponseGrouping
  * 4. Claude format pairing fix via validateAndFixClaudeToolPairing
+ *
+ * Works for BOTH Gemini (contents[]) and Claude (messages[]) formats.
  *
  * @param payload - Request payload object
  * @param isClaude - Whether this is a Claude model request
@@ -266,6 +268,24 @@ export declare function applyToolPairingFixes(payload: Record<string, unknown>, 
     contentsFixed: boolean;
     messagesFixed: boolean;
 };
+/**
+ * Sanitizes a Gemini-style contents array so it does NOT end with a model turn.
+ *
+ * The Antigravity backend rejects requests whose history ends with a model
+ * turn that contains a functionCall without a matching functionResponse
+ * (HTTP 400 "Requests ending with a model turn are not supported").
+ *
+ * This happens after interrupted tool executions (ESC, aborted subagents,
+ * parallel sessions) where the last assistant message keeps a dangling
+ * tool call. The fix reuses the existing orphan-recovery pipeline:
+ * 1. Assign deterministic IDs to any functionCalls missing them
+ * 2. Match existing functionResponses to their calls
+ * 3. Inject placeholder functionResponses for still-pending calls
+ *
+ * @param contents - Gemini-style contents array
+ * @returns Sanitized contents that no longer end with an orphaned model turn
+ */
+export declare function sanitizeEndingModelTurn(contents: any[]): any[];
 /**
  * Creates a synthetic Claude SSE streaming response with error content.
  *

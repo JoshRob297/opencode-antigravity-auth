@@ -23,6 +23,7 @@ import {
   cleanJSONSchemaForAntigravity,
   createSyntheticErrorResponse,
   recursivelyParseJsonStrings,
+  sanitizeEndingModelTurn,
 } from "./request-helpers";
 import { deduplicateThinkingText, createThoughtBuffer } from "./core/streaming/transformer";
 
@@ -1949,5 +1950,97 @@ describe("recursivelyParseJsonStrings", () => {
         },
       },
     });
+  });
+});
+
+describe("sanitizeEndingModelTurn", () => {
+  it("injects placeholder response when history ends with a model functionCall", () => {
+    const contents = [
+      { role: "user", parts: [{ text: "Check quota" }] },
+      {
+        role: "model",
+        parts: [
+          {
+            functionCall: {
+              name: "antigravity_quota",
+              args: {},
+            },
+          },
+        ],
+      },
+    ];
+
+    const result = sanitizeEndingModelTurn(contents);
+
+    // Must append a user turn with a functionResponse (or drop the trailing call)
+    expect(result.length).toBeGreaterThan(0);
+    const last = result[result.length - 1]!;
+    expect(last.role).not.toBe("model");
+    if (last.role === "user" && Array.isArray(last.parts)) {
+      const hasFunctionResponse = last.parts.some(
+        (p: any) => p?.functionResponse
+      );
+      expect(hasFunctionResponse).toBe(true);
+    }
+  });
+
+  it("leaves normal history ending with a user turn unchanged", () => {
+    const contents = [
+      { role: "user", parts: [{ text: "Hello" }] },
+      { role: "model", parts: [{ text: "Hi!" }] },
+      { role: "user", parts: [{ text: "Continue" }] },
+    ];
+
+    const result = sanitizeEndingModelTurn(contents);
+    expect(result).toEqual(contents);
+  });
+
+  it("handles multiple consecutive functionCalls at the end", () => {
+    const contents = [
+      { role: "user", parts: [{ text: "Do both" }] },
+      {
+        role: "model",
+        parts: [
+          { functionCall: { name: "bash", args: { command: "ls" } } },
+          { functionCall: { name: "antigravity_quota", args: {} } },
+        ],
+      },
+    ];
+
+    const result = sanitizeEndingModelTurn(contents);
+
+    const last = result[result.length - 1]!;
+    expect(last.role).not.toBe("model");
+    if (last.role === "user" && Array.isArray(last.parts)) {
+      const responseCount = last.parts.filter(
+        (p: any) => p?.functionResponse
+      ).length;
+      // One response per call, or the trailing turn was dropped entirely
+      expect(responseCount).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("drops the trailing model turn when the functionCall cannot be resolved", () => {
+    const contents = [
+      { role: "user", parts: [{ text: "Run tool" }] },
+      {
+        role: "model",
+        parts: [
+          {
+            functionCall: {
+              // No id - orphan recovery can still assign one
+              name: "bash",
+              args: {},
+            },
+          },
+        ],
+      },
+    ];
+
+    const result = sanitizeEndingModelTurn(contents);
+
+    // Result must not end with a model turn at all
+    const last = result[result.length - 1]!;
+    expect(last.role).not.toBe("model");
   });
 });

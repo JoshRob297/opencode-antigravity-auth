@@ -2,6 +2,24 @@ import { describe, it, expect } from "vitest";
 import { detectErrorType, isRecoverableError } from "./recovery";
 
 describe("detectErrorType", () => {
+  describe("model_turn_end detection", () => {
+    it("detects the exact Gemini 400 error message", () => {
+      const error = "Requests ending with a model turn are not supported.";
+      expect(detectErrorType(error)).toBe("model_turn_end");
+    });
+
+    it("detects from error object with message field", () => {
+      const error = {
+        error: { message: "Request contains unsupported input. Requests ending with a model turn are not supported." }
+      };
+      expect(detectErrorType(error)).toBe("model_turn_end");
+    });
+
+    it("returns null for unrelated messages", () => {
+      expect(detectErrorType("Random server error")).toBeNull();
+    });
+  });
+
   describe("tool_result_missing detection", () => {
     it("detects tool_use without tool_result error", () => {
       const error = {
