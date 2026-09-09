@@ -757,6 +757,7 @@ export function prepareAntigravityRequest(
   headerStyle: HeaderStyle = "antigravity",
   forceThinkingRecovery = false,
   options?: PrepareRequestOptions,
+  forceModelTurnFix = false,
 ): {
   request: RequestInfo;
   init: RequestInit;
@@ -923,7 +924,7 @@ export function prepareAntigravityRequest(
           } else if (Array.isArray((req as any).contents)) {
             // Gemini models: sanitize trailing model turns with dangling
             // functionCalls (400 "Requests ending with a model turn are not supported").
-            (req as any).contents = sanitizeEndingModelTurn((req as any).contents);
+            (req as any).contents = sanitizeEndingModelTurn((req as any).contents, forceModelTurnFix);
           }
         }
 
@@ -1472,7 +1473,7 @@ export function prepareAntigravityRequest(
           // turn holding a dangling functionCall (400 "Requests ending with a model
           // turn are not supported"). Claude keeps its own messages[]-based fix.
           if (!isClaude) {
-            requestPayload.contents = sanitizeEndingModelTurn(requestPayload.contents as any[]);
+            requestPayload.contents = sanitizeEndingModelTurn(requestPayload.contents as any[], forceModelTurnFix);
           }
         }
 
@@ -1799,16 +1800,16 @@ export async function transformAntigravityResponse(
             ? errorBody.error.message
             : "Unknown error";
         const errorType = detectErrorType(rawErrorMessage);
-        const debugInfo = `\n\n[Debug Info]\nRequested Model: ${requestedModel || "Unknown"}\nEffective Model: ${effectiveModel || "Unknown"}\nProject: ${projectId || "Unknown"}\nEndpoint: ${endpoint || "Unknown"}\nStatus: ${response.status}\nRequest ID: ${headers.get("x-request-id") || "N/A"}${toolDebugMissing !== undefined ? `\nTool Debug Missing: ${toolDebugMissing}` : ""}${toolDebugSummary ? `\nTool Debug Summary: ${toolDebugSummary}` : ""}${toolDebugPayload ? `\nTool Debug Payload: ${toolDebugPayload}` : ""}`;
+        const cleanDebugInfo = `\n\n[Debug Info]\nRequested Model: ${requestedModel || "Unknown"}\nEffective Model: ${effectiveModel || "Unknown"}\nProject: ${projectId || "Unknown"}\nEndpoint: ${endpoint || "Unknown"}\nStatus: ${response.status}\nRequest ID: ${headers.get("x-request-id") || "N/A"}`;
         const injectedDebug = debugText ? `\n\n${debugText}` : "";
-        errorBody.error.message = rawErrorMessage + debugInfo + injectedDebug;
+        errorBody.error.message = rawErrorMessage + cleanDebugInfo + injectedDebug;
 
         // Check if this is a recoverable thinking error - throw to trigger retry
         if (errorType === "thinking_block_order") {
           const recoveryError = new Error("THINKING_RECOVERY_NEEDED");
           (recoveryError as any).recoveryType = errorType;
           (recoveryError as any).originalError = errorBody;
-          (recoveryError as any).debugInfo = debugInfo;
+          (recoveryError as any).debugInfo = cleanDebugInfo;
           throw recoveryError;
         }
 
@@ -1818,7 +1819,7 @@ export async function transformAntigravityResponse(
           const recoveryError = new Error("MODEL_TURN_RECOVERY_NEEDED");
           (recoveryError as any).recoveryType = errorType;
           (recoveryError as any).originalError = errorBody;
-          (recoveryError as any).debugInfo = debugInfo;
+          (recoveryError as any).debugInfo = cleanDebugInfo;
           throw recoveryError;
         }
 

@@ -2047,6 +2047,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
                     claudePromptAutoCaching: config.claude_prompt_auto_caching,
                     fingerprint: account.fingerprint,
                   },
+                  forceModelTurnFix,
                 );
 
                 const originalUrl = toUrlString(input);
@@ -2568,7 +2569,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
                   const rawMessage = originalError.error?.message || "History ends with a model turn";
 
                   const recoveryMessage =
-                    `${rawMessage}\n\n[RECOVERY] Conversation history still ends with an unresolved tool call.\n` +
+                    `Requests ending with a model turn are not supported.\n\n[RECOVERY] Conversation history still ends with an unresolved tool call.\n` +
                     `Use /undo to remove the last incomplete tool turn, or start a new session.`;
 
                   return new Response(JSON.stringify({

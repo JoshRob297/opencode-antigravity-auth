@@ -2264,9 +2264,12 @@ export function applyToolPairingFixes(payload, isClaude) {
  * 3. Inject placeholder functionResponses for still-pending calls
  *
  * @param contents - Gemini-style contents array
+ * @param force - When true, also drop trailing model turns that contain NO
+ * functionCall (pure text/thinking). Used on retry after the backend already
+ * rejected the request with "Requests ending with a model turn are not supported".
  * @returns Sanitized contents that no longer end with an orphaned model turn
  */
-export function sanitizeEndingModelTurn(contents) {
+export function sanitizeEndingModelTurn(contents, force = false) {
     if (!Array.isArray(contents) || contents.length === 0) {
         return contents;
     }
@@ -2282,23 +2285,34 @@ export function sanitizeEndingModelTurn(contents) {
         ? last.parts
         : [];
     const hasFunctionCall = parts.some((p) => p && typeof p === "object" && p.functionCall);
-    if (!hasFunctionCall) {
+    if (!hasFunctionCall && !force) {
         return contents;
     }
     const payload = { contents: [...contents] };
     applyToolPairingFixes(payload, false);
-    const fixed = Array.isArray(payload.contents) ? payload.contents : contents;
-    // Last-resort guarantee: if we still end with a model turn holding a
-    // functionCall, drop that trailing turn so the request is accepted.
-    const lastAfter = fixed[fixed.length - 1];
-    const partsAfter = Array.isArray(lastAfter?.parts) ? lastAfter.parts : [];
-    const stillEndsWithCall = (lastAfter?.role === "model" || lastAfter?.role === "assistant") &&
-        partsAfter.some((p) => p?.functionCall);
-    if (stillEndsWithCall) {
+    let fixed = Array.isArray(payload.contents) ? payload.contents : contents;
+    // Last-resort guarantee: if we still end with a model turn (holding a
+    // functionCall, or any model turn when force=true), drop trailing turns
+    // until the history ends with a user turn so the request is accepted.
+    const isTrailingModelTurn = (c) => !!c && (c.role === "model" || c.role === "assistant");
+    if (hasFunctionCall && !isTrailingModelTurn(fixed[fixed.length - 1])) {
+        return fixed;
+    }
+    if ((hasFunctionCall || force) && isTrailingModelTurn(fixed[fixed.length - 1])) {
         log.debug("sanitizeEndingModelTurn: dropping trailing orphan model turn", {
-            lastRole: lastAfter?.role,
+            lastRole: fixed[fixed.length - 1]?.role,
+            force,
         });
-        return fixed.slice(0, -1);
+        const lastIdx = fixed.length - 1;
+        // Drop the trailing model turn AND any model-only tail (e.g., consecutive
+        // model turns without a user turn in between).
+        while (fixed.length > 0 && isTrailingModelTurn(fixed[fixed.length - 1])) {
+            fixed = fixed.slice(0, -1);
+        }
+        // Avoid duplicate drop if nothing changed
+        if (fixed.length === lastIdx) {
+            return fixed;
+        }
     }
     return fixed;
 }

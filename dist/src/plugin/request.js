@@ -542,7 +542,7 @@ const STREAM_ACTION = "streamGenerateContent";
 export function isGenerativeLanguageRequest(input) {
     return typeof input === "string" && input.includes("generativelanguage.googleapis.com");
 }
-export function prepareAntigravityRequest(input, init, accessToken, projectId, endpointOverride, headerStyle = "antigravity", forceThinkingRecovery = false, options) {
+export function prepareAntigravityRequest(input, init, accessToken, projectId, endpointOverride, headerStyle = "antigravity", forceThinkingRecovery = false, options, forceModelTurnFix = false) {
     const baseInit = { ...init };
     const headers = new Headers(init?.headers ?? {});
     let resolvedProjectId = projectId?.trim() || "";
@@ -668,7 +668,7 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                     else if (Array.isArray(req.contents)) {
                         // Gemini models: sanitize trailing model turns with dangling
                         // functionCalls (400 "Requests ending with a model turn are not supported").
-                        req.contents = sanitizeEndingModelTurn(req.contents);
+                        req.contents = sanitizeEndingModelTurn(req.contents, forceModelTurnFix);
                     }
                 }
                 if (isClaudeThinking && keepThinkingEnabled && sessionId) {
@@ -1129,7 +1129,7 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                     // turn holding a dangling functionCall (400 "Requests ending with a model
                     // turn are not supported"). Claude keeps its own messages[]-based fix.
                     if (!isClaude) {
-                        requestPayload.contents = sanitizeEndingModelTurn(requestPayload.contents);
+                        requestPayload.contents = sanitizeEndingModelTurn(requestPayload.contents, forceModelTurnFix);
                     }
                 }
                 // Fourth pass: Fix Claude format tool pairing (defense in depth)
@@ -1408,15 +1408,15 @@ export async function transformAntigravityResponse(response, streaming, debugCon
                     ? errorBody.error.message
                     : "Unknown error";
                 const errorType = detectErrorType(rawErrorMessage);
-                const debugInfo = `\n\n[Debug Info]\nRequested Model: ${requestedModel || "Unknown"}\nEffective Model: ${effectiveModel || "Unknown"}\nProject: ${projectId || "Unknown"}\nEndpoint: ${endpoint || "Unknown"}\nStatus: ${response.status}\nRequest ID: ${headers.get("x-request-id") || "N/A"}${toolDebugMissing !== undefined ? `\nTool Debug Missing: ${toolDebugMissing}` : ""}${toolDebugSummary ? `\nTool Debug Summary: ${toolDebugSummary}` : ""}${toolDebugPayload ? `\nTool Debug Payload: ${toolDebugPayload}` : ""}`;
+                const cleanDebugInfo = `\n\n[Debug Info]\nRequested Model: ${requestedModel || "Unknown"}\nEffective Model: ${effectiveModel || "Unknown"}\nProject: ${projectId || "Unknown"}\nEndpoint: ${endpoint || "Unknown"}\nStatus: ${response.status}\nRequest ID: ${headers.get("x-request-id") || "N/A"}`;
                 const injectedDebug = debugText ? `\n\n${debugText}` : "";
-                errorBody.error.message = rawErrorMessage + debugInfo + injectedDebug;
+                errorBody.error.message = rawErrorMessage + cleanDebugInfo + injectedDebug;
                 // Check if this is a recoverable thinking error - throw to trigger retry
                 if (errorType === "thinking_block_order") {
                     const recoveryError = new Error("THINKING_RECOVERY_NEEDED");
                     recoveryError.recoveryType = errorType;
                     recoveryError.originalError = errorBody;
-                    recoveryError.debugInfo = debugInfo;
+                    recoveryError.debugInfo = cleanDebugInfo;
                     throw recoveryError;
                 }
                 // Detect "history ends with a dangling model turn" (400) - throw to trigger
@@ -1425,7 +1425,7 @@ export async function transformAntigravityResponse(response, streaming, debugCon
                     const recoveryError = new Error("MODEL_TURN_RECOVERY_NEEDED");
                     recoveryError.recoveryType = errorType;
                     recoveryError.originalError = errorBody;
-                    recoveryError.debugInfo = debugInfo;
+                    recoveryError.debugInfo = cleanDebugInfo;
                     throw recoveryError;
                 }
                 // Detect context length / prompt too long errors - signal to caller for toast

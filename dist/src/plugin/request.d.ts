@@ -42,7 +42,7 @@ export interface PrepareRequestOptions {
     /** Per-account fingerprint for rate limit mitigation. Falls back to session fingerprint if not provided. */
     fingerprint?: Fingerprint;
 }
-export declare function prepareAntigravityRequest(input: RequestInfo, init: RequestInit | undefined, accessToken: string, projectId: string, endpointOverride?: string, headerStyle?: HeaderStyle, forceThinkingRecovery?: boolean, options?: PrepareRequestOptions): {
+export declare function prepareAntigravityRequest(input: RequestInfo, init: RequestInit | undefined, accessToken: string, projectId: string, endpointOverride?: string, headerStyle?: HeaderStyle, forceThinkingRecovery?: boolean, options?: PrepareRequestOptions, forceModelTurnFix?: boolean): {
     request: RequestInfo;
     init: RequestInit;
     streaming: boolean;

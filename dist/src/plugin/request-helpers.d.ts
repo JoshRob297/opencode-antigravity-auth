@@ -283,9 +283,12 @@ export declare function applyToolPairingFixes(payload: Record<string, unknown>, 
  * 3. Inject placeholder functionResponses for still-pending calls
  *
  * @param contents - Gemini-style contents array
+ * @param force - When true, also drop trailing model turns that contain NO
+ * functionCall (pure text/thinking). Used on retry after the backend already
+ * rejected the request with "Requests ending with a model turn are not supported".
  * @returns Sanitized contents that no longer end with an orphaned model turn
  */
-export declare function sanitizeEndingModelTurn(contents: any[]): any[];
+export declare function sanitizeEndingModelTurn(contents: any[], force?: boolean): any[];
 /**
  * Creates a synthetic Claude SSE streaming response with error content.
  *
