@@ -20,7 +20,7 @@
 | ⚡ **Fast Multi-Account Failover** | On quota exhaustion the plugin would spin waiting on the same account (60s+ backoffs). | Default scheduling mode changed to `balance` with immediate `QUOTA_EXHAUSTED` failover (500ms) to the next account with quota. |
 | 🛠️ **IAM 403 Permission Denied Fix** | Requests failed with `403 IAM_PERMISSION_DENIED` on `projects/rising-fact-p41fc` for instances requiring `cloudaicompanion.instances.completeTask`. | Fixed two core bugs in `project.ts`: corrected `metadata.platform` from invalid `MACOS/WINDOWS` enums to `PLATFORM_UNSPECIFIED` and updated the discovery User-Agent, allowing automatic resolution and persistence of the account's real `managedProjectId`. |
 | ⚡ **Gemini 3.6 Flash & 3.5 Flash** | Native multi-tier backend model resolution (`gemini-3.6-flash-{low,medium,high}` and `gemini-3.5-flash-{low,high}`). | Multi-tier thinking resolution support built into `model-resolver.ts`. |
-| 🧹 **Clean CI & Community Standards** | Upstream had broken npm publishing actions and no rulesets. | Replaced with clean, automated Node.js CI with **1,042 tests passing**, security policies, and Dependabot groups. |
+| 🧹 **Clean CI & Community Standards** | Upstream had broken npm publishing actions and no rulesets. | Replaced with clean, automated Node.js CI with **1,046 tests passing**, security policies, and Dependabot groups. |
 
 ---
 

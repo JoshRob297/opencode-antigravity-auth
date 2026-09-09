@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { ANTIGRAVITY_ENDPOINT, GEMINI_CLI_ENDPOINT, GEMINI_CLI_HEADERS, EMPTY_SCHEMA_PLACEHOLDER_NAME, EMPTY_SCHEMA_PLACEHOLDER_DESCRIPTION, SKIP_THOUGHT_SIGNATURE, getRandomizedHeaders, } from "../constants";
 import { cacheSignature, getCachedSignature } from "./cache";
 import { getKeepThinking } from "./config";
-import { createStreamingTransformer, transformSseLine, transformStreamingPayload, } from "./core/streaming";
+import { createStreamingTransformer, transformSseLine, transformStreamingPayload, sanitizeGuardrailMessage, } from "./core/streaming";
 import { defaultSignatureStore } from "./stores/signature-store";
 import { DEBUG_MESSAGE_PREFIX, isDebugEnabled, isDebugTuiEnabled, logAntigravityDebugResponse, logCacheStats, } from "./debug";
 import { createLogger } from "./logger";
@@ -1168,6 +1168,17 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                 if ("model" in requestPayload) {
                     delete requestPayload.model;
                 }
+                // Inject permissive safetySettings by default for Gemini models to prevent
+                // false-positive blocks on coding, security research, and system utilities.
+                if (!isClaude && !requestPayload.safetySettings) {
+                    requestPayload.safetySettings = [
+                        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+                        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+                        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+                        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
+                        { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_ONLY_HIGH" },
+                    ];
+                }
                 stripInjectedDebugFromRequestPayload(requestPayload);
                 sanitizeRequestPayloadForAntigravity(requestPayload);
                 const effectiveProjectId = projectId?.trim() || (headerStyle === "antigravity" ? generateSyntheticProjectId() : "");
@@ -1497,6 +1508,7 @@ export async function transformAntigravityResponse(response, streaming, debugCon
             if (debugText) {
                 responseBody = injectDebugThinking(responseBody, debugText);
             }
+            responseBody = sanitizeGuardrailMessage(responseBody);
             const transformed = transformThinkingParts(responseBody);
             return new Response(JSON.stringify(transformed), init);
         }

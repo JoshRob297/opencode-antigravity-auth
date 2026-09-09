@@ -1,4 +1,50 @@
 import { processImageData } from '../../image-saver';
+export const CLEAN_GUARDRAIL_MESSAGE = "[Solicitud bloqueada por filtros de seguridad de Gemini. Por favor, intenta reformular tu prompt o enfoque.]";
+/**
+ * Checks if a text is the generic verbose Gemini filter blocking message
+ * and replaces it with a clean, concise prompt rephrase invitation.
+ */
+export function sanitizeGuardrailText(text) {
+    if (text.includes("This request was blocked by Gemini's filters") ||
+        text.includes("blocked by Gemini's filters") ||
+        (text.includes("Gemini's filters") && text.includes("rephrasing your prompt"))) {
+        return CLEAN_GUARDRAIL_MESSAGE;
+    }
+    return text;
+}
+/**
+ * Replaces verbose Google safety filter messages in response candidates
+ * with a concise rephrasing invitation.
+ */
+export function sanitizeGuardrailMessage(response) {
+    if (!response || typeof response !== "object")
+        return response;
+    const resp = response;
+    if (Array.isArray(resp.candidates)) {
+        for (const candidate of resp.candidates) {
+            const cand = candidate;
+            if (!cand)
+                continue;
+            if (cand.finishReason === "SAFETY") {
+                if (!cand.content || typeof cand.content !== "object") {
+                    cand.content = { parts: [{ text: CLEAN_GUARDRAIL_MESSAGE }], role: "model" };
+                }
+            }
+            if (cand.content && typeof cand.content === "object") {
+                const content = cand.content;
+                if (Array.isArray(content.parts)) {
+                    for (const part of content.parts) {
+                        const p = part;
+                        if (p && typeof p.text === "string") {
+                            p.text = sanitizeGuardrailText(p.text);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return response;
+}
 /**
  * Simple string hash for thinking deduplication.
  * Uses DJB2-like algorithm.
@@ -155,7 +201,8 @@ export function transformSseLine(line, signatureStore, thoughtBuffer, sentThinki
                 response = callbacks.onInjectDebug(response, options.debugText);
                 debugState.injected = true;
             }
-            // Note: onInjectSyntheticThinking removed - keep_thinking now uses debugText path
+            // Clean guardrail / safety filter message
+            response = sanitizeGuardrailMessage(response);
             const transformed = callbacks.transformThinkingParts
                 ? callbacks.transformThinkingParts(response)
                 : response;

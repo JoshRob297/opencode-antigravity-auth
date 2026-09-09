@@ -15,6 +15,7 @@ import {
   createStreamingTransformer,
   transformSseLine,
   transformStreamingPayload,
+  sanitizeGuardrailMessage,
 } from "./core/streaming";
 import { defaultSignatureStore } from "./stores/signature-store";
 import {
@@ -1517,6 +1518,18 @@ export function prepareAntigravityRequest(
           delete requestPayload.model;
         }
 
+        // Inject permissive safetySettings by default for Gemini models to prevent
+        // false-positive blocks on coding, security research, and system utilities.
+        if (!isClaude && !requestPayload.safetySettings) {
+          requestPayload.safetySettings = [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_ONLY_HIGH" },
+          ];
+        }
+
         stripInjectedDebugFromRequestPayload(requestPayload);
         sanitizeRequestPayloadForAntigravity(requestPayload);
 
@@ -1912,6 +1925,7 @@ export async function transformAntigravityResponse(
       if (debugText) {
         responseBody = injectDebugThinking(responseBody, debugText);
       }
+      responseBody = sanitizeGuardrailMessage(responseBody);
       const transformed = transformThinkingParts(responseBody);
       return new Response(JSON.stringify(transformed), init);
     }

@@ -16,7 +16,7 @@
 
 ### Tests
 
-- 1,042 passing tests (36 suites). Added unit tests for exact server timestamp tracking, cooldown wait times, blocked account diagnosis, and trailing model turn sanitization (incl. MODEL_TURN_RECOVERY_NEEDED propagation).
+- 1,046 passing tests (36 suites). Added unit tests for exact server timestamp tracking, cooldown wait times, blocked account diagnosis, and trailing model turn sanitization (incl. MODEL_TURN_RECOVERY_NEEDED propagation).
 
 ## [1.9.0] - 2026-09-02
 

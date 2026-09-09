@@ -1,4 +1,15 @@
 import type { SignatureStore, StreamingCallbacks, StreamingOptions, ThoughtBuffer } from './types';
+export declare const CLEAN_GUARDRAIL_MESSAGE = "[Solicitud bloqueada por filtros de seguridad de Gemini. Por favor, intenta reformular tu prompt o enfoque.]";
+/**
+ * Checks if a text is the generic verbose Gemini filter blocking message
+ * and replaces it with a clean, concise prompt rephrase invitation.
+ */
+export declare function sanitizeGuardrailText(text: string): string;
+/**
+ * Replaces verbose Google safety filter messages in response candidates
+ * with a concise rephrasing invitation.
+ */
+export declare function sanitizeGuardrailMessage(response: unknown): unknown;
 export declare function createThoughtBuffer(): ThoughtBuffer;
 export declare function transformStreamingPayload(payload: string, transformThinkingParts?: (response: unknown) => unknown): string;
 export declare function deduplicateThinkingText(response: unknown, sentBuffer: ThoughtBuffer, displayedThinkingHashes?: Set<string>): unknown;

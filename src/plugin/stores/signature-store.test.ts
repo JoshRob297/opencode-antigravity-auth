@@ -4,6 +4,11 @@ import {
   createThoughtBuffer,
   defaultSignatureStore,
 } from "./signature-store";
+import {
+  sanitizeGuardrailText,
+  sanitizeGuardrailMessage,
+  CLEAN_GUARDRAIL_MESSAGE,
+} from "../core/streaming";
 
 // ─── createSignatureStore ─────────────────────────────────────────────────────
 
@@ -145,5 +150,55 @@ describe("defaultSignatureStore", () => {
   it("is a module-level singleton (same reference on re-import)", async () => {
     const { defaultSignatureStore: imported } = await import("./signature-store");
     expect(imported).toBe(defaultSignatureStore);
+  });
+});
+
+// ─── Guardrail Sanitizer ──────────────────────────────────────────────────────
+
+describe("Guardrail / Safety Filter Sanitization", () => {
+  it("replaces verbose Google Gemini filter message with clean rephrase message", () => {
+    const rawBlocked =
+      "This request was blocked by Gemini's filters. They can occasionally trigger by mistake on safe coding, security, or biology-related queries. Please try rephrasing your prompt. You can send feedback or read more about our policies here.";
+
+    expect(sanitizeGuardrailText(rawBlocked)).toBe(CLEAN_GUARDRAIL_MESSAGE);
+  });
+
+  it("leaves normal model responses intact", () => {
+    const normal = "Here is how you implement quicksort in Python:";
+    expect(sanitizeGuardrailText(normal)).toBe(normal);
+  });
+
+  it("sanitizes candidate parts inside response objects", () => {
+    const rawResponse = {
+      candidates: [
+        {
+          finishReason: "SAFETY",
+          content: {
+            role: "model",
+            parts: [
+              {
+                text: "This request was blocked by Gemini's filters. Please try rephrasing your prompt.",
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const sanitized = sanitizeGuardrailMessage(rawResponse) as any;
+    expect(sanitized.candidates[0].content.parts[0].text).toBe(CLEAN_GUARDRAIL_MESSAGE);
+  });
+
+  it("handles finishReason: SAFETY without content", () => {
+    const rawResponse = {
+      candidates: [
+        {
+          finishReason: "SAFETY",
+        },
+      ],
+    };
+
+    const sanitized = sanitizeGuardrailMessage(rawResponse) as any;
+    expect(sanitized.candidates[0].content.parts[0].text).toBe(CLEAN_GUARDRAIL_MESSAGE);
   });
 });
