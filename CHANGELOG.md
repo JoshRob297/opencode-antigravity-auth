@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Permissive Safety Settings (`BLOCK_ONLY_HIGH`)** - Automatically injects permissive safety thresholds (`BLOCK_ONLY_HIGH`) across all harm categories (`HARASSMENT`, `HATE_SPEECH`, `SEXUALLY_EXPLICIT`, `DANGEROUS_CONTENT`, `CIVIC_INTEGRITY`) for Gemini models, preventing false-positive refusals during security research, bash scripting, and system programming.
+- **Clean Guardrail Rephrase Interceptor** - Intercepts verbose Google safety refusal payloads (containing legal disclaimers, policy URLs, and bug report links) in both streaming SSE and buffered fallback paths, replacing them with a concise, actionable prompt: `[Solicitud bloqueada por filtros de seguridad de Gemini. Por favor, intenta reformular tu prompt o enfoque.]`.
 - **Server-Data-Driven Quota Exits** - The plugin now captures `metadata.quotaResetTimeStamp` / `quotaResetDelay` from Google RPC error details and stores exact future reset timestamps instead of synthetic backoff counters.
 - **Trailing Model Turn Sanitization** - Gemini histories ending with a dangling `functionCall` (interrupted tools, ESC, crashed subagents, parallel sessions) now get placeholder `functionResponse`s injected before sending, fixing the `400 "Requests ending with a model turn are not supported"`. Applied to both wrapped and non-wrapped request paths, with a one-shot retry (`MODEL_TURN_RECOVERY_NEEDED`) and session-level detection (`model_turn_end`).
 - **Fail-Fast on All-Accounts-Blocked** - Added `max_all_blocked_wait_seconds` (default 120s). When all accounts are rate-limited or exhausted, retries stop cleanly with a descriptive message detailing status per account and inviting the user to switch models/providers or view windows via `antigravity_quota`.

@@ -60,7 +60,10 @@ Settings for managing multiple Google accounts.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `account_selection_strategy` | `"hybrid"` | How to select accounts |
+| `scheduling_mode` | `"balance"` | Scheduling policy (`"balance"`, `"cache_first"`, `"performance_first"`) |
 | `switch_on_first_rate_limit` | `true` | Switch account immediately on first 429 |
+| `max_all_blocked_wait_seconds` | `120` | Maximum cumulative seconds to retry when all accounts are blocked before fail-fast termination |
+| `max_rate_limit_wait_seconds` | `300` | Maximum single reset wait in seconds before immediately throwing a rate-limit error |
 | `pid_offset_enabled` | `false` | Distribute sessions across accounts (for parallel agents) |
 | `quota_fallback` | `false` | Deprecated (ignored). Kept for backward compatibility; Gemini fallback is automatic |
 

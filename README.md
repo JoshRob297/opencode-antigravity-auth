@@ -13,7 +13,8 @@
 | Enhancement | What Was Broken Upstream | How This Fork Fixes It |
 |---|---|---|
 | 🆕 **Gemini 3.8 Flash Support** | Backend restricted the newest `gemini-3.8-flash` model to official CLI signatures. | Added `resolveAntigravityGemini38FlashBackendModel` (→ `gemini-3.8-flash-{low,medium,high}`) and extended the CLI User-Agent spoofing regex to `/gemini-3\.[78]-flash/i`, unlocking **Gemini 3.8 Flash (Low/Medium/High)**. |
-| 🛡️ **Dangling Model Turn Sanitization** | Interrupted tools or aborted sessions caused Gemini to reject requests with `400 "Requests ending with a model turn are not supported"`. | Added automatic `sanitizeEndingModelTurn` pipeline for Gemini payloads + one-shot retry propagation (`MODEL_TURN_RECOVERY_NEEDED`). |
+| 🛡️ **Dangling Model Turn Sanitization** | Interrupted tools or aborted sessions caused Gemini to reject requests with `400 "Requests ending with a model turn are not supported"`. | Added automatic `sanitizeEndingModelTurn` pipeline for Gemini payloads + force-drop retry recovery (`MODEL_TURN_RECOVERY_NEEDED`). |
+| 🛡️ **Permissive Safety Settings & Clean Guardrails** | Strict Google filters caused false-positive blocks on coding/security prompts, outputting verbose legal text and policy URLs. | Injects `BLOCK_ONLY_HIGH` thresholds for all harm categories by default and replaces verbose block messages with a clean single-line rephrasing prompt. |
 | ⏱️ **Server-Data-Driven Quota Exits** | Quota exhaustion retried blindly with backoff counters even when the server specified hours of wait time. | Captures `metadata.quotaResetTimeStamp` / `quotaResetDelay` from Google RPC errors, stores exact future reset timestamps, and enforces `max_all_blocked_wait_seconds` (default 120s) with clear model-switch suggestions. |
 | 📊 **Native Dual-Window Quota Tool** | Quota required a separate external plugin or returned flat model lists. | Embedded the official `antigravity_quota` tool directly into the auth plugin with full **5h Window + Weekly Window** tracking and progress bars via `/v1internal:retrieveUserQuotaSummary`. |
 | 🚀 **Gemini 3.7 Flash Support** | Backend returned `404 NOT_FOUND` (rewritten as *"enable preview access"* or `429`) when invoking `gemini-3.7-flash`. | Discovered that Google restricts 3.7 Flash strictly to official CLI signatures. The plugin now dynamically presents the official Antigravity CLI client signature (`antigravity/cli/...`), unlocking full native access to **Gemini 3.7 Flash (Low/Medium/High)**. |
@@ -30,6 +31,7 @@ Enable OpenCode to authenticate against **Antigravity** (Google's IDE) via OAuth
 
 - **Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.1 Pro/Flash**, and **Claude Opus 4.6, Sonnet 4.6** via Google OAuth
 - **Multi-account support** — add multiple Google accounts, auto-rotates when rate-limited
+- **Permissive Safety Settings & Clean Guardrails** — default `BLOCK_ONLY_HIGH` prevents false-positives on coding/security tasks; clean one-line message on filter triggers
 - **Native Quota Tool (`antigravity_quota`)** — dual-window 5h and Weekly quota tracking with progress bars
 - **Thinking models** — extended thinking for Claude and Gemini 3 with configurable budgets / thinking levels
 - **Google Search grounding** — enable web search for Gemini models (auto or always-on)
@@ -222,6 +224,24 @@ opencode auth login  # Run again to add more accounts
 - **Manage accounts** — Enable/disable specific accounts for rotation
 
 For details on load balancing, dual quota pools, and account storage, see [docs/MULTI-ACCOUNT.md](docs/MULTI-ACCOUNT.md).
+
+---
+
+## Safety Filters & Guardrails
+
+Google Gemini models enforce automated content moderation filters at the server level. For software development, security audits, shell scripting, and low-level systems work, Google's default medium thresholds often trigger false-positive refusals.
+
+### Permissive Defaults (`BLOCK_ONLY_HIGH`)
+The plugin automatically injects `BLOCK_ONLY_HIGH` thresholds for all harm categories (`HARASSMENT`, `HATE_SPEECH`, `SEXUALLY_EXPLICIT`, `DANGEROUS_CONTENT`, `CIVIC_INTEGRITY`) on Gemini requests. This allows code analysis, shell commands, and security research without premature filter tripping.
+
+### Clean Rephrase Prompt
+If a query triggers Google's backend safety policy, the plugin intercepts the verbose response (which contains lengthy legal disclaimers, policy links, and bug report URLs) and replaces it with a clean, actionable notice:
+
+```text
+[Solicitud bloqueada por filtros de seguridad de Gemini. Por favor, intenta reformular tu prompt o enfoque.]
+```
+
+This prevents chat clutter, session lockups, and unrecoverable error cascades.
 
 ---
 
