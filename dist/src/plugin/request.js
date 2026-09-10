@@ -765,11 +765,12 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                     // Add safety settings for image generation (permissive to allow creative content)
                     if (!requestPayload.safetySettings) {
                         requestPayload.safetySettings = [
-                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
-                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
-                            { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_ONLY_HIGH" },
+                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_JAILBREAK", threshold: "BLOCK_NONE" },
                         ];
                     }
                     // Image models don't support tools - remove them entirely
@@ -1168,15 +1169,17 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                 if ("model" in requestPayload) {
                     delete requestPayload.model;
                 }
-                // Inject permissive safetySettings by default for Gemini models to prevent
-                // false-positive blocks on coding, security research, and system utilities.
+                // Inject maximum permissive safetySettings by default for Gemini models (BLOCK_NONE)
+                // to prevent false-positive blocks on coding, security research, system exploits,
+                // and prompt injection filters (HARM_CATEGORY_JAILBREAK).
                 if (!isClaude && !requestPayload.safetySettings) {
                     requestPayload.safetySettings = [
-                        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-                        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-                        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
-                        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
-                        { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_ONLY_HIGH" },
+                        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+                        { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
+                        { category: "HARM_CATEGORY_JAILBREAK", threshold: "BLOCK_NONE" },
                     ];
                 }
                 stripInjectedDebugFromRequestPayload(requestPayload);
