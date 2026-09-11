@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **False weekly Claude cooldown** - Antigravity 429 bodies often include weekly `RetryInfo` even when the 5-hour Claude bar is still LIVE. The plugin previously persisted that delay as `rateLimitResetTimes.claude`, so round-robin could not pick remaining accounts and fail-fast retried for hours. RPM / UNKNOWN Retry-After is now capped at 60s, `QUOTA_EXHAUSTED` Retry-After and `absoluteResetAtMs` are capped when `remainingFraction > 0`, and pick/min-wait ignore long cooldowns on accounts with fresh remaining quota.
+
 ## [1.10.0] - 2026-09-02
 
 ### Added
