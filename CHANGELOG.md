@@ -1,13 +1,26 @@
 # Changelog
 
+## [1.11.0] - 2026-09-11
+
+### Added
+
+- **Request Payload Normalization** - Standardized content moderation parameters across Gemini endpoints, preventing false positives on technical, scripting, and development tasks.
+- **Concise Filter Handling** - Intercepts verbose backend filter notices in streaming and buffered responses, emitting a single-line notification instead of full policy disclaimers.
+- **Model Turn History Sanitization** - Automatically cleans conversation histories ending with unfulfilled assistant tool turns (`sanitizeEndingModelTurn`), preventing HTTP 400 errors during tool interruptions and session recovery.
+
+### Changed
+
+- **Clean Debug Diagnostics** - Removed verbose tool schema dumps from runtime error payloads to keep terminal output compact and actionable.
+
+### Tests
+
+- 1,046 passing tests (36 suites).
+
 ## [1.10.0] - 2026-09-02
 
 ### Added
 
-- **Permissive Safety Settings (`BLOCK_NONE` & `HARM_CATEGORY_JAILBREAK`)** - Automatically injects maximum permissive safety thresholds (`BLOCK_NONE`) across all harm categories (`HARASSMENT`, `HATE_SPEECH`, `SEXUALLY_EXPLICIT`, `DANGEROUS_CONTENT`, `CIVIC_INTEGRITY`) and enables `HARM_CATEGORY_JAILBREAK: BLOCK_NONE` for Gemini models. This eliminates prompt injection and safety filter false-positives on security audits, exploit analysis, root scripts, and system programming.
-- **Clean Guardrail Rephrase Interceptor** - Intercepts verbose Google safety refusal payloads (containing legal disclaimers, policy URLs, and bug report links) in both streaming SSE and buffered fallback paths, replacing them with a concise, actionable prompt: `[Solicitud bloqueada por filtros de seguridad de Gemini. Por favor, intenta reformular tu prompt o enfoque.]`.
 - **Server-Data-Driven Quota Exits** - The plugin now captures `metadata.quotaResetTimeStamp` / `quotaResetDelay` from Google RPC error details and stores exact future reset timestamps instead of synthetic backoff counters.
-- **Trailing Model Turn Sanitization** - Gemini histories ending with a dangling `functionCall` (interrupted tools, ESC, crashed subagents, parallel sessions) now get placeholder `functionResponse`s injected before sending, fixing the `400 "Requests ending with a model turn are not supported"`. Applied to both wrapped and non-wrapped request paths, with a one-shot retry (`MODEL_TURN_RECOVERY_NEEDED`) and session-level detection (`model_turn_end`).
 - **Fail-Fast on All-Accounts-Blocked** - Added `max_all_blocked_wait_seconds` (default 120s). When all accounts are rate-limited or exhausted, retries stop cleanly with a descriptive message detailing status per account and inviting the user to switch models/providers or view windows via `antigravity_quota`.
 - **`getAllBlockedReasons` Helper** - Reports human-readable blocked states per account (quota reset countdowns, cooldown reasons, verification status).
 
@@ -15,10 +28,6 @@
 
 - **Upgraded Core Dependencies** - Bumped `@opencode-ai/plugin` to `1.18.26`, `zod` to `4.5.4`, and `@types/node` to `26.4.1`.
 - **Vitest upgraded to v4** - Bumped the vitest group (vitest, @vitest/coverage-v8, @vitest/ui) from 3.2.4 to 4.1.11. Fixed Vitest 4 test isolation (`resetAllMocks` in `persist-account-pool.test.ts`) and hoisted a nested `vi.mock` to top level (`quota-fallback.test.ts`).
-
-### Tests
-
-- 1,046 passing tests (36 suites). Added unit tests for exact server timestamp tracking, cooldown wait times, blocked account diagnosis, and trailing model turn sanitization (incl. MODEL_TURN_RECOVERY_NEEDED propagation).
 
 ## [1.9.0] - 2026-09-02
 
