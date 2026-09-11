@@ -37,6 +37,9 @@ antigravity-debug-*.log
 # Hive workflow internal files
 .hive/
 
+# Local git worktrees
+.worktrees/
+
 # Test artifacts
 test-file.ts
 
