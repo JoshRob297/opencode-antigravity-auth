@@ -97,6 +97,97 @@ describe("AccountManager", () => {
     expect(next).toBeNull();
   });
 
+  it("picks a Claude account whose 5h remaining is positive despite a weekly cooldown", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+
+    const stored: AccountStorageV4 = {
+      version: 4,
+      accounts: [
+        {
+          refreshToken: "exhausted",
+          projectId: "p1",
+          addedAt: 1,
+          lastUsed: 0,
+          email: "empty@example.com",
+          rateLimitResetTimes: { claude: Date.now() + 90 * 60 * 1000 },
+          cachedQuota: { claude: { remainingFraction: 0 } },
+          cachedQuotaUpdatedAt: Date.now(),
+        },
+        {
+          refreshToken: "live",
+          projectId: "p2",
+          addedAt: 1,
+          lastUsed: 0,
+          email: "live@example.com",
+          rateLimitResetTimes: { claude: Date.now() + 6.5 * 24 * 60 * 60 * 1000 },
+          cachedQuota: { claude: { remainingFraction: 1 } },
+          cachedQuotaUpdatedAt: Date.now(),
+        },
+      ],
+      activeIndex: 0,
+    };
+
+    const manager = new AccountManager(undefined, stored);
+    const account = manager.getCurrentOrNextForFamily("claude");
+    expect(account?.parts.refreshToken).toBe("live");
+    expect(manager.getMinWaitTimeForFamily("claude")).toBe(0);
+
+    vi.useRealTimers();
+  });
+
+  it("still honors a short RPM cooldown when remainingFraction is positive", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+
+    const stored: AccountStorageV4 = {
+      version: 4,
+      accounts: [
+        {
+          refreshToken: "r1",
+          projectId: "p1",
+          addedAt: 1,
+          lastUsed: 0,
+          rateLimitResetTimes: { claude: Date.now() + 30_000 },
+          cachedQuota: { claude: { remainingFraction: 1 } },
+          cachedQuotaUpdatedAt: Date.now(),
+        },
+      ],
+      activeIndex: 0,
+    };
+
+    const manager = new AccountManager(undefined, stored);
+    expect(manager.getCurrentOrNextForFamily("claude")).toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it("still skips an exhausted Claude account with a long cooldown", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+
+    const stored: AccountStorageV4 = {
+      version: 4,
+      accounts: [
+        {
+          refreshToken: "r1",
+          projectId: "p1",
+          addedAt: 1,
+          lastUsed: 0,
+          rateLimitResetTimes: { claude: Date.now() + 5 * 60 * 60 * 1000 },
+          cachedQuota: { claude: { remainingFraction: 0 } },
+          cachedQuotaUpdatedAt: Date.now(),
+        },
+      ],
+      activeIndex: 0,
+    };
+
+    const manager = new AccountManager(undefined, stored);
+    expect(manager.getCurrentOrNextForFamily("claude")).toBeNull();
+
+    vi.useRealTimers();
+  });
+
   it("un-rate-limits accounts after timeout expires", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(0));
@@ -1241,6 +1332,23 @@ describe("AccountManager", () => {
       it("returns default backoff for UNKNOWN", () => {
         expect(calculateBackoffMs("UNKNOWN", 0)).toBe(60_000);
       });
+
+      it("caps RPM Retry-After when the server sends a weekly reset", () => {
+        const weekMs = 6.5 * 24 * 60 * 60 * 1000;
+        expect(calculateBackoffMs("RATE_LIMIT_EXCEEDED", 0, weekMs)).toBe(60_000);
+        expect(calculateBackoffMs("UNKNOWN", 0, weekMs)).toBe(60_000);
+      });
+
+      it("keeps quota Retry-After when remaining is exhausted", () => {
+        const fiveHoursMs = 5 * 60 * 60 * 1000;
+        expect(calculateBackoffMs("QUOTA_EXHAUSTED", 0, fiveHoursMs)).toBe(fiveHoursMs);
+        expect(calculateBackoffMs("QUOTA_EXHAUSTED", 0, fiveHoursMs, 0)).toBe(fiveHoursMs);
+      });
+
+      it("caps quota Retry-After when remainingFraction is still positive", () => {
+        const weekMs = 6.5 * 24 * 60 * 60 * 1000;
+        expect(calculateBackoffMs("QUOTA_EXHAUSTED", 0, weekMs, 1)).toBe(60_000);
+      });
     });
 
     describe("markRateLimitedWithReason", () => {
@@ -1299,6 +1407,77 @@ describe("AccountManager", () => {
           account, "gemini", "antigravity", null, "QUOTA_EXHAUSTED", 180_000
         );
         expect(backoff).toBe(180_000);
+
+        vi.useRealTimers();
+      });
+
+      it("does not persist a weekly Claude cooldown when cached remaining is positive", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(1_000);
+
+        const stored: AccountStorageV4 = {
+          version: 4,
+          accounts: [
+            {
+              refreshToken: "r1",
+              projectId: "p1",
+              addedAt: 1,
+              lastUsed: 0,
+              cachedQuota: { claude: { remainingFraction: 1 } },
+              cachedQuotaUpdatedAt: 1_000,
+            },
+          ],
+          activeIndex: 0,
+        };
+
+        const manager = new AccountManager(undefined, stored);
+        const account = manager.getAccounts()[0]!;
+        const weekMs = 6.5 * 24 * 60 * 60 * 1000;
+        const backoff = manager.markRateLimitedWithReason(
+          account, "claude", "antigravity", "claude-sonnet-4-6", "QUOTA_EXHAUSTED", weekMs
+        );
+
+        expect(backoff).toBe(60_000);
+        expect(account.rateLimitResetTimes.claude).toBe(1_000 + 60_000);
+
+        vi.useRealTimers();
+      });
+
+      it("caps weekly absoluteResetAtMs when cached remaining is positive", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(1_000);
+
+        const stored: AccountStorageV4 = {
+          version: 4,
+          accounts: [
+            {
+              refreshToken: "r1",
+              projectId: "p1",
+              addedAt: 1,
+              lastUsed: 0,
+              cachedQuota: { claude: { remainingFraction: 1 } },
+              cachedQuotaUpdatedAt: 1_000,
+            },
+          ],
+          activeIndex: 0,
+        };
+
+        const manager = new AccountManager(undefined, stored);
+        const account = manager.getAccounts()[0]!;
+        const weekMs = 6.5 * 24 * 60 * 60 * 1000;
+        const backoff = manager.markRateLimitedWithReason(
+          account,
+          "claude",
+          "antigravity",
+          "claude-sonnet-4-6",
+          "QUOTA_EXHAUSTED",
+          weekMs,
+          3600_000,
+          1_000 + weekMs,
+        );
+
+        expect(backoff).toBe(60_000);
+        expect(account.rateLimitResetTimes.claude).toBe(1_000 + 60_000);
 
         vi.useRealTimers();
       });
