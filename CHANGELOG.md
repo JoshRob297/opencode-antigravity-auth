@@ -8,13 +8,17 @@
 - **Concise Filter Handling** - Intercepts verbose backend filter notices in streaming and buffered responses, emitting a single-line notification instead of full policy disclaimers.
 - **Model Turn History Sanitization** - Automatically cleans conversation histories ending with unfulfilled assistant tool turns (`sanitizeEndingModelTurn`), preventing HTTP 400 errors during tool interruptions and session recovery.
 
+### Fixed
+
+- **False weekly Claude cooldown** - Antigravity 429 bodies often include weekly `RetryInfo` even when the 5-hour Claude bar is still LIVE. The plugin previously persisted that delay as `rateLimitResetTimes.claude`, causing unnecessary lockouts. RPM / UNKNOWN Retry-After is now capped at 60s, `QUOTA_EXHAUSTED` Retry-After and `absoluteResetAtMs` are capped when `remainingFraction > 0`, and account selection ignores long cooldowns on accounts with active remaining quota.
+
 ### Changed
 
 - **Clean Debug Diagnostics** - Removed verbose tool schema dumps from runtime error payloads to keep terminal output compact and actionable.
 
 ### Tests
 
-- 1,046 passing tests (36 suites).
+- 1,054 passing tests (36 suites). Added unit tests for Claude weekly cooldown mitigation and live remaining fraction validation.
 
 ## [1.10.0] - 2026-09-02
 
