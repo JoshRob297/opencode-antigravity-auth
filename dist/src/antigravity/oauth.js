@@ -62,7 +62,7 @@ async function fetchProjectID(accessToken) {
     const loadHeaders = {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
-        "User-Agent": GEMINI_CLI_HEADERS["User-Agent"],
+        "User-Agent": "antigravity",
         "Client-Metadata": getAntigravityHeaders()["Client-Metadata"],
     };
     const loadEndpoints = Array.from(new Set([...ANTIGRAVITY_LOAD_ENDPOINTS, ...ANTIGRAVITY_ENDPOINT_FALLBACKS]));
@@ -75,7 +75,7 @@ async function fetchProjectID(accessToken) {
                 body: JSON.stringify({
                     metadata: {
                         ideType: "ANTIGRAVITY",
-                        platform: process.platform === "win32" ? "WINDOWS" : "MACOS",
+                        platform: "PLATFORM_UNSPECIFIED",
                         pluginType: "GEMINI",
                     },
                 }),
