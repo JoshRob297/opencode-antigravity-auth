@@ -63,7 +63,7 @@ async function promptLoginModeFallback(existingAccounts: ExistingAccountInfo[]):
     console.log("");
 
     while (true) {
-      const answer = await rl.question("(a)dd new, (f)resh start, (c)heck quotas, (v)erify account, (va) verify all? [a/f/c/v/va]: ");
+      const answer = await rl.question("(a)dd new, (f)resh start, (d)elete account, (c)heck quotas, (v)erify, (va) verify all? [a/f/d/c/v/va]: ");
       const normalized = answer.trim().toLowerCase();
 
       if (normalized === "a" || normalized === "add") {
@@ -71,6 +71,15 @@ async function promptLoginModeFallback(existingAccounts: ExistingAccountInfo[]):
       }
       if (normalized === "f" || normalized === "fresh") {
         return { mode: "fresh" };
+      }
+      if (normalized === "d" || normalized === "del" || normalized === "delete") {
+        const numStr = await rl.question(`Enter account number to delete (1-${existingAccounts.length}): `);
+        const idx = parseInt(numStr.trim(), 10) - 1;
+        if (!isNaN(idx) && idx >= 0 && idx < existingAccounts.length) {
+          return { mode: "add", deleteAccountIndex: idx };
+        }
+        console.log("Invalid account number.");
+        continue;
       }
       if (normalized === "c" || normalized === "check") {
         return { mode: "check" };
@@ -82,7 +91,7 @@ async function promptLoginModeFallback(existingAccounts: ExistingAccountInfo[]):
         return { mode: "verify-all", verifyAll: true };
       }
 
-      console.log("Please enter 'a', 'f', 'c', 'v', or 'va'.");
+      console.log("Please enter 'a', 'f', 'd', 'c', 'v', or 'va'.");
     }
   } finally {
     rl.close();

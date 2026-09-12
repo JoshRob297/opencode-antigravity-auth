@@ -48,7 +48,7 @@ function buildMetadata(projectId?: string): Record<string, string> {
     platform: CODE_ASSIST_METADATA.platform,
     pluginType: CODE_ASSIST_METADATA.pluginType,
   };
-  if (projectId) {
+  if (projectId && projectId !== ANTIGRAVITY_DEFAULT_PROJECT_ID) {
     metadata.duetProject = projectId;
   }
   return metadata;
@@ -261,7 +261,8 @@ export async function ensureProjectContext(auth: OAuthAuthDetails): Promise<Proj
     };
 
     // Try to resolve a managed project from Antigravity if possible.
-    const loadPayload = await loadManagedProject(accessToken, parts.projectId ?? fallbackProjectId);
+    // Use undefined instead of fallbackProjectId so Google resolves the account's own companion project
+    const loadPayload = await loadManagedProject(accessToken, parts.projectId);
     const resolvedManagedProjectId = extractManagedProjectId(loadPayload);
 
     if (resolvedManagedProjectId) {

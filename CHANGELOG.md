@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0] - 2026-09-12
+
+### Fixed
+
+- **Managed Project Auto-Resolution on Cloud Code** - `ensureProjectContext` no longer passes the generic fallback project ID (`rising-fact-p41fc`) to `loadManagedProject`, allowing Google Cloud to cleanly resolve the account's own companion project instead of causing HTTP 403 `#3501` (`SUBSCRIPTION_REQUIRED`) errors.
+- **Explicit Account Management in Fallback CLI** - Added `(d)elete account` option to non-TTY / fallback login prompts, and made account sub-menu actions (Re-authenticate / Delete / Toggle) prominent in the interactive TUI menu.
+
 ## [1.12.0] - 2026-09-12
 
 ### Added

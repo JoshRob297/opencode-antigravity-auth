@@ -8,7 +8,7 @@
 
 ---
 
-### 🌟 What's New & Changed in this Fork (v1.12.0)
+### 🌟 What's New & Changed in this Fork (v1.13.0)
 
 | Enhancement | What Was Broken Upstream | How This Fork Fixes It |
 |---|---|---|

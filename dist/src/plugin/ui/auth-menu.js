@@ -38,7 +38,7 @@ export async function showAuthMenu(accounts) {
         { label: 'Verify all accounts', value: { type: 'verify-all' }, color: 'cyan' },
         { label: 'Configure models in opencode.json', value: { type: 'configure-models' }, color: 'cyan' },
         { label: '', value: { type: 'cancel' }, separator: true },
-        { label: 'Accounts', value: { type: 'cancel' }, kind: 'heading' },
+        { label: 'Accounts (Select an account to Manage / Re-authenticate / Delete)', value: { type: 'cancel' }, kind: 'heading' },
         ...accounts.map(account => {
             const statusBadge = getStatusBadge(account.status);
             const currentBadge = account.isCurrentAccount ? ` ${ANSI.cyan}[current]${ANSI.reset}` : '';

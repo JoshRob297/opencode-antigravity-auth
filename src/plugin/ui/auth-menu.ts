@@ -62,7 +62,7 @@ export async function showAuthMenu(accounts: AccountInfo[]): Promise<AuthMenuAct
 
     { label: '', value: { type: 'cancel' }, separator: true },
 
-    { label: 'Accounts', value: { type: 'cancel' }, kind: 'heading' },
+    { label: 'Accounts (Select an account to Manage / Re-authenticate / Delete)', value: { type: 'cancel' }, kind: 'heading' },
 
     ...accounts.map(account => {
       const statusBadge = getStatusBadge(account.status);
