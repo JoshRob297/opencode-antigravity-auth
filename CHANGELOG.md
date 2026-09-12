@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.12.0] - 2026-09-12
+
+### Added
+
+- **Automatic Slash Command Provisioning (`/antigravity-quota`)** - The plugin now automatically provisions `antigravity-quota.md` directly into OpenCode's command directory (`~/.config/opencode/command/`) upon plugin initialization and configuration update. Users no longer need to manually copy markdown command files across machines.
+
+### Tests
+
+- 1,055 passing tests (36 suites). Added unit tests for automatic command provisioning.
+
 ## [1.11.1] - 2026-09-12
 
 ### Fixed

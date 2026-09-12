@@ -8,10 +8,11 @@
 
 ---
 
-### 🌟 What's New & Changed in this Fork (v1.11.0)
+### 🌟 What's New & Changed in this Fork (v1.12.0)
 
 | Enhancement | What Was Broken Upstream | How This Fork Fixes It |
 |---|---|---|
+| ⚡ **Automatic Slash Command Provisioning** | Slash commands like `/antigravity-quota` required manual file copying into `~/.config/opencode/command/`. | The plugin now automatically creates `antigravity-quota.md` on startup and configuration update. |
 | 🆕 **Gemini 3.8 Flash Support** | Backend restricted the newest `gemini-3.8-flash` model to official CLI signatures. | Added `resolveAntigravityGemini38FlashBackendModel` (→ `gemini-3.8-flash-{low,medium,high}`) and extended the CLI User-Agent spoofing regex to `/gemini-3\.[78]-flash/i`, unlocking **Gemini 3.8 Flash (Low/Medium/High)**. |
 | 🛡️ **Dangling Model Turn Sanitization** | Interrupted tools or aborted sessions caused Gemini to reject requests with `400 "Requests ending with a model turn are not supported"`. | Added automatic `sanitizeEndingModelTurn` pipeline for Gemini payloads + force-drop retry recovery (`MODEL_TURN_RECOVERY_NEEDED`). |
 | 🛡️ **Request Normalization & Clean Feedback** | Default filters caused false-positive blocks on coding and technical prompts with verbose legal notices. | Standardized payload configurations for development tasks and added concise single-line notification handling. |
@@ -21,7 +22,7 @@
 | ⚡ **Fast Multi-Account Failover** | On quota exhaustion the plugin would spin waiting on the same account (60s+ backoffs). | Default scheduling mode changed to `balance` with immediate `QUOTA_EXHAUSTED` failover (500ms) to the next account with quota. |
 | 🛠️ **IAM 403 Permission Denied Fix** | Requests failed with `403 IAM_PERMISSION_DENIED` on `projects/rising-fact-p41fc` for instances requiring `cloudaicompanion.instances.completeTask`. | Fixed two core bugs in `project.ts`: corrected `metadata.platform` from invalid `MACOS/WINDOWS` enums to `PLATFORM_UNSPECIFIED` and updated the discovery User-Agent, allowing automatic resolution and persistence of the account's real `managedProjectId`. |
 | ⚡ **Gemini 3.6 Flash & 3.5 Flash** | Native multi-tier backend model resolution (`gemini-3.6-flash-{low,medium,high}` and `gemini-3.5-flash-{low,high}`). | Multi-tier thinking resolution support built into `model-resolver.ts`. |
-| 🧹 **Clean CI & Community Standards** | Upstream had broken npm publishing actions and no rulesets. | Replaced with clean, automated Node.js CI with **1,054 tests passing**, security policies, and Dependabot groups. |
+| 🧹 **Clean CI & Community Standards** | Upstream had broken npm publishing actions and no rulesets. | Replaced with clean, automated Node.js CI with **1,055 tests passing**, security policies, and Dependabot groups. |
 
 ---
 

@@ -45,6 +45,7 @@ import { createAutoUpdateCheckerHook } from "./hooks/auto-update-checker";
 import { loadConfig, initRuntimeConfig, type AntigravityConfig } from "./plugin/config";
 import { createSessionRecoveryHook, getRecoverySuccessToast } from "./plugin/recovery";
 import { checkAccountsQuota, formatQuotaReportMarkdown } from "./plugin/quota";
+import { ensureAntigravityQuotaCommand } from "./plugin/config/updater";
 import { initDiskSignatureCache } from "./plugin/cache";
 import { createProactiveRefreshQueue, type ProactiveRefreshQueue } from "./plugin/refresh-queue";
 import { initLogger, createLogger } from "./plugin/logger";
@@ -1281,6 +1282,11 @@ export const createAntigravityPlugin = (providerId: string) => async (
   
   // Initialize session recovery hook with full context
   const sessionRecovery = createSessionRecoveryHook({ client, directory }, config);
+
+  // Automatically ensure /antigravity-quota slash command is installed in ~/.config/opencode/command/
+  try {
+    ensureAntigravityQuotaCommand();
+  } catch {}
   
   const updateChecker = createAutoUpdateCheckerHook(client, directory, {
     showStartupToast: true,

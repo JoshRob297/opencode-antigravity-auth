@@ -2,7 +2,12 @@ import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { updateOpencodeConfig } from "./updater";
+import {
+  updateOpencodeConfig,
+  ensureAntigravityQuotaCommand,
+  ANTIGRAVITY_QUOTA_COMMAND_FILENAME,
+  ANTIGRAVITY_QUOTA_COMMAND_CONTENT,
+} from "./updater";
 import { OPENCODE_MODEL_DEFINITIONS } from "./models";
 
 describe("updateOpencodeConfig", () => {
@@ -302,5 +307,22 @@ describe("updateOpencodeConfig", () => {
     expect(writtenConfig.provider.google.customSetting).toBe(true);
     // But models should be replaced
     expect(writtenConfig.provider.google.models["old-model"]).toBeUndefined();
+  });
+
+  test("ensureAntigravityQuotaCommand installs /antigravity-quota.md in command directory", () => {
+    const customConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-cmd-test-"));
+    const createdPath = ensureAntigravityQuotaCommand(customConfigDir);
+
+    expect(createdPath).toBe(path.join(customConfigDir, "command", ANTIGRAVITY_QUOTA_COMMAND_FILENAME));
+    expect(fs.existsSync(createdPath)).toBe(true);
+
+    const content = fs.readFileSync(createdPath, "utf-8");
+    expect(content).toBe(ANTIGRAVITY_QUOTA_COMMAND_CONTENT);
+    expect(content).toContain("antigravity_quota()");
+
+    // Calling it again should preserve the existing file without throwing
+    expect(() => ensureAntigravityQuotaCommand(customConfigDir)).not.toThrow();
+
+    fs.rmSync(customConfigDir, { recursive: true, force: true });
   });
 });

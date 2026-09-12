@@ -7,7 +7,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
-import { OPENCODE_MODEL_DEFINITIONS } from "./models";
+import { OPENCODE_MODEL_DEFINITIONS } from "./models.js";
 
 // =============================================================================
 // Types
@@ -45,6 +45,52 @@ const PLUGIN_NAME = "opencode-antigravity-auth@latest";
 const SCHEMA_URL = "https://opencode.ai/config.json";
 const OPENCODE_JSON_FILENAME = "opencode.json";
 const OPENCODE_JSONC_FILENAME = "opencode.jsonc";
+export const ANTIGRAVITY_QUOTA_COMMAND_FILENAME = "antigravity-quota.md";
+
+export const ANTIGRAVITY_QUOTA_COMMAND_CONTENT = `---
+description: Consultar estado de cuotas de Antigravity (5h y Semanal)
+---
+
+Use the \`antigravity_quota\` tool to check the current quota status.
+
+This will show:
+- API quota remaining for each model (Gemini 3 Pro, Flash, Claude via Antigravity)
+- Per-account breakdown with visual progress bars
+- Time until quota reset
+- Local rate limit cache status
+
+Just call the tool directly:
+\`\`\`
+antigravity_quota()
+\`\`\`
+
+IMPORTANT: Display the tool output EXACTLY as it is returned. Do not summarize, reformat, or modify the output in any way.
+`;
+
+/**
+ * Ensures the /antigravity-quota slash command is installed in OpenCode's command directory.
+ *
+ * @param configDir - Optional custom config dir (for testing)
+ * @returns Path of the command file created or updated
+ */
+export function ensureAntigravityQuotaCommand(configDir?: string): string {
+  const dir = configDir ?? getOpencodeConfigDir();
+  const commandDir = join(dir, "command");
+  const commandPath = join(commandDir, ANTIGRAVITY_QUOTA_COMMAND_FILENAME);
+
+  try {
+    if (!existsSync(commandDir)) {
+      mkdirSync(commandDir, { recursive: true });
+    }
+    if (!existsSync(commandPath)) {
+      writeFileSync(commandPath, ANTIGRAVITY_QUOTA_COMMAND_CONTENT, "utf-8");
+    }
+  } catch {
+    // Best-effort creation, ignore permission issues
+  }
+
+  return commandPath;
+}
 
 function stripJsonCommentsAndTrailingCommas(json: string): string {
   return json
@@ -153,6 +199,9 @@ export async function updateOpencodeConfig(
 
     // Replace google models with plugin models
     config.provider.google.models = { ...OPENCODE_MODEL_DEFINITIONS };
+
+    // Automatically ensure /antigravity-quota command is installed
+    ensureAntigravityQuotaCommand(getOpencodeConfigDir());
 
     // Ensure config directory exists
     const configDir = dirname(configPath);
