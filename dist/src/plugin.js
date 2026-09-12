@@ -1911,7 +1911,7 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                                 // Try immediate auto-onboarding / companion discovery
                                                 try {
                                                     if (authRecord.access) {
-                                                        const onboardedId = await onboardManagedProject(authRecord.access, "FREE", undefined, 3, 1000);
+                                                        const onboardedId = await onboardManagedProject(authRecord.access, "free-tier", undefined, 3, 1000);
                                                         if (onboardedId) {
                                                             pushDebug(`auto-onboarded project ${onboardedId} for account ${account.index}`);
                                                             const parts = parseRefreshParts(authRecord.refresh);

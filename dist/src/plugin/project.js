@@ -206,7 +206,7 @@ export async function ensureProjectContext(auth) {
         }
         // No managed project found - try to auto-provision one via onboarding.
         // This handles accounts that were added before managed project provisioning was required.
-        const tierId = getDefaultTierId(loadPayload?.allowedTiers) ?? "FREE";
+        const tierId = getDefaultTierId(loadPayload?.allowedTiers) ?? "free-tier";
         log.debug("Auto-provisioning managed project", { tierId, projectId: parts.projectId });
         const provisionedProjectId = await onboardManagedProject(accessToken, tierId, parts.projectId);
         if (provisionedProjectId) {
