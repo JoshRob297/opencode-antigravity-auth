@@ -13,6 +13,8 @@ const MODEL_CAPACITY_EXHAUSTED_JITTER_MAX = 30_000; // ±15s jitter range
 const SERVER_ERROR_BACKOFF = 20_000;
 const UNKNOWN_BACKOFF = 60_000;
 const MIN_BACKOFF_MS = 2_000;
+export const MAX_RPM_RETRY_AFTER_MS = 60_000;
+const DEFAULT_QUOTA_CACHE_TTL_MS = 10 * 60 * 1000;
 /**
  * Generate a random jitter value for backoff timing.
  * Helps prevent thundering herd problem when multiple clients retry simultaneously.
@@ -60,11 +62,22 @@ export function parseRateLimitReason(reason, message, status) {
     }
     return "UNKNOWN";
 }
-export function calculateBackoffMs(reason, consecutiveFailures, retryAfterMs) {
-    // Respect explicit Retry-After header if reasonable
+function shouldCapRetryAfter(reason, remainingFraction) {
+    if (reason !== "QUOTA_EXHAUSTED") {
+        return true;
+    }
+    return remainingFraction != null && remainingFraction > 0;
+}
+export function calculateBackoffMs(reason, consecutiveFailures, retryAfterMs, remainingFraction) {
+    // Respect explicit Retry-After header if reasonable, but never persist a
+    // weekly/5h reset as an RPM cooldown — Antigravity often returns weekly
+    // RetryInfo even when the 5h Claude bar is still LIVE.
     if (retryAfterMs && retryAfterMs > 0) {
-        // Rust uses 2s min buffer, we keep 2s
-        return Math.max(retryAfterMs, MIN_BACKOFF_MS);
+        const raw = Math.max(retryAfterMs, MIN_BACKOFF_MS);
+        if (shouldCapRetryAfter(reason, remainingFraction)) {
+            return Math.min(raw, MAX_RPM_RETRY_AFTER_MS);
+        }
+        return raw;
     }
     switch (reason) {
         case "QUOTA_EXHAUSTED": {
@@ -102,33 +115,58 @@ function getQuotaKey(family, headerStyle, model) {
     }
     return base;
 }
-function isRateLimitedForQuotaKey(account, key) {
-    const resetTime = account.rateLimitResetTimes[key];
-    return resetTime !== undefined && nowMs() < resetTime;
+function getFreshRemainingFraction(account, family, cacheTtlMs, model) {
+    if (!account.cachedQuota)
+        return undefined;
+    if (account.cachedQuotaUpdatedAt == null)
+        return undefined;
+    const age = nowMs() - account.cachedQuotaUpdatedAt;
+    if (age > cacheTtlMs)
+        return undefined;
+    const quotaGroup = resolveQuotaGroup(family, model);
+    const fraction = account.cachedQuota[quotaGroup]?.remainingFraction;
+    if (fraction == null || !Number.isFinite(fraction))
+        return undefined;
+    return Math.max(0, Math.min(1, fraction));
 }
-function isRateLimitedForFamily(account, family, model) {
-    if (family === "claude") {
-        return isRateLimitedForQuotaKey(account, "claude");
+function isRateLimitedForQuotaKey(account, key, family, cacheTtlMs = DEFAULT_QUOTA_CACHE_TTL_MS, model) {
+    const resetTime = account.rateLimitResetTimes[key];
+    if (resetTime === undefined || nowMs() >= resetTime) {
+        return false;
     }
-    const antigravityIsLimited = isRateLimitedForHeaderStyle(account, family, "antigravity", model);
-    const cliIsLimited = isRateLimitedForHeaderStyle(account, family, "gemini-cli", model);
+    const remainingMs = resetTime - nowMs();
+    if (remainingMs <= MAX_RPM_RETRY_AFTER_MS) {
+        return true;
+    }
+    const remaining = getFreshRemainingFraction(account, family, cacheTtlMs, model);
+    if (remaining !== undefined && remaining > 0) {
+        return false;
+    }
+    return true;
+}
+function isRateLimitedForFamily(account, family, model, cacheTtlMs = DEFAULT_QUOTA_CACHE_TTL_MS) {
+    if (family === "claude") {
+        return isRateLimitedForQuotaKey(account, "claude", family, cacheTtlMs, model);
+    }
+    const antigravityIsLimited = isRateLimitedForHeaderStyle(account, family, "antigravity", model, cacheTtlMs);
+    const cliIsLimited = isRateLimitedForHeaderStyle(account, family, "gemini-cli", model, cacheTtlMs);
     return antigravityIsLimited && cliIsLimited;
 }
-function isRateLimitedForHeaderStyle(account, family, headerStyle, model) {
+function isRateLimitedForHeaderStyle(account, family, headerStyle, model, cacheTtlMs = DEFAULT_QUOTA_CACHE_TTL_MS) {
     clearExpiredRateLimits(account);
     if (family === "claude") {
-        return isRateLimitedForQuotaKey(account, "claude");
+        return isRateLimitedForQuotaKey(account, "claude", family, cacheTtlMs, model);
     }
     // Check model-specific quota first if provided
     if (model) {
         const modelKey = getQuotaKey(family, headerStyle, model);
-        if (isRateLimitedForQuotaKey(account, modelKey)) {
+        if (isRateLimitedForQuotaKey(account, modelKey, family, cacheTtlMs, model)) {
             return true;
         }
     }
     // Then check base family quota
     const baseKey = getQuotaKey(family, headerStyle);
-    return isRateLimitedForQuotaKey(account, baseKey);
+    return isRateLimitedForQuotaKey(account, baseKey, family, cacheTtlMs, model);
 }
 function clearExpiredRateLimits(account) {
     const now = nowMs();
@@ -398,7 +436,7 @@ export class AccountManager {
                     index: acc.index,
                     lastUsed: acc.lastUsed,
                     healthScore: healthTracker.getScore(acc.index),
-                    isRateLimited: isRateLimitedForFamily(acc, family, model) ||
+                    isRateLimited: isRateLimitedForFamily(acc, family, model, softQuotaCacheTtlMs) ||
                         isOverSoftQuotaThreshold(acc, family, softQuotaThresholdPercent, softQuotaCacheTtlMs, model),
                     isCoolingDown: this.isAccountCoolingDown(acc),
                 };
@@ -430,7 +468,7 @@ export class AccountManager {
         const current = this.getCurrentAccountForFamily(family);
         if (current) {
             clearExpiredRateLimits(current);
-            const isLimitedForRequestedStyle = isRateLimitedForHeaderStyle(current, family, headerStyle, model);
+            const isLimitedForRequestedStyle = isRateLimitedForHeaderStyle(current, family, headerStyle, model, softQuotaCacheTtlMs);
             const isOverThreshold = isOverSoftQuotaThreshold(current, family, softQuotaThresholdPercent, softQuotaCacheTtlMs, model);
             if (!isLimitedForRequestedStyle && !isOverThreshold && !this.isAccountCoolingDown(current)) {
                 this.markTouchedForQuota(current, quotaKey);
@@ -448,7 +486,7 @@ export class AccountManager {
         const available = this.accounts.filter((a) => {
             clearExpiredRateLimits(a);
             return a.enabled !== false &&
-                !isRateLimitedForHeaderStyle(a, family, headerStyle, model) &&
+                !isRateLimitedForHeaderStyle(a, family, headerStyle, model, softQuotaCacheTtlMs) &&
                 !isOverSoftQuotaThreshold(a, family, softQuotaThresholdPercent, softQuotaCacheTtlMs, model) &&
                 !this.isAccountCoolingDown(a);
         });
@@ -488,12 +526,16 @@ export class AccountManager {
         const failures = (account.consecutiveFailures ?? 0) + 1;
         account.consecutiveFailures = failures;
         account.lastFailureTime = now;
+        const remainingFraction = getFreshRemainingFraction(account, family, DEFAULT_QUOTA_CACHE_TTL_MS, model);
         let effectiveWaitMs;
         if (absoluteResetAtMs && absoluteResetAtMs > now) {
             effectiveWaitMs = absoluteResetAtMs - now;
         }
         else {
-            effectiveWaitMs = calculateBackoffMs(reason, failures - 1, retryAfterMs);
+            effectiveWaitMs = calculateBackoffMs(reason, failures - 1, retryAfterMs, remainingFraction);
+        }
+        if (shouldCapRetryAfter(reason, remainingFraction)) {
+            effectiveWaitMs = Math.min(Math.max(effectiveWaitMs, MIN_BACKOFF_MS), MAX_RPM_RETRY_AFTER_MS);
         }
         const key = getQuotaKey(family, headerStyle, model);
         account.rateLimitResetTimes[key] = now + effectiveWaitMs;
@@ -733,12 +775,12 @@ export class AccountManager {
             expires: account.expires,
         };
     }
-    getMinWaitTimeForFamily(family, model, headerStyle, strict) {
+    getMinWaitTimeForFamily(family, model, headerStyle, strict, cacheTtlMs = DEFAULT_QUOTA_CACHE_TTL_MS) {
         const available = this.accounts.filter((a) => {
             clearExpiredRateLimits(a);
             const isLimited = strict && headerStyle
-                ? isRateLimitedForHeaderStyle(a, family, headerStyle, model)
-                : isRateLimitedForFamily(a, family, model);
+                ? isRateLimitedForHeaderStyle(a, family, headerStyle, model, cacheTtlMs)
+                : isRateLimitedForFamily(a, family, model, cacheTtlMs);
             return a.enabled !== false && !isLimited && !this.isAccountCoolingDown(a);
         });
         if (available.length > 0) {

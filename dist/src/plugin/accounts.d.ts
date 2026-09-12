@@ -10,8 +10,9 @@ export interface RateLimitBackoffResult {
     backoffMs: number;
     reason: RateLimitReason;
 }
+export declare const MAX_RPM_RETRY_AFTER_MS = 60000;
 export declare function parseRateLimitReason(reason: string | undefined, message: string | undefined, status?: number): RateLimitReason;
-export declare function calculateBackoffMs(reason: RateLimitReason, consecutiveFailures: number, retryAfterMs?: number | null): number;
+export declare function calculateBackoffMs(reason: RateLimitReason, consecutiveFailures: number, retryAfterMs?: number | null, remainingFraction?: number | null): number;
 export type BaseQuotaKey = "claude" | "gemini-antigravity" | "gemini-cli";
 export type QuotaKey = BaseQuotaKey | `${BaseQuotaKey}:${string}`;
 export interface ManagedAccount {
@@ -133,7 +134,7 @@ export declare class AccountManager {
     removeAccount(account: ManagedAccount): boolean;
     updateFromAuth(account: ManagedAccount, auth: OAuthAuthDetails): void;
     toAuthDetails(account: ManagedAccount): OAuthAuthDetails;
-    getMinWaitTimeForFamily(family: ModelFamily, model?: string | null, headerStyle?: HeaderStyle, strict?: boolean): number;
+    getMinWaitTimeForFamily(family: ModelFamily, model?: string | null, headerStyle?: HeaderStyle, strict?: boolean, cacheTtlMs?: number): number;
     /**
      * Get human-readable reasons why accounts are currently blocked for a given family/model.
      * Distinguishes between rate-limits (with reset times), cooldowns, and disabled states.
