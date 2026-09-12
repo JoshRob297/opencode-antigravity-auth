@@ -607,20 +607,19 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                         effectiveModel = gemini38FlashBackendModel;
                         wrappedBody.model = gemini38FlashBackendModel;
                     }
-                    const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
-                    if (gemini37FlashBackendModel) {
-                        effectiveModel = gemini37FlashBackendModel;
-                        wrappedBody.model = gemini37FlashBackendModel;
-                    }
-                    const gemini36FlashBackendModel = resolveAntigravityGemini36FlashBackendModel(rawModel, tierThinkingLevel);
-                    if (gemini36FlashBackendModel) {
-                        effectiveModel = gemini36FlashBackendModel;
-                        wrappedBody.model = gemini36FlashBackendModel;
-                    }
-                    const gemini35FlashBackendModel = resolveAntigravityGemini35FlashBackendModel(rawModel, tierThinkingLevel);
-                    if (gemini35FlashBackendModel) {
-                        effectiveModel = gemini35FlashBackendModel;
-                        wrappedBody.model = gemini35FlashBackendModel;
+                    else {
+                        const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
+                        if (gemini37FlashBackendModel) {
+                            effectiveModel = gemini37FlashBackendModel;
+                            wrappedBody.model = gemini37FlashBackendModel;
+                        }
+                        else {
+                            const gemini36FlashBackendModel = resolveAntigravityGemini36FlashBackendModel(rawModel, tierThinkingLevel);
+                            if (gemini36FlashBackendModel) {
+                                effectiveModel = gemini36FlashBackendModel;
+                                wrappedBody.model = gemini36FlashBackendModel;
+                            }
+                        }
                     }
                 }
                 // Some callers may already send an Antigravity-wrapped body.
@@ -712,17 +711,17 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                     if (gemini38FlashBackendModel) {
                         effectiveModel = gemini38FlashBackendModel;
                     }
-                    const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
-                    if (gemini37FlashBackendModel) {
-                        effectiveModel = gemini37FlashBackendModel;
-                    }
-                    const gemini36FlashBackendModel = resolveAntigravityGemini36FlashBackendModel(rawModel, tierThinkingLevel);
-                    if (gemini36FlashBackendModel) {
-                        effectiveModel = gemini36FlashBackendModel;
-                    }
-                    const gemini35FlashBackendModel = resolveAntigravityGemini35FlashBackendModel(rawModel, tierThinkingLevel);
-                    if (gemini35FlashBackendModel) {
-                        effectiveModel = gemini35FlashBackendModel;
+                    else {
+                        const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
+                        if (gemini37FlashBackendModel) {
+                            effectiveModel = gemini37FlashBackendModel;
+                        }
+                        else {
+                            const gemini36FlashBackendModel = resolveAntigravityGemini36FlashBackendModel(rawModel, tierThinkingLevel);
+                            if (gemini36FlashBackendModel) {
+                                effectiveModel = gemini36FlashBackendModel;
+                            }
+                        }
                     }
                 }
                 if (isClaude) {

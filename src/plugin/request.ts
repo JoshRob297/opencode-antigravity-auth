@@ -853,21 +853,18 @@ export function prepareAntigravityRequest(
           if (gemini38FlashBackendModel) {
             effectiveModel = gemini38FlashBackendModel;
             wrappedBody.model = gemini38FlashBackendModel;
-          }
-          const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
-          if (gemini37FlashBackendModel) {
-            effectiveModel = gemini37FlashBackendModel;
-            wrappedBody.model = gemini37FlashBackendModel;
-          }
-          const gemini36FlashBackendModel = resolveAntigravityGemini36FlashBackendModel(rawModel, tierThinkingLevel);
-          if (gemini36FlashBackendModel) {
-            effectiveModel = gemini36FlashBackendModel;
-            wrappedBody.model = gemini36FlashBackendModel;
-          }
-          const gemini35FlashBackendModel = resolveAntigravityGemini35FlashBackendModel(rawModel, tierThinkingLevel);
-          if (gemini35FlashBackendModel) {
-            effectiveModel = gemini35FlashBackendModel;
-            wrappedBody.model = gemini35FlashBackendModel;
+          } else {
+            const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
+            if (gemini37FlashBackendModel) {
+              effectiveModel = gemini37FlashBackendModel;
+              wrappedBody.model = gemini37FlashBackendModel;
+            } else {
+              const gemini36FlashBackendModel = resolveAntigravityGemini36FlashBackendModel(rawModel, tierThinkingLevel);
+              if (gemini36FlashBackendModel) {
+                effectiveModel = gemini36FlashBackendModel;
+                wrappedBody.model = gemini36FlashBackendModel;
+              }
+            }
           }
         }
 
@@ -978,18 +975,16 @@ export function prepareAntigravityRequest(
           const gemini38FlashBackendModel = resolveAntigravityGemini38FlashBackendModel(rawModel, tierThinkingLevel);
           if (gemini38FlashBackendModel) {
             effectiveModel = gemini38FlashBackendModel;
-          }
-          const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
-          if (gemini37FlashBackendModel) {
-            effectiveModel = gemini37FlashBackendModel;
-          }
-          const gemini36FlashBackendModel = resolveAntigravityGemini36FlashBackendModel(rawModel, tierThinkingLevel);
-          if (gemini36FlashBackendModel) {
-            effectiveModel = gemini36FlashBackendModel;
-          }
-          const gemini35FlashBackendModel = resolveAntigravityGemini35FlashBackendModel(rawModel, tierThinkingLevel);
-          if (gemini35FlashBackendModel) {
-            effectiveModel = gemini35FlashBackendModel;
+          } else {
+            const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
+            if (gemini37FlashBackendModel) {
+              effectiveModel = gemini37FlashBackendModel;
+            } else {
+              const gemini36FlashBackendModel = resolveAntigravityGemini36FlashBackendModel(rawModel, tierThinkingLevel);
+              if (gemini36FlashBackendModel) {
+                effectiveModel = gemini36FlashBackendModel;
+              }
+            }
           }
         }
 

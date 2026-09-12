@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0] - 2026-09-12
+
+### Fixed
+
+- **Decommissioned Autopush Endpoint Removed (Fix 403 `#3501`)** - Google recently restricted the `autopush-cloudcode-pa.sandbox.googleapis.com` endpoint to internal enterprise accounts, causing consumer and Gemini AI Pro accounts to fail with HTTP 403 `#3501` (`SUBSCRIPTION_REQUIRED`). Removed `autopush` from `ANTIGRAVITY_ENDPOINT_FALLBACKS` and `ANTIGRAVITY_LOAD_ENDPOINTS`, routing requests strictly through active `daily` and `prod` endpoints.
+- **Model Resolution Precedence** - Fixed priority checks in request preparation to ensure `gemini-3.8-flash` resolution never cascades into legacy resolvers.
+
 ## [1.14.0] - 2026-09-12
 
 ### Removed

@@ -31,22 +31,20 @@ export const ANTIGRAVITY_ENDPOINT_DAILY = "https://daily-cloudcode-pa.sandbox.go
 export const ANTIGRAVITY_ENDPOINT_AUTOPUSH = "https://autopush-cloudcode-pa.sandbox.googleapis.com";
 export const ANTIGRAVITY_ENDPOINT_PROD = "https://cloudcode-pa.googleapis.com";
 /**
- * Endpoint fallback order (daily → autopush → prod).
- * Shared across request handling and project discovery to mirror CLIProxy behavior.
+ * Endpoint fallback order (daily → prod).
+ * Note: autopush endpoint has been decommissioned by Google for consumer licenses and responds with 403 #3501.
  */
 export const ANTIGRAVITY_ENDPOINT_FALLBACKS = [
     ANTIGRAVITY_ENDPOINT_DAILY,
-    ANTIGRAVITY_ENDPOINT_AUTOPUSH,
     ANTIGRAVITY_ENDPOINT_PROD,
 ];
 /**
- * Preferred endpoint order for project discovery (prod first, then fallbacks).
- * loadCodeAssist appears to be best supported on prod for managed project resolution.
+ * Preferred endpoint order for project discovery (prod first, then daily).
+ * loadCodeAssist is best supported on prod and daily.
  */
 export const ANTIGRAVITY_LOAD_ENDPOINTS = [
     ANTIGRAVITY_ENDPOINT_PROD,
     ANTIGRAVITY_ENDPOINT_DAILY,
-    ANTIGRAVITY_ENDPOINT_AUTOPUSH,
 ];
 /**
  * Primary endpoint to use (daily sandbox - same as CLIProxy/Vibeproxy).
