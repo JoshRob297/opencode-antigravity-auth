@@ -201,10 +201,8 @@ export function resolveModelWithTier(requestedModel, options = {}) {
     const baseName = tier ? modelWithoutQuota.replace(TIER_REGEX, "") : modelWithoutQuota;
     const isImageModel = IMAGE_GENERATION_MODELS.test(modelWithoutQuota);
     const isClaudeModel = modelWithoutQuota.toLowerCase().includes("claude");
-    // All models default to Antigravity quota unless cli_first is enabled
-    // Fallback to gemini-cli happens at the account rotation level when Antigravity is exhausted
-    const preferGeminiCli = options.cli_first === true && !isAntigravity && !isImageModel && !isClaudeModel;
-    const quotaPreference = preferGeminiCli ? "gemini-cli" : "antigravity";
+    // All models strictly route to Antigravity quota
+    const quotaPreference = "antigravity";
     const explicitQuota = isAntigravity || isImageModel;
     const isGemini3 = modelWithoutQuota.toLowerCase().startsWith("gemini-3");
     const skipAlias = isAntigravity && isGemini3;
@@ -321,41 +319,25 @@ function budgetToGemini3Level(budget) {
  * - gemini-3-pro-preview (gemini-cli) → gemini-3-pro-low (antigravity)
  * - gemini-3-flash (antigravity) → gemini-3-flash-preview (gemini-cli)
  */
-export function resolveModelForHeaderStyle(requestedModel, headerStyle) {
+export function resolveModelForHeaderStyle(requestedModel, headerStyle = "antigravity") {
     const lower = requestedModel.toLowerCase();
     const isGemini3 = lower.includes("gemini-3");
     if (!isGemini3) {
         return resolveModelWithTier(requestedModel);
     }
-    if (headerStyle === "antigravity") {
-        let transformedModel = requestedModel
-            .replace(/-preview-customtools$/i, "")
-            .replace(/-preview$/i, "")
-            .replace(/^antigravity-/i, "");
-        const isGemini3Pro = isGemini3ProModel(transformedModel);
-        const hasTierSuffix = /-(low|medium|high)$/i.test(transformedModel);
-        const isImageModel = IMAGE_GENERATION_MODELS.test(transformedModel);
-        // Don't add tier suffix to image models - they don't support thinking
-        if (isGemini3Pro && !hasTierSuffix && !isImageModel) {
-            transformedModel = `${transformedModel}-low`;
-        }
-        const prefixedModel = `antigravity-${transformedModel}`;
-        return resolveModelWithTier(prefixedModel);
+    let transformedModel = requestedModel
+        .replace(/-preview-customtools$/i, "")
+        .replace(/-preview$/i, "")
+        .replace(/^antigravity-/i, "");
+    const isGemini3Pro = isGemini3ProModel(transformedModel);
+    const hasTierSuffix = /-(low|medium|high)$/i.test(transformedModel);
+    const isImageModel = IMAGE_GENERATION_MODELS.test(transformedModel);
+    // Don't add tier suffix to image models - they don't support thinking
+    if (isGemini3Pro && !hasTierSuffix && !isImageModel) {
+        transformedModel = `${transformedModel}-low`;
     }
-    if (headerStyle === "gemini-cli") {
-        let transformedModel = requestedModel
-            .replace(/^antigravity-/i, "")
-            .replace(/-(low|medium|high)$/i, "");
-        const hasPreviewSuffix = /-preview($|-)/i.test(transformedModel);
-        if (!hasPreviewSuffix) {
-            transformedModel = `${transformedModel}-preview`;
-        }
-        return {
-            ...resolveModelWithTier(transformedModel),
-            quotaPreference: "gemini-cli",
-        };
-    }
-    return resolveModelWithTier(requestedModel);
+    const prefixedModel = `antigravity-${transformedModel}`;
+    return resolveModelWithTier(prefixedModel);
 }
 /**
  * Resolves model with variant config from providerOptions.

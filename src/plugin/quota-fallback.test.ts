@@ -46,27 +46,17 @@ beforeAll(async () => {
 });
 
 describe("quota fallback direction", () => {
-  it("falls back from gemini-cli to antigravity when alternate quota is available", () => {
-    const result = resolveQuotaFallbackHeaderStyle?.({
-      family: "gemini",
-      headerStyle: "gemini-cli",
-      alternateStyle: "antigravity",
-    });
-
-    expect(result).toBe("antigravity");
-  });
-
-  it("falls back from antigravity to gemini-cli when alternate quota is available", () => {
+  it("returns null when no alternate quota is needed (antigravity unified)", () => {
     const result = resolveQuotaFallbackHeaderStyle?.({
       family: "gemini",
       headerStyle: "antigravity",
-      alternateStyle: "gemini-cli",
+      alternateStyle: "antigravity",
     });
 
-    expect(result).toBe("gemini-cli");
+    expect(result).toBeNull();
   });
 
-  it("returns null when no alternate quota is available", () => {
+  it("returns null when alternateStyle is null", () => {
     const result = resolveQuotaFallbackHeaderStyle?.({
       family: "gemini",
       headerStyle: "antigravity",
@@ -85,7 +75,7 @@ describe("header style resolution", () => {
       true,
     );
 
-    expect(headerStyle).toBe("gemini-cli");
+    expect(headerStyle).toBe("antigravity");
   });
 
   it("keeps antigravity for unsuffixed Gemini models when cli_first is disabled", () => {
@@ -148,7 +138,7 @@ describe("header routing decision", () => {
 
     expect(decision).toMatchObject({
       cliFirst: true,
-      preferredHeaderStyle: "gemini-cli",
+      preferredHeaderStyle: "antigravity",
       explicitQuota: false,
       allowQuotaFallback: true,
     });

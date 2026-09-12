@@ -112,7 +112,7 @@ export interface VariantConfig {
  * - gemini-3-pro-preview (gemini-cli) → gemini-3-pro-low (antigravity)
  * - gemini-3-flash (antigravity) → gemini-3-flash-preview (gemini-cli)
  */
-export declare function resolveModelForHeaderStyle(requestedModel: string, headerStyle: "antigravity" | "gemini-cli"): ResolvedModel;
+export declare function resolveModelForHeaderStyle(requestedModel: string, headerStyle?: "antigravity"): ResolvedModel;
 /**
  * Resolves model with variant config from providerOptions.
  * Variant config takes priority over tier suffix in model name.

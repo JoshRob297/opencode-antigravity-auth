@@ -8,8 +8,9 @@
 
 ---
 
-### 🌟 What's New & Changed in this Fork (v1.16.0)
+### 🌟 What's New & Changed in this Fork (v1.17.0)
 
+- 🚫 **Legacy `gemini-cli` Mode Removed (Definitive 403 `#3501` Fix)**: Completely stripped legacy VS Code headers and `-preview` model fallbacks. All requests route cleanly through official Antigravity CLI signatures (`aidev_client`), eliminating false license errors across all accounts.
 - 🛡️ **Configurable Safety Settings (`safety_level`)**: Uses Google's native moderation baseline by default (`medium` / `BLOCK_MEDIUM_AND_ABOVE`) to protect accounts, with configurable options for `high` and `none` (with explicit disclaimer).
 - 🛠️ **Fixed 403 `#3501` (`SUBSCRIPTION_REQUIRED`) on Flash**: Removed decommissioned sandbox `autopush` endpoint from fallbacks so all requests route cleanly to live `daily` and `prod` endpoints.
 - 🚫 **Deprecated Gemini 3.5 Flash Removed**: Fully removed `antigravity-gemini-3.5-flash` following Google's backend sunset, keeping only active models (Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.1 Pro, and Claude 4.6).

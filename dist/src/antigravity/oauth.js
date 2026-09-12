@@ -1,5 +1,5 @@
 import { generatePKCE } from "@openauthjs/openauth/pkce";
-import { ANTIGRAVITY_CLIENT_ID, ANTIGRAVITY_CLIENT_SECRET, ANTIGRAVITY_REDIRECT_URI, ANTIGRAVITY_SCOPES, ANTIGRAVITY_ENDPOINT_FALLBACKS, ANTIGRAVITY_LOAD_ENDPOINTS, getAntigravityHeaders, GEMINI_CLI_HEADERS, } from "../constants";
+import { ANTIGRAVITY_CLIENT_ID, ANTIGRAVITY_CLIENT_SECRET, ANTIGRAVITY_REDIRECT_URI, ANTIGRAVITY_SCOPES, ANTIGRAVITY_ENDPOINT_FALLBACKS, ANTIGRAVITY_LOAD_ENDPOINTS, getAntigravityHeaders, } from "../constants";
 import { createLogger } from "../plugin/logger";
 import { calculateTokenExpiry } from "../plugin/auth";
 const log = createLogger("oauth");
@@ -118,7 +118,7 @@ export async function exchangeAntigravity(code, state) {
                 "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
                 "Accept": "*/*",
                 "Accept-Encoding": "gzip, deflate, br",
-                "User-Agent": GEMINI_CLI_HEADERS["User-Agent"],
+                "User-Agent": "antigravity",
             },
             body: new URLSearchParams({
                 client_id: ANTIGRAVITY_CLIENT_ID,
@@ -137,7 +137,7 @@ export async function exchangeAntigravity(code, state) {
         const userInfoResponse = await fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
             headers: {
                 Authorization: `Bearer ${tokenPayload.access_token}`,
-                "User-Agent": GEMINI_CLI_HEADERS["User-Agent"],
+                "User-Agent": "antigravity",
             },
         });
         const userInfo = userInfoResponse.ok

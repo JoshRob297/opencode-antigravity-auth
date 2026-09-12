@@ -51,12 +51,6 @@ export const ANTIGRAVITY_LOAD_ENDPOINTS = [
  */
 export const ANTIGRAVITY_ENDPOINT = ANTIGRAVITY_ENDPOINT_DAILY;
 /**
- * Gemini CLI endpoint (production).
- * Used for models without :antigravity suffix.
- * Same as opencode-gemini-auth's GEMINI_CODE_ASSIST_ENDPOINT.
- */
-export const GEMINI_CLI_ENDPOINT = ANTIGRAVITY_ENDPOINT_PROD;
-/**
  * Hardcoded project id used when Antigravity does not return one (e.g., business/workspace accounts).
  */
 export const ANTIGRAVITY_DEFAULT_PROJECT_ID = "rising-fact-p41fc";
@@ -89,11 +83,6 @@ export const ANTIGRAVITY_HEADERS = {
     "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
     "Client-Metadata": `{"ideType":"ANTIGRAVITY","platform":"${process.platform === "win32" ? "WINDOWS" : "MACOS"}","pluginType":"GEMINI"}`,
 };
-export const GEMINI_CLI_HEADERS = {
-    "User-Agent": "google-api-nodejs-client/9.15.1",
-    "X-Goog-Api-Client": "gl-node/22.17.0",
-    "Client-Metadata": "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI",
-};
 const ANTIGRAVITY_PLATFORMS = ["windows/amd64", "darwin/arm64", "darwin/amd64"];
 const ANTIGRAVITY_API_CLIENTS = [
     "google-cloud-sdk vscode_cloudshelleditor/0.1",
@@ -103,14 +92,7 @@ const ANTIGRAVITY_API_CLIENTS = [
 function randomFrom(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
-export function getRandomizedHeaders(style, model) {
-    if (style === "gemini-cli") {
-        return {
-            "User-Agent": GEMINI_CLI_HEADERS["User-Agent"],
-            "X-Goog-Api-Client": GEMINI_CLI_HEADERS["X-Goog-Api-Client"],
-            "Client-Metadata": GEMINI_CLI_HEADERS["Client-Metadata"],
-        };
-    }
+export function getRandomizedHeaders(style = "antigravity", model) {
     const platform = randomFrom(ANTIGRAVITY_PLATFORMS);
     const metadataPlatform = platform.startsWith("windows") ? "WINDOWS" : "MACOS";
     return {

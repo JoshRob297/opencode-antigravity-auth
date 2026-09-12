@@ -37,12 +37,6 @@ export declare const ANTIGRAVITY_LOAD_ENDPOINTS: readonly ["https://cloudcode-pa
  */
 export declare const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
 /**
- * Gemini CLI endpoint (production).
- * Used for models without :antigravity suffix.
- * Same as opencode-gemini-auth's GEMINI_CODE_ASSIST_ENDPOINT.
- */
-export declare const GEMINI_CLI_ENDPOINT = "https://cloudcode-pa.googleapis.com";
-/**
  * Hardcoded project id used when Antigravity does not return one (e.g., business/workspace accounts).
  */
 export declare const ANTIGRAVITY_DEFAULT_PROJECT_ID = "rising-fact-p41fc";
@@ -64,18 +58,13 @@ export declare const ANTIGRAVITY_HEADERS: {
     readonly "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1";
     readonly "Client-Metadata": "{\"ideType\":\"ANTIGRAVITY\",\"platform\":\"WINDOWS\",\"pluginType\":\"GEMINI\"}" | "{\"ideType\":\"ANTIGRAVITY\",\"platform\":\"MACOS\",\"pluginType\":\"GEMINI\"}";
 };
-export declare const GEMINI_CLI_HEADERS: {
-    readonly "User-Agent": "google-api-nodejs-client/9.15.1";
-    readonly "X-Goog-Api-Client": "gl-node/22.17.0";
-    readonly "Client-Metadata": "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI";
-};
 export type HeaderSet = {
     "User-Agent": string;
     "X-Goog-Api-Client"?: string;
     "Client-Metadata"?: string;
 };
-export declare function getRandomizedHeaders(style: HeaderStyle, model?: string): HeaderSet;
-export type HeaderStyle = "antigravity" | "gemini-cli";
+export declare function getRandomizedHeaders(style?: HeaderStyle, model?: string): HeaderSet;
+export type HeaderStyle = "antigravity";
 /**
  * Provider identifier shared between the plugin loader and credential store.
  */

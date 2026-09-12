@@ -8,7 +8,6 @@ import {
   ANTIGRAVITY_ENDPOINT_FALLBACKS,
   ANTIGRAVITY_LOAD_ENDPOINTS,
   getAntigravityHeaders,
-  GEMINI_CLI_HEADERS,
 } from "../constants";
 import { createLogger } from "../plugin/logger";
 import { calculateTokenExpiry } from "../plugin/auth";
@@ -212,7 +211,7 @@ export async function exchangeAntigravity(
         "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
         "Accept": "*/*",
         "Accept-Encoding": "gzip, deflate, br",
-        "User-Agent": GEMINI_CLI_HEADERS["User-Agent"],
+        "User-Agent": "antigravity",
       },
       body: new URLSearchParams({
         client_id: ANTIGRAVITY_CLIENT_ID,
@@ -236,7 +235,7 @@ export async function exchangeAntigravity(
       {
         headers: {
           Authorization: `Bearer ${tokenPayload.access_token}`,
-          "User-Agent": GEMINI_CLI_HEADERS["User-Agent"],
+          "User-Agent": "antigravity",
         },
       },
     );

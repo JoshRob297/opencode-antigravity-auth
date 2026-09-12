@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.17.0] - 2026-09-12
+
+### Removed
+
+- **Legacy `gemini-cli` Fallback Mode Removed (Permanent Fix for 403 `#3501`)** - Completely removed legacy VS Code / `gemini-cli` headers, endpoints, and `-preview` model mutators. Google recently restricted the VS Code backend (`cloudcode-pa.googleapis.com` with `ideType=VSCODE`) strictly to paid Enterprise licenses, causing all fallback requests to fail with HTTP 403 `#3501` (`SUBSCRIPTION_REQUIRED`). All requests now route exclusively through official Antigravity signatures (`aidev_client`), ensuring 100% reliable 200 OK responses.
+
 ## [1.16.0] - 2026-09-12
 
 ### Added

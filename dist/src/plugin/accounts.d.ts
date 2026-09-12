@@ -13,7 +13,7 @@ export interface RateLimitBackoffResult {
 export declare const MAX_RPM_RETRY_AFTER_MS = 60000;
 export declare function parseRateLimitReason(reason: string | undefined, message: string | undefined, status?: number): RateLimitReason;
 export declare function calculateBackoffMs(reason: RateLimitReason, consecutiveFailures: number, retryAfterMs?: number | null, remainingFraction?: number | null): number;
-export type BaseQuotaKey = "claude" | "gemini-antigravity" | "gemini-cli";
+export type BaseQuotaKey = "claude" | "gemini-antigravity";
 export type QuotaKey = BaseQuotaKey | `${BaseQuotaKey}:${string}`;
 export interface ManagedAccount {
     index: number;
@@ -116,15 +116,6 @@ export declare class AccountManager {
     getAvailableHeaderStyle(account: ManagedAccount, family: ModelFamily, model?: string | null): HeaderStyle | null;
     /**
      * Check if any OTHER account has antigravity quota available for the given family/model.
-     *
-     * Used to determine whether to switch accounts vs fall back to gemini-cli:
-     * - If true: Switch to another account (preserve antigravity priority)
-     * - If false: All accounts exhausted antigravity, safe to fall back to gemini-cli
-     *
-     * @param currentAccountIndex - Index of the current account (will be excluded from check)
-     * @param family - Model family ("gemini" or "claude")
-     * @param model - Optional model name for model-specific rate limits
-     * @returns true if any other enabled, non-cooling-down account has antigravity available
      */
     hasOtherAccountWithAntigravityAvailable(currentAccountIndex: number, family: ModelFamily, model?: string | null): boolean;
     setAccountEnabled(accountIndex: number, enabled: boolean): boolean;

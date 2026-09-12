@@ -105,11 +105,11 @@ function clampNonNegativeInt(value, fallback) {
     }
     return value < 0 ? 0 : Math.floor(value);
 }
-function getQuotaKey(family, headerStyle, model) {
+function getQuotaKey(family, headerStyle = "antigravity", model) {
     if (family === "claude") {
         return "claude";
     }
-    const base = headerStyle === "gemini-cli" ? "gemini-cli" : "gemini-antigravity";
+    const base = "gemini-antigravity";
     if (model) {
         return `${base}:${model}`;
     }
@@ -148,9 +148,7 @@ function isRateLimitedForFamily(account, family, model, cacheTtlMs = DEFAULT_QUO
     if (family === "claude") {
         return isRateLimitedForQuotaKey(account, "claude", family, cacheTtlMs, model);
     }
-    const antigravityIsLimited = isRateLimitedForHeaderStyle(account, family, "antigravity", model, cacheTtlMs);
-    const cliIsLimited = isRateLimitedForHeaderStyle(account, family, "gemini-cli", model, cacheTtlMs);
-    return antigravityIsLimited && cliIsLimited;
+    return isRateLimitedForHeaderStyle(account, family, "antigravity", model, cacheTtlMs);
 }
 function isRateLimitedForHeaderStyle(account, family, headerStyle, model, cacheTtlMs = DEFAULT_QUOTA_CACHE_TTL_MS) {
     clearExpiredRateLimits(account);
@@ -553,9 +551,7 @@ export class AccountManager {
             }
             else {
                 const antigravityKey = getQuotaKey(family, "antigravity", model);
-                const cliKey = getQuotaKey(family, "gemini-cli", model);
                 delete account.rateLimitResetTimes[antigravityKey];
-                delete account.rateLimitResetTimes[cliKey];
             }
             account.consecutiveFailures = 0;
         }
@@ -611,32 +607,16 @@ export class AccountManager {
     }
     getAvailableHeaderStyle(account, family, model) {
         clearExpiredRateLimits(account);
-        if (family === "claude") {
-            return isRateLimitedForHeaderStyle(account, family, "antigravity") ? null : "antigravity";
-        }
         if (!isRateLimitedForHeaderStyle(account, family, "antigravity", model)) {
             return "antigravity";
-        }
-        if (!isRateLimitedForHeaderStyle(account, family, "gemini-cli", model)) {
-            return "gemini-cli";
         }
         return null;
     }
     /**
      * Check if any OTHER account has antigravity quota available for the given family/model.
-     *
-     * Used to determine whether to switch accounts vs fall back to gemini-cli:
-     * - If true: Switch to another account (preserve antigravity priority)
-     * - If false: All accounts exhausted antigravity, safe to fall back to gemini-cli
-     *
-     * @param currentAccountIndex - Index of the current account (will be excluded from check)
-     * @param family - Model family ("gemini" or "claude")
-     * @param model - Optional model name for model-specific rate limits
-     * @returns true if any other enabled, non-cooling-down account has antigravity available
      */
     hasOtherAccountWithAntigravityAvailable(currentAccountIndex, family, model) {
-        // Claude has no gemini-cli fallback - always return false
-        // (This method is only relevant for Gemini's dual quota pools)
+        // Claude has no alternate header fallback - return false to switch accounts normally
         if (family === "claude") {
             return false;
         }
@@ -808,14 +788,10 @@ export class AccountManager {
                     waitTimes.push(Math.max(0, t - now));
             }
             else {
-                // For Gemini, account becomes available when EITHER pool expires for this model/family
                 const antigravityKey = getQuotaKey(family, "antigravity", model);
-                const cliKey = getQuotaKey(family, "gemini-cli", model);
                 const t1 = a.rateLimitResetTimes[antigravityKey];
-                const t2 = a.rateLimitResetTimes[cliKey];
-                const accountWait = Math.min(t1 !== undefined ? Math.max(0, t1 - now) : Infinity, t2 !== undefined ? Math.max(0, t2 - now) : Infinity);
-                if (accountWait !== Infinity)
-                    waitTimes.push(accountWait);
+                if (t1 !== undefined)
+                    waitTimes.push(Math.max(0, t1 - now));
             }
         }
         return waitTimes.length > 0 ? Math.min(...waitTimes) : 0;
