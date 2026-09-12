@@ -746,6 +746,43 @@ export interface PrepareRequestOptions {
   googleSearch?: GoogleSearchConfig;
   /** Per-account fingerprint for rate limit mitigation. Falls back to session fingerprint if not provided. */
   fingerprint?: Fingerprint;
+  /** Gemini safety level ("medium" | "high" | "none"). Default: "medium" */
+  safetyLevel?: "medium" | "high" | "none";
+}
+
+/**
+ * Builds safety settings payload for Gemini requests according to the configured safetyLevel.
+ */
+export function buildSafetySettings(safetyLevel: "medium" | "high" | "none" = "medium"): Array<{ category: string; threshold: string }> {
+  if (safetyLevel === "none") {
+    return [
+      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_JAILBREAK", threshold: "BLOCK_NONE" },
+    ];
+  }
+
+  if (safetyLevel === "high") {
+    return [
+      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
+      { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_ONLY_HIGH" },
+    ];
+  }
+
+  // Default: "medium" (Google native standard baseline)
+  return [
+    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+  ];
 }
 
 export function prepareAntigravityRequest(
@@ -1029,16 +1066,9 @@ export function prepareAntigravityRequest(
           }
           requestPayload.generationConfig = generationConfig;
 
-          // Add safety settings for image generation (permissive to allow creative content)
+          // Add safety settings for image generation
           if (!requestPayload.safetySettings) {
-            requestPayload.safetySettings = [
-              { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_JAILBREAK", threshold: "BLOCK_NONE" },
-            ];
+            requestPayload.safetySettings = buildSafetySettings(options?.safetyLevel ?? "medium");
           }
 
           // Image models don't support tools - remove them entirely
@@ -1515,18 +1545,9 @@ export function prepareAntigravityRequest(
           delete requestPayload.model;
         }
 
-        // Inject maximum permissive safetySettings by default for Gemini models (BLOCK_NONE)
-        // to prevent false-positive blocks on coding, security research, system exploits,
-        // and prompt injection filters (HARM_CATEGORY_JAILBREAK).
+        // Inject safetySettings according to configured safetyLevel (default: medium / Google baseline)
         if (!isClaude && !requestPayload.safetySettings) {
-          requestPayload.safetySettings = [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_JAILBREAK", threshold: "BLOCK_NONE" },
-          ];
+          requestPayload.safetySettings = buildSafetySettings(options?.safetyLevel ?? "medium");
         }
 
         stripInjectedDebugFromRequestPayload(requestPayload);

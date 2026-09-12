@@ -84,6 +84,11 @@ export declare const AntigravityConfigSchema: z.ZodObject<{
     tool_id_recovery: z.ZodDefault<z.ZodBoolean>;
     claude_tool_hardening: z.ZodDefault<z.ZodBoolean>;
     claude_prompt_auto_caching: z.ZodDefault<z.ZodBoolean>;
+    safety_level: z.ZodDefault<z.ZodEnum<{
+        medium: "medium";
+        high: "high";
+        none: "none";
+    }>>;
     proactive_token_refresh: z.ZodDefault<z.ZodBoolean>;
     proactive_refresh_buffer_seconds: z.ZodDefault<z.ZodNumber>;
     proactive_refresh_check_interval_seconds: z.ZodDefault<z.ZodNumber>;

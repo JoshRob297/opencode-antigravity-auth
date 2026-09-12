@@ -189,6 +189,15 @@ export const AntigravityConfigSchema = z.object({
      * @default false
      */
     claude_prompt_auto_caching: z.boolean().default(false),
+    /**
+     * Gemini safety filtering level:
+     * - "medium" (Default): Google native baseline (BLOCK_MEDIUM_AND_ABOVE). Max account safety.
+     * - "high": Technical coding & debugging (BLOCK_ONLY_HIGH). Reduces false positives.
+     * - "none": Permissive / Pentesting (BLOCK_NONE + JAILBREAK). Use at your own risk.
+     *
+     * @default "medium"
+     */
+    safety_level: z.enum(["medium", "high", "none"]).default("medium"),
     // =========================================================================
     // Proactive Token Refresh (ported from LLM-API-Key-Proxy)
     // =========================================================================
@@ -404,6 +413,7 @@ export const DEFAULT_CONFIG = {
     tool_id_recovery: true,
     claude_tool_hardening: true,
     claude_prompt_auto_caching: false,
+    safety_level: "medium",
     proactive_token_refresh: true,
     proactive_refresh_buffer_seconds: 1800,
     proactive_refresh_check_interval_seconds: 300,

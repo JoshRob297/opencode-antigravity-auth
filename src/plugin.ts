@@ -1287,6 +1287,12 @@ export const createAntigravityPlugin = (providerId: string) => async (
   try {
     ensureAntigravityQuotaCommand();
   } catch {}
+
+  if (config.safety_level === "none") {
+    log.warn(
+      "[antigravity-auth] DISCLAIMER: 'safety_level' is configured as 'none'. External safety filters and jailbreak classifiers are disabled. Use at your own discretion. You assume all responsibility for potential account scrutiny or suspensions by Google."
+    );
+  }
   
   const updateChecker = createAutoUpdateCheckerHook(client, directory, {
     showStartupToast: true,
@@ -2052,6 +2058,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
                     claudeToolHardening: config.claude_tool_hardening,
                     claudePromptAutoCaching: config.claude_prompt_auto_caching,
                     fingerprint: account.fingerprint,
+                    safetyLevel: config.safety_level,
                   },
                   forceModelTurnFix,
                 );

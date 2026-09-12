@@ -41,7 +41,16 @@ export interface PrepareRequestOptions {
     googleSearch?: GoogleSearchConfig;
     /** Per-account fingerprint for rate limit mitigation. Falls back to session fingerprint if not provided. */
     fingerprint?: Fingerprint;
+    /** Gemini safety level ("medium" | "high" | "none"). Default: "medium" */
+    safetyLevel?: "medium" | "high" | "none";
 }
+/**
+ * Builds safety settings payload for Gemini requests according to the configured safetyLevel.
+ */
+export declare function buildSafetySettings(safetyLevel?: "medium" | "high" | "none"): Array<{
+    category: string;
+    threshold: string;
+}>;
 export declare function prepareAntigravityRequest(input: RequestInfo, init: RequestInit | undefined, accessToken: string, projectId: string, endpointOverride?: string, headerStyle?: HeaderStyle, forceThinkingRecovery?: boolean, options?: PrepareRequestOptions, forceModelTurnFix?: boolean): {
     request: RequestInfo;
     init: RequestInit;

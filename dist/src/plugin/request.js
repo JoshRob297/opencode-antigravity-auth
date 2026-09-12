@@ -542,6 +542,38 @@ const STREAM_ACTION = "streamGenerateContent";
 export function isGenerativeLanguageRequest(input) {
     return typeof input === "string" && input.includes("generativelanguage.googleapis.com");
 }
+/**
+ * Builds safety settings payload for Gemini requests according to the configured safetyLevel.
+ */
+export function buildSafetySettings(safetyLevel = "medium") {
+    if (safetyLevel === "none") {
+        return [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_JAILBREAK", threshold: "BLOCK_NONE" },
+        ];
+    }
+    if (safetyLevel === "high") {
+        return [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_ONLY_HIGH" },
+        ];
+    }
+    // Default: "medium" (Google native standard baseline)
+    return [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+        { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+    ];
+}
 export function prepareAntigravityRequest(input, init, accessToken, projectId, endpointOverride, headerStyle = "antigravity", forceThinkingRecovery = false, options, forceModelTurnFix = false) {
     const baseInit = { ...init };
     const headers = new Headers(init?.headers ?? {});
@@ -761,16 +793,9 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                         generationConfig.candidateCount = 1;
                     }
                     requestPayload.generationConfig = generationConfig;
-                    // Add safety settings for image generation (permissive to allow creative content)
+                    // Add safety settings for image generation
                     if (!requestPayload.safetySettings) {
-                        requestPayload.safetySettings = [
-                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_JAILBREAK", threshold: "BLOCK_NONE" },
-                        ];
+                        requestPayload.safetySettings = buildSafetySettings(options?.safetyLevel ?? "medium");
                     }
                     // Image models don't support tools - remove them entirely
                     delete requestPayload.tools;
@@ -1168,18 +1193,9 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                 if ("model" in requestPayload) {
                     delete requestPayload.model;
                 }
-                // Inject maximum permissive safetySettings by default for Gemini models (BLOCK_NONE)
-                // to prevent false-positive blocks on coding, security research, system exploits,
-                // and prompt injection filters (HARM_CATEGORY_JAILBREAK).
+                // Inject safetySettings according to configured safetyLevel (default: medium / Google baseline)
                 if (!isClaude && !requestPayload.safetySettings) {
-                    requestPayload.safetySettings = [
-                        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-                        { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
-                        { category: "HARM_CATEGORY_JAILBREAK", threshold: "BLOCK_NONE" },
-                    ];
+                    requestPayload.safetySettings = buildSafetySettings(options?.safetyLevel ?? "medium");
                 }
                 stripInjectedDebugFromRequestPayload(requestPayload);
                 sanitizeRequestPayloadForAntigravity(requestPayload);

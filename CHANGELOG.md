@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.16.0] - 2026-09-12
+
+### Added
+
+- **Configurable Safety Filtering (`safety_level`) with Google Native Default** - Replaced mandatory permissive injection with a user-configurable `safety_level` parameter (`"medium"` | `"high"` | `"none"`):
+  - `"medium"` (Default): Mirrors Google native baseline (`BLOCK_MEDIUM_AND_ABOVE`), ensuring standard telemetry and maximum account security.
+  - `"high"`: Moderately permissive (`BLOCK_ONLY_HIGH`), reducing false positives for programming and debugging.
+  - `"none"`: Fully permissive (`BLOCK_NONE` + `HARM_CATEGORY_JAILBREAK`). Emits explicit console disclaimer that usage is strictly at the user's discretion and responsibility.
+
 ## [1.15.0] - 2026-09-12
 
 ### Fixed

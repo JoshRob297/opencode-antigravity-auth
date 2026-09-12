@@ -8,9 +8,10 @@
 
 ---
 
-### 🌟 What's New & Changed in this Fork (v1.15.0)
+### 🌟 What's New & Changed in this Fork (v1.16.0)
 
-- 🛠️ **Fixed 403 `#3501` (`SUBSCRIPTION_REQUIRED`) on Flash**: Google recently decommissioned public consumer access on the sandbox `autopush` endpoint (`autopush-cloudcode-pa.sandbox.googleapis.com`), throwing 403 `#3501`. Removed `autopush` from endpoint fallbacks so all requests route directly to live `daily` and `prod` endpoints.
+- 🛡️ **Configurable Safety Settings (`safety_level`)**: Uses Google's native moderation baseline by default (`medium` / `BLOCK_MEDIUM_AND_ABOVE`) to protect accounts, with configurable options for `high` and `none` (with explicit disclaimer).
+- 🛠️ **Fixed 403 `#3501` (`SUBSCRIPTION_REQUIRED`) on Flash**: Removed decommissioned sandbox `autopush` endpoint from fallbacks so all requests route cleanly to live `daily` and `prod` endpoints.
 - 🚫 **Deprecated Gemini 3.5 Flash Removed**: Fully removed `antigravity-gemini-3.5-flash` following Google's backend sunset, keeping only active models (Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.1 Pro, and Claude 4.6).
 - 🎯 **Clean Install Model Whitelisting**: Automatically injects a strict `provider.google.whitelist` in `opencode.json` on clean setup, hiding 18+ unauthenticated built-in Google AI Studio/Vertex models from the OpenCode model selector.
 - 🔄 **In-Flight 403 `#3501` (`SUBSCRIPTION_REQUIRED`) Auto-Recovery**: Intercepts project resolution failures and immediately provisions/links the companion project via `onboardManagedProject` without crashing the active agent session.
@@ -222,10 +223,26 @@ For details on load balancing, dual quota pools, and account storage, see [docs/
 
 ---
 
-## Request Handling & Feedback
+## Request Handling, Safety & Feedback
 
-### Technical Query Normalization
-The plugin automatically optimizes moderation parameters across all harm categories on Gemini requests. This ensures development tasks, shell commands, and system workflows proceed smoothly without premature filter interruptions.
+### Safety Levels (`safety_level`)
+
+By default, the plugin mirrors Google's native moderation baseline (`medium` / `BLOCK_MEDIUM_AND_ABOVE`) to protect your accounts from telemetry anomalies.
+
+You can configure `safety_level` in `~/.config/opencode/antigravity.json`:
+
+```json
+{
+  "safety_level": "medium"
+}
+```
+
+Available levels:
+- `"medium"` (Default) — Standard Google safety filters (`BLOCK_MEDIUM_AND_ABOVE`). Maximum account protection.
+- `"high"` — Blocks only high-probability harm (`BLOCK_ONLY_HIGH`). Recommended for extensive development, vulnerability analysis, and debugging.
+- `"none"` — Disables external safety classifiers (`BLOCK_NONE`) and bypasses prompt injection filters (`HARM_CATEGORY_JAILBREAK`).
+
+> ⚠️ **DISCLAIMER:** Setting `safety_level` to `"none"` is strictly for authorized security research and advanced workflows. Using `"none"` is done solely at your own discretion and risk. We accept no responsibility or liability for account reviews, suspensions, or bans enacted by Google.
 
 ### Concise Notification Handling
 If a query triggers a backend moderation notice, the plugin intercepts the verbose response (which contains lengthy legal disclaimers, policy links, and bug report URLs) and replaces it with a clean, actionable notice:
