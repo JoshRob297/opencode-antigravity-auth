@@ -597,6 +597,17 @@ it("removes x-api-key header", () => {
       expect(headers.get("x-api-key")).toBeNull();
     });
 
+    it("removes x-goog-api-key header to prevent 400 API_KEY_INVALID", () => {
+      const result = prepareAntigravityRequest(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+        { method: "POST", body: JSON.stringify({ contents: [] }), headers: { "x-goog-api-key": "AIzaSy-invalid" } },
+        mockAccessToken,
+        mockProjectId
+      );
+      const headers = result.init.headers as Headers;
+      expect(headers.get("x-goog-api-key")).toBeNull();
+    });
+
     it("removes x-goog-user-project header for antigravity headerStyle", () => {
       const result = prepareAntigravityRequest(
         "https://generativelanguage.googleapis.com/v1beta/models/claude-opus-4-6-thinking:generateContent",

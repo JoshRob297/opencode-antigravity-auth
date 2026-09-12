@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.17.1] - 2026-09-12
+
+### Fixed
+
+- **Strip `x-goog-api-key` Header (Fix 400 `API_KEY_INVALID`)** - OpenCode injects an invalid AI Studio / Vertex API key via the `x-goog-api-key` header when intercepting requests to `generativelanguage.googleapis.com`. The Antigravity backend (`cloudcode-pa.googleapis.com`) prioritized this header over `Authorization: Bearer`, rejecting requests with `400 INVALID_ARGUMENT` (`API_KEY_INVALID: "API key not valid. Please pass a valid API key."`). Stripped `x-goog-api-key` alongside `x-api-key` in `prepareAntigravityRequest`.
+
 ## [1.17.0] - 2026-09-12
 
 ### Removed
