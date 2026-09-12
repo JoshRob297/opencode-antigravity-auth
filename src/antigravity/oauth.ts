@@ -134,7 +134,7 @@ async function fetchProjectID(accessToken: string): Promise<string> {
   const loadHeaders: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
-    "User-Agent": GEMINI_CLI_HEADERS["User-Agent"],
+    "User-Agent": "antigravity",
     "Client-Metadata": getAntigravityHeaders()["Client-Metadata"],
   };
 
@@ -151,7 +151,7 @@ async function fetchProjectID(accessToken: string): Promise<string> {
         body: JSON.stringify({
           metadata: {
             ideType: "ANTIGRAVITY",
-            platform: process.platform === "win32" ? "WINDOWS" : "MACOS",
+            platform: "PLATFORM_UNSPECIFIED",
             pluginType: "GEMINI",
           },
         }),

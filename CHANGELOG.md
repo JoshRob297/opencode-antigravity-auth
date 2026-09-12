@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.11.1] - 2026-09-12
+
+### Fixed
+
+- **Initial Project ID Discovery on Fresh Installs** - Fixed an issue where fresh logins did not discover the account's managed project ID due to invalid `platform` metadata (`MACOS`/`WINDOWS`) in `fetchProjectID`, preventing HTTP 403 `#3501` (`SUBSCRIPTION_REQUIRED`) errors on new machines.
+
 ## [1.11.0] - 2026-09-11
 
 ### Added
