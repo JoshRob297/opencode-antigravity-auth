@@ -220,6 +220,17 @@ export async function onboardManagedProject(
 }
 
 /**
+ * Invalidate cached project context for an account (e.g. after 403 SUBSCRIPTION_REQUIRED).
+ */
+export function invalidateProjectContext(auth: OAuthAuthDetails): void {
+  const cacheKey = getCacheKey(auth);
+  if (cacheKey) {
+    projectContextResultCache.delete(cacheKey);
+    projectContextPendingCache.delete(cacheKey);
+  }
+}
+
+/**
  * Resolves an effective project ID for the current auth state, caching results per refresh token.
  */
 export async function ensureProjectContext(auth: OAuthAuthDetails): Promise<ProjectContextResult> {

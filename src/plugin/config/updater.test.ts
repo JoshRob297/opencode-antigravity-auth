@@ -47,9 +47,12 @@ describe("updateOpencodeConfig", () => {
     expect(writtenConfig.$schema).toBe("https://opencode.ai/config.json");
     expect(writtenConfig.plugin).toContain("opencode-antigravity-auth@latest");
     expect(writtenConfig.provider?.google?.models).toBeDefined();
+    expect(writtenConfig.provider?.google?.whitelist).toBeDefined();
+    expect(writtenConfig.provider?.google?.whitelist).toContain("antigravity-gemini-3.8-flash");
+    expect(writtenConfig.provider?.google?.whitelist).not.toContain("antigravity-gemini-3.5-flash");
   });
 
-  test("replaces existing google models with plugin models", async () => {
+  test("replaces existing google models with plugin models and updates whitelist", async () => {
     const existingConfig = {
       $schema: "https://opencode.ai/config.json",
       plugin: ["opencode-antigravity-auth@latest"],
@@ -58,6 +61,7 @@ describe("updateOpencodeConfig", () => {
           models: {
             "old-model": { name: "Old Model" },
           },
+          whitelist: ["old-model"],
         },
       },
     };
@@ -73,6 +77,10 @@ describe("updateOpencodeConfig", () => {
     // New models should be present
     expect(writtenConfig.provider.google.models["antigravity-gemini-3.7-flash"]).toBeDefined();
     expect(writtenConfig.provider.google.models["antigravity-claude-sonnet-4-6"]).toBeDefined();
+    expect(writtenConfig.provider.google.models["antigravity-gemini-3.5-flash"]).toBeUndefined();
+    // Whitelist should be updated
+    expect(writtenConfig.provider.google.whitelist).toContain("antigravity-gemini-3.7-flash");
+    expect(writtenConfig.provider.google.whitelist).not.toContain("old-model");
   });
 
   test("preserves non-google provider sections", async () => {

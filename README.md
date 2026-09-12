@@ -8,7 +8,12 @@
 
 ---
 
-### 🌟 What's New & Changed in this Fork (v1.13.0)
+### 🌟 What's New & Changed in this Fork (v1.14.0)
+
+- 🚫 **Deprecated Gemini 3.5 Flash Removed**: Fully removed `antigravity-gemini-3.5-flash` following Google's backend sunset, keeping only active models (Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.1 Pro, and Claude 4.6).
+- 🎯 **Clean Install Model Whitelisting**: Automatically injects a strict `provider.google.whitelist` in `opencode.json` on clean setup, hiding 18+ unauthenticated built-in Google AI Studio/Vertex models from the OpenCode model selector.
+- 🔄 **In-Flight 403 `#3501` (`SUBSCRIPTION_REQUIRED`) Auto-Recovery**: Intercepts project resolution failures and immediately provisions/links the companion project via `onboardManagedProject` without crashing the active agent session.
+- ⚡ **Auto-Update Commands**: Includes `/antigravity-update` slash command and CLI updater (`antigravity-update`) for one-click plugin updates.
 
 | Enhancement | What Was Broken Upstream | How This Fork Fixes It |
 |---|---|---|

@@ -33,17 +33,6 @@ export const OPENCODE_MODEL_DEFINITIONS = {
             high: { thinkingLevel: "high" },
         },
     },
-    "antigravity-gemini-3.5-flash": {
-        name: "Gemini 3.5 Flash (Antigravity)",
-        limit: { context: 1048576, output: 65536 },
-        modalities: DEFAULT_MODALITIES,
-        variants: {
-            minimal: { thinkingLevel: "minimal" },
-            low: { thinkingLevel: "low" },
-            medium: { thinkingLevel: "medium" },
-            high: { thinkingLevel: "high" },
-        },
-    },
     "antigravity-gemini-3.1-pro": {
         name: "Gemini 3.1 Pro (Antigravity)",
         limit: { context: 1048576, output: 65535 },
@@ -68,4 +57,9 @@ export const OPENCODE_MODEL_DEFINITIONS = {
         },
     },
 };
+/**
+ * List of Antigravity model IDs to whitelist in OpenCode configuration.
+ * Prevents OpenCode from showing 18+ unauthenticated built-in Google models.
+ */
+export const OPENCODE_WHITELIST_MODELS = Object.keys(OPENCODE_MODEL_DEFINITIONS);
 //# sourceMappingURL=models.js.map

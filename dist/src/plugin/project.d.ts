@@ -26,6 +26,10 @@ export declare function loadManagedProject(accessToken: string, projectId?: stri
  */
 export declare function onboardManagedProject(accessToken: string, tierId: string, projectId?: string, attempts?: number, delayMs?: number): Promise<string | undefined>;
 /**
+ * Invalidate cached project context for an account (e.g. after 403 SUBSCRIPTION_REQUIRED).
+ */
+export declare function invalidateProjectContext(auth: OAuthAuthDetails): void;
+/**
  * Resolves an effective project ID for the current auth state, caching results per refresh token.
  */
 export declare function ensureProjectContext(auth: OAuthAuthDetails): Promise<ProjectContextResult>;

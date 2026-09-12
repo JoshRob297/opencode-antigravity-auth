@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.14.0] - 2026-09-12
+
+### Removed
+
+- **Deprecated Gemini 3.5 Flash** - Completely removed `antigravity-gemini-3.5-flash` from model definitions and whitelists, aligning with Google Antigravity backend deprecation.
+
+### Added
+
+- **Automatic Google Model Whitelist Injection** - `updater.ts` now automatically injects a strict `provider.google.whitelist` into `opencode.json` on initialization. This hides 18+ unauthenticated built-in Google models (Gemini Studio/Vertex) on clean installs, showing only usable Antigravity models.
+- **In-Flight 403 `#3501` (`SUBSCRIPTION_REQUIRED`) Auto-Recovery** - Intercepts HTTP 403 `#3501` responses, invalidates stale project contexts, triggers immediate auto-onboarding (`onboardManagedProject`), and persists the assigned project without interrupting the user's session.
+- **Auto-Update Slash Command (`/antigravity-update`)** - Automatically provisions `/antigravity-update` into `~/.config/opencode/command/` for quick in-editor plugin updates.
+
 ## [1.13.0] - 2026-09-12
 
 ### Fixed

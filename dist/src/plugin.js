@@ -4,7 +4,7 @@ import { ANTIGRAVITY_DEFAULT_PROJECT_ID, ANTIGRAVITY_ENDPOINT_FALLBACKS, ANTIGRA
 import { authorizeAntigravity, exchangeAntigravity } from "./antigravity/oauth";
 import { accessTokenExpired, isOAuthAuth, parseRefreshParts, formatRefreshParts } from "./plugin/auth";
 import { promptAddAnotherAccount, promptLoginMode, promptProjectId } from "./plugin/cli";
-import { ensureProjectContext } from "./plugin/project";
+import { ensureProjectContext, invalidateProjectContext, loadManagedProject, onboardManagedProject } from "./plugin/project";
 import { startAntigravityDebugRequest, logAntigravityDebugResponse, logAccountContext, logRateLimitEvent, logRateLimitSnapshot, logResponseBody, logModelFamily, isDebugEnabled, getLogFilePath, initializeDebug, } from "./plugin/debug";
 import { buildThinkingWarmupBody, isGenerativeLanguageRequest, prepareAntigravityRequest, transformAntigravityResponse, } from "./plugin/request";
 import { resolveModelWithTier } from "./plugin/transform/model-resolver";
@@ -1896,6 +1896,46 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                                     accountManager.markToastShown(account.index);
                                                 }
                                                 pushDebug(`verification-required: disabled account ${account.index}`);
+                                                getHealthTracker().recordFailure(account.index);
+                                                lastFailure = createFailureContext(response);
+                                                shouldSwitchAccount = true;
+                                                break;
+                                            }
+                                            if (errorBodyText.includes("3501") || errorBodyText.includes("SUBSCRIPTION_REQUIRED")) {
+                                                pushDebug(`subscription-required (#3501) detected on account ${account.index}, attempting auto-onboard`);
+                                                invalidateProjectContext(authRecord);
+                                                // Try immediate auto-onboarding / companion discovery
+                                                try {
+                                                    if (authRecord.access) {
+                                                        const onboardedId = await onboardManagedProject(authRecord.access, "FREE", undefined, 3, 1000);
+                                                        if (onboardedId) {
+                                                            pushDebug(`auto-onboarded project ${onboardedId} for account ${account.index}`);
+                                                            const parts = parseRefreshParts(authRecord.refresh);
+                                                            authRecord.refresh = formatRefreshParts({
+                                                                refreshToken: parts.refreshToken,
+                                                                projectId: parts.projectId,
+                                                                managedProjectId: onboardedId,
+                                                            });
+                                                            // Persist in accounts storage
+                                                            const existingStorage = await loadAccounts();
+                                                            const targetAccount = existingStorage?.accounts[account.index];
+                                                            if (existingStorage && targetAccount) {
+                                                                targetAccount.managedProjectId = onboardedId;
+                                                                await saveAccounts(existingStorage);
+                                                            }
+                                                            // Retry with new project context
+                                                            continue;
+                                                        }
+                                                    }
+                                                }
+                                                catch (onboardErr) {
+                                                    pushDebug(`auto-onboard failed: ${String(onboardErr)}`);
+                                                }
+                                                const label = account.email || `Account ${account.index + 1}`;
+                                                if (accountManager.shouldShowAccountToast(account.index, 60000)) {
+                                                    await showToast(`⚠ ${label} requires active Gemini Code Assist subscription (#3501). Switching account...`, "warning");
+                                                    accountManager.markToastShown(account.index);
+                                                }
                                                 getHealthTracker().recordFailure(account.index);
                                                 lastFailure = createFailureContext(response);
                                                 shouldSwitchAccount = true;

@@ -6,7 +6,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
-import { OPENCODE_MODEL_DEFINITIONS } from "./models.js";
+import { OPENCODE_MODEL_DEFINITIONS, OPENCODE_WHITELIST_MODELS } from "./models.js";
 // =============================================================================
 // Constants
 // =============================================================================
@@ -15,6 +15,7 @@ const SCHEMA_URL = "https://opencode.ai/config.json";
 const OPENCODE_JSON_FILENAME = "opencode.json";
 const OPENCODE_JSONC_FILENAME = "opencode.jsonc";
 export const ANTIGRAVITY_QUOTA_COMMAND_FILENAME = "antigravity-quota.md";
+export const ANTIGRAVITY_UPDATE_COMMAND_FILENAME = "antigravity-update.md";
 export const ANTIGRAVITY_QUOTA_COMMAND_CONTENT = `---
 description: Consultar estado de cuotas de Antigravity (5h y Semanal)
 ---
@@ -34,8 +35,20 @@ antigravity_quota()
 
 IMPORTANT: Display the tool output EXACTLY as it is returned. Do not summarize, reformat, or modify the output in any way.
 `;
+export const ANTIGRAVITY_UPDATE_COMMAND_CONTENT = `---
+description: Actualizar plugin opencode-antigravity-auth a la última versión
+---
+
+Ejecuta la actualización del plugin de Antigravity en este entorno:
+
+1. Si el plugin está cargado como ruta local (ej. en /root/proyectos/opencode-antigravity-auth):
+   - Ve a ese directorio, haz \`git pull origin main\`, y luego compila con \`npm run build\`.
+   - Muestra la versión actualizada resultante de package.json.
+2. Si está cargado desde GitHub (\`github:JoshRob297/opencode-antigravity-auth\`):
+   - Informa al usuario que reinicie OpenCode para descargar la última versión de GitHub o limpia la caché con rm -rf ~/.cache/opencode/.
+`;
 /**
- * Ensures the /antigravity-quota slash command is installed in OpenCode's command directory.
+ * Ensures the /antigravity-quota and /antigravity-update slash commands are installed in OpenCode's command directory.
  *
  * @param configDir - Optional custom config dir (for testing)
  * @returns Path of the command file created or updated
@@ -43,19 +56,23 @@ IMPORTANT: Display the tool output EXACTLY as it is returned. Do not summarize, 
 export function ensureAntigravityQuotaCommand(configDir) {
     const dir = configDir ?? getOpencodeConfigDir();
     const commandDir = join(dir, "command");
-    const commandPath = join(commandDir, ANTIGRAVITY_QUOTA_COMMAND_FILENAME);
+    const quotaCommandPath = join(commandDir, ANTIGRAVITY_QUOTA_COMMAND_FILENAME);
+    const updateCommandPath = join(commandDir, ANTIGRAVITY_UPDATE_COMMAND_FILENAME);
     try {
         if (!existsSync(commandDir)) {
             mkdirSync(commandDir, { recursive: true });
         }
-        if (!existsSync(commandPath)) {
-            writeFileSync(commandPath, ANTIGRAVITY_QUOTA_COMMAND_CONTENT, "utf-8");
+        if (!existsSync(quotaCommandPath)) {
+            writeFileSync(quotaCommandPath, ANTIGRAVITY_QUOTA_COMMAND_CONTENT, "utf-8");
+        }
+        if (!existsSync(updateCommandPath)) {
+            writeFileSync(updateCommandPath, ANTIGRAVITY_UPDATE_COMMAND_CONTENT, "utf-8");
         }
     }
     catch {
         // Best-effort creation, ignore permission issues
     }
-    return commandPath;
+    return quotaCommandPath;
 }
 function stripJsonCommentsAndTrailingCommas(json) {
     return json
@@ -145,6 +162,8 @@ export async function updateOpencodeConfig(options = {}) {
         }
         // Replace google models with plugin models
         config.provider.google.models = { ...OPENCODE_MODEL_DEFINITIONS };
+        // Whitelist only official Antigravity models to hide 18+ unauthenticated native Google models
+        config.provider.google.whitelist = [...OPENCODE_WHITELIST_MODELS];
         // Automatically ensure /antigravity-quota command is installed
         ensureAntigravityQuotaCommand(getOpencodeConfigDir());
         // Ensure config directory exists

@@ -24,4 +24,9 @@ export interface OpencodeModelDefinition extends ProviderModel {
 }
 export type OpencodeModelDefinitions = Record<string, OpencodeModelDefinition>;
 export declare const OPENCODE_MODEL_DEFINITIONS: OpencodeModelDefinitions;
+/**
+ * List of Antigravity model IDs to whitelist in OpenCode configuration.
+ * Prevents OpenCode from showing 18+ unauthenticated built-in Google models.
+ */
+export declare const OPENCODE_WHITELIST_MODELS: string[];
 //# sourceMappingURL=models.d.ts.map
