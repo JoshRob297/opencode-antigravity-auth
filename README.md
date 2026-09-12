@@ -17,7 +17,7 @@
 
 | Enhancement | What Was Broken Upstream | How This Fork Fixes It |
 |---|---|---|
-| ⚡ **Automatic Slash Command Provisioning** | Slash commands like `/antigravity-quota` required manual file copying into `~/.config/opencode/command/`. | The plugin now automatically creates `antigravity-quota.md` on startup and configuration update. |
+| ⚡ **Automatic Slash Command Provisioning** | Slash commands like `/antigravity-quota` and `/antigravity-update` required manual file copying into `~/.config/opencode/command/`. | The plugin now automatically provisions `antigravity-quota.md` and `antigravity-update.md` on startup and configuration update. |
 | 🆕 **Gemini 3.8 Flash Support** | Backend restricted the newest `gemini-3.8-flash` model to official CLI signatures. | Added `resolveAntigravityGemini38FlashBackendModel` (→ `gemini-3.8-flash-{low,medium,high}`) and extended the CLI User-Agent spoofing regex to `/gemini-3\.[78]-flash/i`, unlocking **Gemini 3.8 Flash (Low/Medium/High)**. |
 | 🛡️ **Dangling Model Turn Sanitization** | Interrupted tools or aborted sessions caused Gemini to reject requests with `400 "Requests ending with a model turn are not supported"`. | Added automatic `sanitizeEndingModelTurn` pipeline for Gemini payloads + force-drop retry recovery (`MODEL_TURN_RECOVERY_NEEDED`). |
 | 🛡️ **Request Normalization & Clean Feedback** | Default filters caused false-positive blocks on coding and technical prompts with verbose legal notices. | Standardized payload configurations for development tasks and added concise single-line notification handling. |
@@ -25,9 +25,9 @@
 | 📊 **Native Dual-Window Quota Tool** | Quota required a separate external plugin or returned flat model lists. | Embedded the official `antigravity_quota` tool directly into the auth plugin with full **5h Window + Weekly Window** tracking and progress bars via `/v1internal:retrieveUserQuotaSummary`. |
 | 🚀 **Gemini 3.7 Flash Support** | Backend returned `404 NOT_FOUND` (rewritten as *"enable preview access"* or `429`) when invoking `gemini-3.7-flash`. | Discovered that Google restricts 3.7 Flash strictly to official CLI signatures. The plugin now dynamically presents the official Antigravity CLI client signature (`antigravity/cli/...`), unlocking full native access to **Gemini 3.7 Flash (Low/Medium/High)**. |
 | ⚡ **Fast Multi-Account Failover** | On quota exhaustion the plugin would spin waiting on the same account (60s+ backoffs). | Default scheduling mode changed to `balance` with immediate `QUOTA_EXHAUSTED` failover (500ms) to the next account with quota. |
-| 🛠️ **IAM 403 Permission Denied Fix** | Requests failed with `403 IAM_PERMISSION_DENIED` on `projects/rising-fact-p41fc` for instances requiring `cloudaicompanion.instances.completeTask`. | Fixed two core bugs in `project.ts`: corrected `metadata.platform` from invalid `MACOS/WINDOWS` enums to `PLATFORM_UNSPECIFIED` and updated the discovery User-Agent, allowing automatic resolution and persistence of the account's real `managedProjectId`. |
-| ⚡ **Gemini 3.6 Flash & 3.5 Flash** | Native multi-tier backend model resolution (`gemini-3.6-flash-{low,medium,high}` and `gemini-3.5-flash-{low,high}`). | Multi-tier thinking resolution support built into `model-resolver.ts`. |
-| 🧹 **Clean CI & Community Standards** | Upstream had broken npm publishing actions and no rulesets. | Replaced with clean, automated Node.js CI with **1,055 tests passing**, security policies, and Dependabot groups. |
+| 🛠️ **IAM 403 / #3501 Auto-Recovery** | Requests failed with `403 IAM_PERMISSION_DENIED` or `SUBSCRIPTION_REQUIRED` (#3501) on new/unprovisioned accounts. | Automatic companion discovery + instant in-flight `onboardManagedProject` auto-recovery. Corrected `metadata.platform` to `PLATFORM_UNSPECIFIED`. |
+| ⚡ **Gemini 3.6 Flash & Sunset of 3.5** | Native multi-tier backend model resolution (`gemini-3.6-flash-{low,medium,high}`). Deprecated 3.5 Flash removed. | Multi-tier thinking resolution support built into `model-resolver.ts`; deprecated 3.5 cleanly retired. |
+| 🧹 **Clean CI & Community Standards** | Upstream had broken npm publishing actions and no rulesets. | Replaced with clean, automated Node.js CI with **1,056 tests passing**, security policies, and Dependabot groups. |
 
 ---
 
@@ -123,7 +123,6 @@ Then in `~/.config/opencode/opencode.json`:
 | `antigravity-gemini-3.7-flash` 🚀 | `low`, `medium`, `high` | **Gemini 3.7 Flash** with dynamic thinking *(New in v1.7.0)* |
 | `antigravity-gemini-3.6-flash` ⚡ | `low`, `medium`, `high` | **Gemini 3.6 Flash** with thinking tiers |
 | `antigravity-gemini-3.1-pro` 🧠 | `low`, `high` | **Gemini 3.1 Pro** with 1M token context |
-| `antigravity-gemini-3.5-flash` | `minimal`, `low`, `medium`, `high` | Gemini 3.5 Flash |
 | `antigravity-claude-sonnet-4-6` | — | Claude Sonnet 4.6 |
 | `antigravity-claude-opus-4-6-thinking` | `low`, `medium`, `max` | Claude Opus 4.6 with extended thinking |
 
@@ -166,17 +165,6 @@ Add this to your `~/.config/opencode/opencode.json`:
           "limit": { "context": 1048576, "output": 65536 },
           "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] },
           "variants": {
-            "low": { "thinkingLevel": "low" },
-            "medium": { "thinkingLevel": "medium" },
-            "high": { "thinkingLevel": "high" }
-          }
-        },
-        "antigravity-gemini-3.5-flash": {
-          "name": "Gemini 3.5 Flash (Antigravity)",
-          "limit": { "context": 1048576, "output": 65536 },
-          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] },
-          "variants": {
-            "minimal": { "thinkingLevel": "minimal" },
             "low": { "thinkingLevel": "low" },
             "medium": { "thinkingLevel": "medium" },
             "high": { "thinkingLevel": "high" }
