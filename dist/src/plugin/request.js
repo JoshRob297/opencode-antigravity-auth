@@ -1355,7 +1355,7 @@ export function buildThinkingWarmupBody(bodyText, isClaudeThinking) {
  * For streaming SSE responses, uses TransformStream for true real-time incremental streaming.
  * Thinking/reasoning tokens are transformed and forwarded immediately as they arrive.
  */
-export async function transformAntigravityResponse(response, streaming, debugContext, requestedModel, projectId, endpoint, effectiveModel, sessionId, toolDebugMissing, toolDebugSummary, toolDebugPayload, debugLines) {
+export async function transformAntigravityResponse(response, streaming, debugContext, requestedModel, projectId, endpoint, effectiveModel, sessionId, toolDebugMissing, toolDebugSummary, toolDebugPayload, debugLines, onSafetyRatings) {
     const contentType = response.headers.get("content-type") ?? "";
     const isJsonResponse = contentType.includes("application/json");
     const isEventStreamResponse = contentType.includes("text/event-stream");
@@ -1386,6 +1386,7 @@ export async function transformAntigravityResponse(response, streaming, debugCon
         const streamingTransformer = createStreamingTransformer(defaultSignatureStore, {
             onCacheSignature: cacheSignature,
             onInjectDebug: injectDebugThinking,
+            onSafetyRatings,
             // onInjectSyntheticThinking removed - keep_thinking now uses debugText path
             transformThinkingParts,
         }, {

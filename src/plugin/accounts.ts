@@ -168,6 +168,8 @@ export interface ManagedAccount {
   verificationRequiredAt?: number;
   verificationRequiredReason?: string;
   verificationUrl?: string;
+  /** Counter of consecutive high safety risk evaluations (Account Shield) */
+  consecutiveHighRiskTriggers?: number;
 }
 
 function nowMs(): number {
@@ -767,6 +769,36 @@ export class AccountManager {
       return false;
     }
     return true;
+  }
+
+  recordSafetyRiskTrigger(account: ManagedAccount): number {
+    account.consecutiveHighRiskTriggers = (account.consecutiveHighRiskTriggers ?? 0) + 1;
+    return account.consecutiveHighRiskTriggers;
+  }
+
+  resetSafetyRiskTrigger(account: ManagedAccount): void {
+    account.consecutiveHighRiskTriggers = 0;
+  }
+
+  advanceToNextAccount(family: ModelFamily, model?: string | null): ManagedAccount | null {
+    const current = this.getCurrentAccountForFamily(family);
+    const available = this.accounts.filter((a) => {
+      clearExpiredRateLimits(a);
+      return a.enabled !== false && 
+             !isRateLimitedForHeaderStyle(a, family, "antigravity", model) && 
+             !this.isAccountCoolingDown(a);
+    });
+
+    if (available.length <= 1) {
+      return available[0] ?? null;
+    }
+
+    const nextIndex = current ? (available.findIndex(a => a.index === current.index) + 1) % available.length : 0;
+    const next = available[nextIndex] ?? null;
+    if (next) {
+      this.currentAccountIndexByFamily[family] = next.index;
+    }
+    return next;
   }
 
   clearAccountCooldown(account: ManagedAccount): void {

@@ -574,6 +574,31 @@ export class AccountManager {
         }
         return true;
     }
+    recordSafetyRiskTrigger(account) {
+        account.consecutiveHighRiskTriggers = (account.consecutiveHighRiskTriggers ?? 0) + 1;
+        return account.consecutiveHighRiskTriggers;
+    }
+    resetSafetyRiskTrigger(account) {
+        account.consecutiveHighRiskTriggers = 0;
+    }
+    advanceToNextAccount(family, model) {
+        const current = this.getCurrentAccountForFamily(family);
+        const available = this.accounts.filter((a) => {
+            clearExpiredRateLimits(a);
+            return a.enabled !== false &&
+                !isRateLimitedForHeaderStyle(a, family, "antigravity", model) &&
+                !this.isAccountCoolingDown(a);
+        });
+        if (available.length <= 1) {
+            return available[0] ?? null;
+        }
+        const nextIndex = current ? (available.findIndex(a => a.index === current.index) + 1) % available.length : 0;
+        const next = available[nextIndex] ?? null;
+        if (next) {
+            this.currentAccountIndexByFamily[family] = next.index;
+        }
+        return next;
+    }
     clearAccountCooldown(account) {
         delete account.coolingDownUntil;
         delete account.cooldownReason;

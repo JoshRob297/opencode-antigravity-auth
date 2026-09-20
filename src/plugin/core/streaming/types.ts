@@ -10,9 +10,16 @@ export interface SignatureStore {
   delete(sessionKey: string): void;
 }
 
+export interface SafetyRating {
+  category: string;
+  probability: "NEGLIGIBLE" | "LOW" | "MEDIUM" | "HIGH" | string;
+  blocked?: boolean;
+}
+
 export interface StreamingCallbacks {
   onCacheSignature?: (sessionKey: string, text: string, signature: string) => void;
   onInjectDebug?: (response: unknown, debugText: string) => unknown;
+  onSafetyRatings?: (ratings: SafetyRating[]) => void;
   // Note: onInjectSyntheticThinking removed - keep_thinking now unified with debug via debugText
   transformThinkingParts?: (parts: unknown) => unknown;
 }

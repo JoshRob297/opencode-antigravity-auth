@@ -1733,6 +1733,7 @@ export async function transformAntigravityResponse(
   toolDebugSummary?: string,
   toolDebugPayload?: string,
   debugLines?: string[],
+  onSafetyRatings?: (ratings: import("./core/streaming/types").SafetyRating[]) => void,
 ): Promise<Response> {
   const contentType = response.headers.get("content-type") ?? "";
   const isJsonResponse = contentType.includes("application/json");
@@ -1772,6 +1773,7 @@ export async function transformAntigravityResponse(
       {
         onCacheSignature: cacheSignature,
         onInjectDebug: injectDebugThinking,
+        onSafetyRatings,
         // onInjectSyntheticThinking removed - keep_thinking now uses debugText path
         transformThinkingParts,
       },

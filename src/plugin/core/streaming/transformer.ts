@@ -1,4 +1,5 @@
 import type {
+  SafetyRating,
   SignatureStore,
   StreamingCallbacks,
   StreamingOptions,
@@ -268,6 +269,20 @@ export function transformSseLine(
 
       // Clean guardrail / safety filter message
       response = sanitizeGuardrailMessage(response);
+
+      // Extract and notify safety ratings if present
+      if (callbacks.onSafetyRatings && parsed.response && typeof parsed.response === "object") {
+        const respObj = parsed.response as Record<string, unknown>;
+        if (Array.isArray(respObj.candidates)) {
+          for (const candidate of respObj.candidates) {
+            const cand = candidate as Record<string, unknown> | null;
+            if (cand && Array.isArray(cand.safetyRatings) && cand.safetyRatings.length > 0) {
+              callbacks.onSafetyRatings(cand.safetyRatings as any);
+              break;
+            }
+          }
+        }
+      }
 
       const transformed = callbacks.transformThinkingParts
         ? callbacks.transformThinkingParts(response)

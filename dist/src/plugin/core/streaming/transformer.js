@@ -203,6 +203,19 @@ export function transformSseLine(line, signatureStore, thoughtBuffer, sentThinki
             }
             // Clean guardrail / safety filter message
             response = sanitizeGuardrailMessage(response);
+            // Extract and notify safety ratings if present
+            if (callbacks.onSafetyRatings && parsed.response && typeof parsed.response === "object") {
+                const respObj = parsed.response;
+                if (Array.isArray(respObj.candidates)) {
+                    for (const candidate of respObj.candidates) {
+                        const cand = candidate;
+                        if (cand && Array.isArray(cand.safetyRatings) && cand.safetyRatings.length > 0) {
+                            callbacks.onSafetyRatings(cand.safetyRatings);
+                            break;
+                        }
+                    }
+                }
+            }
             const transformed = callbacks.transformThinkingParts
                 ? callbacks.transformThinkingParts(response)
                 : response;

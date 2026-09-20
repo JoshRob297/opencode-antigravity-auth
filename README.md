@@ -8,8 +8,9 @@
 
 ---
 
-### 🌟 What's New & Changed in this Fork (v1.17.1)
+### 🌟 What's New & Changed in this Fork (v1.18.0)
 
+- 🛡️ **OPSEC Safety Shield & Telemetry (`safety_shield`)**: Intercepts Google Gemini's `safetyRatings` in real-time. Emits UI warnings on high-risk classifications and automatically executes **preventive account rotation** (`Account Shield`) after consecutive triggers to disperse suspicious telemetry across your account pool.
 - 🔑 **Strip `x-goog-api-key` Header (Fix 400 `API_KEY_INVALID`)**: OpenCode automatically injects an AI Studio key into `x-goog-api-key` when intercepting `generativelanguage.googleapis.com` calls. Antigravity backend prioritized this header over `Bearer` auth, returning `400 API_KEY_INVALID`. The header is now stripped alongside `x-api-key`.
 - 🚫 **Legacy `gemini-cli` Mode Removed (Definitive 403 `#3501` Fix)**: Completely stripped legacy VS Code headers and `-preview` model fallbacks. All requests route cleanly through official Antigravity CLI signatures (`aidev_client`), eliminating false license errors across all accounts.
 - 🛡️ **Configurable Safety Settings (`safety_level`)**: Uses Google's native moderation baseline by default (`medium` / `BLOCK_MEDIUM_AND_ABOVE`) to protect accounts, with configurable options for `high` and `none` (with explicit disclaimer).
@@ -245,6 +246,28 @@ Available levels:
 - `"none"` — Disables external safety classifiers (`BLOCK_NONE`) and bypasses prompt injection filters (`HARM_CATEGORY_JAILBREAK`).
 
 > ⚠️ **DISCLAIMER:** Setting `safety_level` to `"none"` is strictly for authorized security research and advanced workflows. Using `"none"` is done solely at your own discretion and risk. We accept no responsibility or liability for account reviews, suspensions, or bans enacted by Google.
+
+### OPSEC Safety Shield (`safety_shield`)
+
+When operating with `safety_level: "none"`, Google's backend still evaluates your queries and attaches `safetyRatings` probabilities (`NEGLIGIBLE`, `LOW`, `MEDIUM`, `HIGH`) to responses.
+
+The plugin provides an active defense engine configured in `~/.config/opencode/antigravity.json`:
+
+```json
+{
+  "safety_level": "none",
+  "safety_shield": {
+    "enabled": true,
+    "log_ratings": true,
+    "show_toast": true,
+    "auto_rotate_threshold": 2
+  }
+}
+```
+
+- **`log_ratings`**: Emits detailed warnings in logs whenever Google assigns `HIGH` harm or `MEDIUM` jailbreak probability to an answer.
+- **`show_toast`**: Displays non-blocking OPSEC warnings in OpenCode's interface (`[OPSEC Shield] Google flagged response: ...`).
+- **`auto_rotate_threshold`**: Number of consecutive high-risk responses on a single account before triggering an automatic, preventive rotation to the next Google account (`Account Shield`). This prevents risk clustering on individual personal accounts. Set to `0` to disable auto-rotation.
 
 ### Concise Notification Handling
 If a query triggers a backend moderation notice, the plugin intercepts the verbose response (which contains lengthy legal disclaimers, policy links, and bug report URLs) and replaces it with a clean, actionable notice:

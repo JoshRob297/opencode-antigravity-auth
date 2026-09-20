@@ -89,6 +89,12 @@ export declare const AntigravityConfigSchema: z.ZodObject<{
         high: "high";
         none: "none";
     }>>;
+    safety_shield: z.ZodDefault<z.ZodObject<{
+        enabled: z.ZodDefault<z.ZodBoolean>;
+        log_ratings: z.ZodDefault<z.ZodBoolean>;
+        show_toast: z.ZodDefault<z.ZodBoolean>;
+        auto_rotate_threshold: z.ZodDefault<z.ZodNumber>;
+    }, z.core.$strip>>;
     proactive_token_refresh: z.ZodDefault<z.ZodBoolean>;
     proactive_refresh_buffer_seconds: z.ZodDefault<z.ZodNumber>;
     proactive_refresh_check_interval_seconds: z.ZodDefault<z.ZodNumber>;

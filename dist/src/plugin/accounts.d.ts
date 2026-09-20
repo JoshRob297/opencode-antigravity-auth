@@ -43,6 +43,8 @@ export interface ManagedAccount {
     verificationRequiredAt?: number;
     verificationRequiredReason?: string;
     verificationUrl?: string;
+    /** Counter of consecutive high safety risk evaluations (Account Shield) */
+    consecutiveHighRiskTriggers?: number;
 }
 /**
  * Resolve the quota group for soft quota checks.
@@ -107,6 +109,9 @@ export declare class AccountManager {
     shouldTryOptimisticReset(family: ModelFamily, model?: string | null): boolean;
     markAccountCoolingDown(account: ManagedAccount, cooldownMs: number, reason: CooldownReason): void;
     isAccountCoolingDown(account: ManagedAccount): boolean;
+    recordSafetyRiskTrigger(account: ManagedAccount): number;
+    resetSafetyRiskTrigger(account: ManagedAccount): void;
+    advanceToNextAccount(family: ModelFamily, model?: string | null): ManagedAccount | null;
     clearAccountCooldown(account: ManagedAccount): void;
     getAccountCooldownReason(account: ManagedAccount): CooldownReason | undefined;
     markTouchedForQuota(account: ManagedAccount, quotaKey: string): void;

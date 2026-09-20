@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.18.0] - 2026-09-14
+
+### Added
+
+- **OPSEC Safety Shield & Telemetry (`safety_shield`)** - Real-time interceptor and mitigation engine for Google Gemini `safetyRatings`:
+  - **Live Extraction:** Stream transformer captures per-chunk `safetyRatings` probabilities (`NEGLIGIBLE`, `LOW`, `MEDIUM`, `HIGH`) across all harm categories.
+  - **OPSEC Logging & UI Toasts:** Flags suspicious queries (`HIGH` risk or `MEDIUM` jailbreak) directly in logs and displays clean notifications in OpenCode TUI.
+  - **Preventive Multi-Account Rotation (Account Shield):** Automatically tracks consecutive high-risk responses per account (`consecutiveHighRiskTriggers`). When reaching the configured threshold (default `2`), the plugin immediately rotates to the next available Google account (`advanceToNextAccount`), preventing abuse flag accumulation on individual personal accounts.
+
 ## [1.17.1] - 2026-09-12
 
 ### Fixed

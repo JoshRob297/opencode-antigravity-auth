@@ -8,9 +8,15 @@ export interface SignatureStore {
     has(sessionKey: string): boolean;
     delete(sessionKey: string): void;
 }
+export interface SafetyRating {
+    category: string;
+    probability: "NEGLIGIBLE" | "LOW" | "MEDIUM" | "HIGH" | string;
+    blocked?: boolean;
+}
 export interface StreamingCallbacks {
     onCacheSignature?: (sessionKey: string, text: string, signature: string) => void;
     onInjectDebug?: (response: unknown, debugText: string) => unknown;
+    onSafetyRatings?: (ratings: SafetyRating[]) => void;
     transformThinkingParts?: (parts: unknown) => unknown;
 }
 export interface StreamingOptions {

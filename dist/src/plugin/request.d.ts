@@ -75,7 +75,7 @@ export declare function buildThinkingWarmupBody(bodyText: string | undefined, is
  * For streaming SSE responses, uses TransformStream for true real-time incremental streaming.
  * Thinking/reasoning tokens are transformed and forwarded immediately as they arrive.
  */
-export declare function transformAntigravityResponse(response: Response, streaming: boolean, debugContext?: AntigravityDebugContext | null, requestedModel?: string, projectId?: string, endpoint?: string, effectiveModel?: string, sessionId?: string, toolDebugMissing?: number, toolDebugSummary?: string, toolDebugPayload?: string, debugLines?: string[]): Promise<Response>;
+export declare function transformAntigravityResponse(response: Response, streaming: boolean, debugContext?: AntigravityDebugContext | null, requestedModel?: string, projectId?: string, endpoint?: string, effectiveModel?: string, sessionId?: string, toolDebugMissing?: number, toolDebugSummary?: string, toolDebugPayload?: string, debugLines?: string[], onSafetyRatings?: (ratings: import("./core/streaming/types").SafetyRating[]) => void): Promise<Response>;
 export declare const __testExports: {
     buildSignatureSessionKey: typeof buildSignatureSessionKey;
     hashConversationSeed: typeof hashConversationSeed;

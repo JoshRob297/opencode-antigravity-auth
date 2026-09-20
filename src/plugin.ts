@@ -2423,6 +2423,42 @@ export const createAntigravityPlugin = (providerId: string) => async (
                   emptyResponseAttempts.delete(emptyAttemptKeyClean);
                 }
                 
+                const handleSafetyRatings = async (ratings: import("./plugin/core/streaming/types").SafetyRating[]) => {
+                  if (!config.safety_shield?.enabled) return;
+
+                  const highRisk = ratings.filter(
+                    (r) => r.probability === "HIGH" || (r.category.includes("JAILBREAK") && r.probability === "MEDIUM")
+                  );
+
+                  if (highRisk.length === 0) {
+                    accountManager.resetSafetyRiskTrigger(account);
+                    return;
+                  }
+
+                  const riskDetails = highRisk.map((r) => `${r.category.replace("HARM_CATEGORY_", "")} (${r.probability})`).join(", ");
+
+                  if (config.safety_shield.log_ratings) {
+                    log.warn(`[Safety Shield] High risk evaluated by Google on ${account.email || `Account ${account.index + 1}`}: ${riskDetails}`);
+                  }
+
+                  if (config.safety_shield.show_toast) {
+                    await showToast(`[OPSEC Shield] Google flagged response: ${riskDetails}`, "warning");
+                  }
+
+                  const threshold = config.safety_shield.auto_rotate_threshold ?? 2;
+                  if (threshold > 0) {
+                    const count = accountManager.recordSafetyRiskTrigger(account);
+                    if (count >= threshold) {
+                      accountManager.resetSafetyRiskTrigger(account);
+                      const rotated = accountManager.advanceToNextAccount(family, model);
+                      if (rotated && rotated.index !== account.index) {
+                        log.warn(`[Safety Shield] Consecutive high risk threshold (${threshold}) reached on ${account.email || `Account ${account.index + 1}`}. Preventive switch to ${rotated.email || `Account ${rotated.index + 1}`}`);
+                        await showToast(`[Account Shield] Preventive rotation to ${rotated.email || `Account ${rotated.index + 1}`} (OPSEC Protection)`, "info");
+                      }
+                    }
+                  }
+                };
+
                 const transformedResponse = await transformAntigravityResponse(
                   response,
                   prepared.streaming,
@@ -2436,6 +2472,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
                   prepared.toolDebugSummary,
                   prepared.toolDebugPayload,
                   debugLines,
+                  handleSafetyRatings,
                 );
 
                 // Check for context errors and show appropriate toast

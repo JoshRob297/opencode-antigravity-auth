@@ -198,6 +198,21 @@ export const AntigravityConfigSchema = z.object({
      * @default "medium"
      */
     safety_level: z.enum(["medium", "high", "none"]).default("medium"),
+    /**
+     * Safety Shield & Telemetry configuration:
+     * Monitors Google safetyRatings (probability: HIGH / MEDIUM) in responses.
+     */
+    safety_shield: z.object({
+        enabled: z.boolean().default(true),
+        log_ratings: z.boolean().default(true),
+        show_toast: z.boolean().default(true),
+        auto_rotate_threshold: z.number().min(0).max(10).default(2), // 0 disables auto-rotate
+    }).default({
+        enabled: true,
+        log_ratings: true,
+        show_toast: true,
+        auto_rotate_threshold: 2,
+    }),
     // =========================================================================
     // Proactive Token Refresh (ported from LLM-API-Key-Proxy)
     // =========================================================================
@@ -414,6 +429,12 @@ export const DEFAULT_CONFIG = {
     claude_tool_hardening: true,
     claude_prompt_auto_caching: false,
     safety_level: "medium",
+    safety_shield: {
+        enabled: true,
+        log_ratings: true,
+        show_toast: true,
+        auto_rotate_threshold: 2,
+    },
     proactive_token_refresh: true,
     proactive_refresh_buffer_seconds: 1800,
     proactive_refresh_check_interval_seconds: 300,
