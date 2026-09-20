@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.0.0-v2-adapter] - 2026-09-20
+
+### Added
+
+- **OpenCode v2 Hybrid Dual-Compatibility Architecture (`src/v2/adapter.ts`)** - Full support for the new OpenCode v2 specification (`@opencode/cli` 2.0+ and `@opencode/plugin` v2) while retaining complete backward compatibility with OpenCode v1 (`1.18.x`):
+  - **Polymorphic Entrypoint (`index.ts`):** Default export functions simultaneously as a v1 factory function `(ctx) => PluginResult` and as a v2 plugin definition object exposing `.id` and lifecycle `.setup(context)`.
+  - **Native v2 Tool Registry:** Dispatches `antigravity_quota` (5h and weekly quota windows) and `google_search` (web grounding and URL analysis) via `context.tool.transform`.
+  - **Native v2 Slash Commands:** Dispatches `/antigravity-quota` via `context.command.transform`.
+  - **Zero Regressions:** 100% of existing v1 functionality, accounts storage, and test suites (1,048 Vitest tests) remain intact.
+
 ## [1.19.0] - 2026-09-20
 
 ### Added

@@ -8,8 +8,10 @@
 
 ---
 
-### What's New & Changed in this Fork (v1.19.0)
+### What's New & Changed in this Fork (v2.0.0-v2-adapter)
 
+- **OpenCode v2 Dual-Compatibility Architecture**: Fully compatible with both OpenCode v1 (`opencode-ai` 1.18.x) and OpenCode v2 (`@opencode/cli` 2.0+). Uses a polymorphic entrypoint that exports a standard v1 callable factory while exposing native v2 `.id` and lifecycle `.setup(context)` methods.
+- **Native v2 Tool & Command Registries**: Dispatches `antigravity_quota`, `google_search`, and `/antigravity-quota` slash command natively via OpenCode v2's domain transforms (`context.tool.transform` and `context.command.transform`).
 - **Strict Tool Schema Sanitization (Fix HTTP 400 `property is not defined`)**: Cloud Code API backed by Protobuf rejects tool calls when schema `required` arrays contain properties not declared in `properties`. The normalizer recursively cleans parameter schemas, prunes orphan required keys, and enforces validation on pre-packaged `functionDeclarations`.
 - **Model Addition: `antigravity-gpt-oss-120b-medium`**: Integrated Antigravity's native 120B open-source model into `OPENCODE_MODEL_DEFINITIONS` with 131k context window and multi-account routing support.
 - **Official Antigravity CLI v1.2.7 Signature Parity**: Synchronized client signature headers and User-Agent to `antigravity/cli/1.2.7 (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)`, matching the latest Google Antigravity binary release.
@@ -51,6 +53,32 @@ Enable OpenCode to authenticate against **Antigravity** (Google's IDE) via OAuth
 - **Google Search grounding** — enable web search for Gemini models (auto or always-on)
 - **Auto-recovery** — handles session errors and tool failures automatically
 - **Plugin compatible** — works alongside other OpenCode plugins (oh-my-opencode, dcp, etc.)
+- **Dual-Version Support** — native compatibility with both OpenCode v1 (`opencode-ai`) and OpenCode v2 (`@opencode/cli`)
+
+---
+
+## OpenCode v1 & v2 Architecture Compatibility
+
+This plugin implements a polymorphic dual-compatibility entrypoint in `index.ts`:
+
+- **OpenCode v1 (1.18.x / `opencode-ai`):**
+  Loads as a callable factory function:
+  ```typescript
+  export default async function ({ client, directory }: PluginContext): Promise<PluginResult>
+  ```
+  Returns `{ auth, event, tool }` hooks with full multi-account rotation and header interception.
+
+- **OpenCode v2 (2.0.x / `@opencode/cli`):**
+  Loads as a native v2 plugin definition object:
+  ```typescript
+  export default {
+    id: "opencode-antigravity-auth",
+    setup: async (context: V2Context) => cleanup
+  }
+  ```
+  Registers native tools (`context.tool.transform`) and commands (`context.command.transform`) while sharing the unified account pool and config.
+
+No configuration changes are required when transitioning between OpenCode v1 and v2.
 
 ---
 
