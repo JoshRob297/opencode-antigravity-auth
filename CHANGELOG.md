@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.19.0] - 2026-09-20
+
+### Added
+
+- **Model Addition: `antigravity-gpt-oss-120b-medium`** - Integrated Antigravity's native 120B open-source model into `OPENCODE_MODEL_DEFINITIONS` with 131k context window and full multi-account routing support.
+- **Official Antigravity CLI v1.2.7 Signature Parity** - Synchronized client signature headers and User-Agent to `antigravity/cli/1.2.7 (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)`, matching the latest Google Antigravity binary release.
+
+### Fixed
+
+- **Strict Tool Schema Sanitization (Fix HTTP 400 `property is not defined`)** - Cloud Code API backed by Protobuf rejects tool calls when schema `required` arrays contain properties not declared in `properties`. Fixed `toGeminiSchema` to purge orphan required elements, omit empty required arrays, and enforce full schema sanitization on pre-wrapped `functionDeclarations` tools.
+
 ## [1.18.0] - 2026-09-14
 
 ### Added

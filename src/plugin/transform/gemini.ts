@@ -105,10 +105,8 @@ export function toGeminiSchema(schema: unknown): unknown {
           result[key] = validRequired;
         }
         // If no valid required properties, omit the required field entirely
-      } else {
-        // If there are no properties, keep required as-is (might be a schema without properties)
-        result[key] = value;
       }
+      // If there are no properties at all, omit required entirely to prevent API rejection
     } else {
       result[key] = value;
     }
@@ -503,10 +501,11 @@ export function wrapToolsAsFunctionDeclarations(payload: RequestPayload): WrapTo
     if (tool.functionDeclarations) {
       if (Array.isArray(tool.functionDeclarations)) {
         for (const decl of tool.functionDeclarations as Array<Record<string, unknown>>) {
+          const rawParams = (decl.parameters as Record<string, unknown>) || { type: "OBJECT", properties: {} };
           functionDeclarations.push({
             name: String(decl.name || `tool-${functionDeclarations.length}`),
             description: String(decl.description || ""),
-            parameters: (decl.parameters as Record<string, unknown>) || { type: "OBJECT", properties: {} },
+            parameters: (toGeminiSchema(rawParams) as Record<string, unknown>) || { type: "OBJECT", properties: {} },
           });
         }
       }
@@ -545,7 +544,7 @@ export function wrapToolsAsFunctionDeclarations(payload: RequestPayload): WrapTo
     functionDeclarations.push({
       name,
       description,
-      parameters: schema,
+      parameters: (toGeminiSchema(schema) as Record<string, unknown>) || { type: "OBJECT", properties: {} },
     });
   }
 

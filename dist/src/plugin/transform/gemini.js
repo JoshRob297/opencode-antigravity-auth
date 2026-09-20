@@ -102,10 +102,7 @@ export function toGeminiSchema(schema) {
                 }
                 // If no valid required properties, omit the required field entirely
             }
-            else {
-                // If there are no properties, keep required as-is (might be a schema without properties)
-                result[key] = value;
-            }
+            // If there are no properties at all, omit required entirely to prevent API rejection
         }
         else {
             result[key] = value;
@@ -387,10 +384,11 @@ export function wrapToolsAsFunctionDeclarations(payload) {
         if (tool.functionDeclarations) {
             if (Array.isArray(tool.functionDeclarations)) {
                 for (const decl of tool.functionDeclarations) {
+                    const rawParams = decl.parameters || { type: "OBJECT", properties: {} };
                     functionDeclarations.push({
                         name: String(decl.name || `tool-${functionDeclarations.length}`),
                         description: String(decl.description || ""),
-                        parameters: decl.parameters || { type: "OBJECT", properties: {} },
+                        parameters: toGeminiSchema(rawParams) || { type: "OBJECT", properties: {} },
                     });
                 }
             }
@@ -418,7 +416,7 @@ export function wrapToolsAsFunctionDeclarations(payload) {
         functionDeclarations.push({
             name,
             description,
-            parameters: schema,
+            parameters: toGeminiSchema(schema) || { type: "OBJECT", properties: {} },
         });
     }
     const finalTools = [];

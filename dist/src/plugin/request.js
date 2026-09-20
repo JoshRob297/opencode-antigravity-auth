@@ -1285,10 +1285,10 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
     // Gemini 3.7/3.8 Flash are only served to the official Antigravity CLI user agent.
     // With the generic `antigravity/<ver> <platform>/<arch>` UA the backend
     // returns 404 NOT_FOUND (rewritten as "enable preview features").
-    // Verified with agy v1.1.12: UA `antigravity/cli/<ver> (aidev_client; ...)`
+    // Verified with agy v1.2.7: UA `antigravity/cli/<ver> (aidev_client; ...)`
     // returns 200 with modelVersion gemini-3.7-flash / gemini-3.8-flash for low/medium/high.
     if (/gemini-3\.[78]-flash/i.test(effectiveModel)) {
-        userAgent = "antigravity/cli/1.1.12 (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)";
+        userAgent = "antigravity/cli/1.2.7 (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)";
     }
     headers.set("User-Agent", userAgent);
     return {

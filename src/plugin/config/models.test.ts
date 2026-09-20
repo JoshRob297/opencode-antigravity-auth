@@ -21,6 +21,7 @@ describe("OPENCODE_MODEL_DEFINITIONS", () => {
       "antigravity-gemini-3.6-flash",
       "antigravity-gemini-3.7-flash",
       "antigravity-gemini-3.8-flash",
+      "antigravity-gpt-oss-120b-medium",
     ]);
   });
 

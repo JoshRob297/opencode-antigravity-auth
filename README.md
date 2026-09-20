@@ -8,9 +8,12 @@
 
 ---
 
-### 🌟 What's New & Changed in this Fork (v1.18.0)
+### What's New & Changed in this Fork (v1.19.0)
 
-- 🛡️ **OPSEC Safety Shield & Telemetry (`safety_shield`)**: Intercepts Google Gemini's `safetyRatings` in real-time. Emits UI warnings on high-risk classifications and automatically executes **preventive account rotation** (`Account Shield`) after consecutive triggers to disperse suspicious telemetry across your account pool.
+- **Strict Tool Schema Sanitization (Fix HTTP 400 `property is not defined`)**: Cloud Code API backed by Protobuf rejects tool calls when schema `required` arrays contain properties not declared in `properties`. The normalizer recursively cleans parameter schemas, prunes orphan required keys, and enforces validation on pre-packaged `functionDeclarations`.
+- **Model Addition: `antigravity-gpt-oss-120b-medium`**: Integrated Antigravity's native 120B open-source model into `OPENCODE_MODEL_DEFINITIONS` with 131k context window and multi-account routing support.
+- **Official Antigravity CLI v1.2.7 Signature Parity**: Synchronized client signature headers and User-Agent to `antigravity/cli/1.2.7 (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)`, matching the latest Google Antigravity binary release.
+- **OPSEC Safety Shield & Telemetry (`safety_shield`)**: Intercepts Google Gemini's `safetyRatings` in real-time. Emits UI warnings on high-risk classifications and automatically executes **preventive account rotation** (`Account Shield`) after consecutive triggers to disperse suspicious telemetry across your account pool.
 - 🔑 **Strip `x-goog-api-key` Header (Fix 400 `API_KEY_INVALID`)**: OpenCode automatically injects an AI Studio key into `x-goog-api-key` when intercepting `generativelanguage.googleapis.com` calls. Antigravity backend prioritized this header over `Bearer` auth, returning `400 API_KEY_INVALID`. The header is now stripped alongside `x-api-key`.
 - 🚫 **Legacy `gemini-cli` Mode Removed (Definitive 403 `#3501` Fix)**: Completely stripped legacy VS Code headers and `-preview` model fallbacks. All requests route cleanly through official Antigravity CLI signatures (`aidev_client`), eliminating false license errors across all accounts.
 - 🛡️ **Configurable Safety Settings (`safety_level`)**: Uses Google's native moderation baseline by default (`medium` / `BLOCK_MEDIUM_AND_ABOVE`) to protect accounts, with configurable options for `high` and `none` (with explicit disclaimer).
@@ -130,6 +133,7 @@ Then in `~/.config/opencode/opencode.json`:
 | `antigravity-gemini-3.1-pro` 🧠 | `low`, `high` | **Gemini 3.1 Pro** with 1M token context |
 | `antigravity-claude-sonnet-4-6` | — | Claude Sonnet 4.6 |
 | `antigravity-claude-opus-4-6-thinking` | `low`, `medium`, `max` | Claude Opus 4.6 with extended thinking |
+| `antigravity-gpt-oss-120b-medium` | — | GPT-OSS 120B open-source model *(New in v1.19.0)* |
 
 ---
 
@@ -198,6 +202,11 @@ Add this to your `~/.config/opencode/opencode.json`:
             "medium": { "thinkingConfig": { "thinkingBudget": 16384 } },
             "max": { "thinkingConfig": { "thinkingBudget": 32768 } }
           }
+        },
+        "antigravity-gpt-oss-120b-medium": {
+          "name": "GPT-OSS 120B (Antigravity)",
+          "limit": { "context": 131072, "output": 8192 },
+          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] }
         }
       }
     }

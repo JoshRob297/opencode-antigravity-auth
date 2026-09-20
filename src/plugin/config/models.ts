@@ -91,6 +91,11 @@ export const OPENCODE_MODEL_DEFINITIONS: OpencodeModelDefinitions = {
       max: { thinkingConfig: { thinkingBudget: 32768 } },
     },
   },
+  "antigravity-gpt-oss-120b-medium": {
+    name: "GPT-OSS 120B (Antigravity)",
+    limit: { context: 131072, output: 8192 },
+    modalities: DEFAULT_MODALITIES,
+  },
 };
 
 /**
