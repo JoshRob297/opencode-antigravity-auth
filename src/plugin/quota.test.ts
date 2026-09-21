@@ -482,7 +482,7 @@ describe("checkAccountsQuota", () => {
 describe("formatQuotaReportMarkdown", () => {
   it("handles empty results gracefully", () => {
     const report = formatQuotaReportMarkdown([]);
-    expect(report).toBe("# ☁️ Antigravity Quota Status\n\nNo accounts configured.\n");
+    expect(report).toBe("# Antigravity Quota Status\n\nNo accounts configured.\n");
   });
 
   it("formats dual-window markdown report cleanly with errors, disabled accounts, and sorting", () => {
@@ -566,11 +566,11 @@ describe("formatQuotaReportMarkdown", () => {
     ];
 
     const report = formatQuotaReportMarkdown(results);
-    expect(report).toContain("# ☁️ Antigravity Quota Status");
-    expect(report).toContain("🤖 Gemini Models (Flash / Pro)");
-    expect(report).toContain("🧠 Claude & GPT Models (Opus / Sonnet / GPT-OSS)");
+    expect(report).toContain("# Antigravity Quota Status");
+    expect(report).toContain("Gemini Models (Flash / Pro)");
+    expect(report).toContain("Claude & GPT Models (Opus / Sonnet / GPT-OSS)");
     expect(report).toContain("### Custom Provider");
-    expect(report).toContain("⚠️ Errors: err: 403 Forbidden");
+    expect(report).toContain("Errors: err: 403 Forbidden");
     expect(report).toContain("alpha");
     expect(report).toContain("beta (disabled)");
     expect(report).toContain("account-3");
@@ -617,10 +617,10 @@ describe("formatQuotaReportMarkdown", () => {
     ];
 
     const report = formatQuotaReportMarkdown(results);
-    expect(report).toContain("# ☁️ Antigravity Quota Status");
-    expect(report).toContain("🤖 Gemini Models (Flash / Pro)");
-    expect(report).toContain("🧠 Claude Models (Opus / Sonnet)");
-    expect(report).toContain("⚠️ Errors: Account 2: Network timeout");
+    expect(report).toContain("# Antigravity Quota Status");
+    expect(report).toContain("Gemini Models (Flash / Pro)");
+    expect(report).toContain("Claude Models (Opus / Sonnet)");
+    expect(report).toContain("Errors: Account 2: Network timeout");
     expect(report).toContain("QUOTA               RESET IN    ACCOUNT");
     expect(report).toContain("user1 (disabled)");
   });
