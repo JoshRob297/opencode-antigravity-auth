@@ -86,7 +86,8 @@ describe("OpenCode v2 Adapter", () => {
 
     // Test retry hook ignores non-429 errors
     const retryEvent: any = { error: { status: 500 } };
-    await registeredHooks["retry"](retryEvent);
+    expect(registeredHooks["retry"]).toBeDefined();
+    await registeredHooks["retry"]!(retryEvent);
     expect(retryEvent.decision).toBeUndefined();
 
     // Verify cleanup execution
