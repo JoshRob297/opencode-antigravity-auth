@@ -7,17 +7,29 @@
 
 import { checkAccountsQuota, formatQuotaReportMarkdown } from "../plugin/quota";
 import { loadConfig, initRuntimeConfig } from "../plugin/config";
-import { loadAccounts } from "../plugin/storage";
+import { loadAccounts, saveAccounts } from "../plugin/storage";
 import { refreshAccessToken } from "../plugin/token";
 import { executeSearch } from "../plugin/search";
 import { createLogger } from "../plugin/logger";
 import { ANTIGRAVITY_PROVIDER_ID } from "../constants";
+import {
+  prepareAntigravityRequest,
+  transformAntigravityResponse,
+  isGenerativeLanguageRequest,
+} from "../plugin/request";
+import { OPENCODE_MODEL_DEFINITIONS } from "../plugin/config/models";
 
 const log = createLogger("v2-adapter");
 
 export interface V2Context {
   readonly app?: any;
   readonly location?: { directory?: string };
+  readonly session?: {
+    hook: (name: string, callback: (event: any) => Promise<void> | void, options?: any) => Promise<{ dispose: () => Promise<void> }>;
+  };
+  readonly model?: {
+    transform: (callback: (editor: any) => void) => Promise<{ dispose: () => Promise<void> }>;
+  };
   readonly tool?: {
     transform: (callback: (editor: any) => void) => Promise<{ dispose: () => Promise<void> }>;
   };
@@ -97,9 +109,137 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
 
   log.info("Initializing opencode-antigravity-auth in OpenCode v2 mode");
 
-  // 1. Register tools in OpenCode v2 tool registry
+  const pendingRequests = new Map<string, any>();
+
+  // 1. Session hooks: Native HTTP request/response pipeline and multi-account retry
+  if (context.session && typeof context.session.hook === "function") {
+    // Intercept outbound HTTP requests to Google Cloud Code
+    await context.session.hook("http.request", async (event: any) => {
+      const url = event.request?.url || "";
+      if (!isGenerativeLanguageRequest(url)) {
+        return;
+      }
+
+      const storage = await loadAccounts();
+      if (!storage || storage.accounts.length === 0) {
+        log.warn("Antigravity request detected but no accounts configured");
+        return;
+      }
+
+      const activeIndex = storage.activeIndex ?? 0;
+      const account = storage.accounts[activeIndex] || storage.accounts[0];
+      if (!account || !account.refreshToken) {
+        return;
+      }
+
+      const mockAuth: any = {
+        type: "oauth",
+        refresh: account.refreshToken,
+        access: "",
+        expires: 0,
+      };
+      const mockClient: any = { tui: { showToast: async () => {} } };
+      let accessToken = "";
+      try {
+        const refreshed = await refreshAccessToken(mockAuth, mockClient, ANTIGRAVITY_PROVIDER_ID);
+        accessToken = refreshed?.access || "";
+      } catch (err) {
+        log.warn(`Token refresh error in v2 adapter: ${err}`);
+      }
+
+      let bodyText = "";
+      try {
+        bodyText = await event.request.clone().text();
+      } catch {
+        bodyText = "";
+      }
+
+      const headers = new Headers(event.request.headers);
+      if (accessToken) {
+        headers.set("Authorization", `Bearer ${accessToken}`);
+      }
+
+      const prepared = prepareAntigravityRequest(
+        url,
+        {
+          method: event.request.method,
+          headers,
+          body: bodyText,
+        },
+        accessToken,
+        account.managedProjectId || account.projectId || "default-cli-project",
+        undefined,
+        "antigravity",
+      );
+
+      pendingRequests.set(event.sessionID, prepared);
+
+      event.request = new Request(prepared.request, prepared.init);
+    });
+
+    // Transform inbound SSE responses and extract thinking tokens
+    await context.session.hook("http.response", async (event: any) => {
+      const prepared = pendingRequests.get(event.sessionID);
+      if (!prepared) {
+        return;
+      }
+
+      try {
+        const transformed = await transformAntigravityResponse(
+          event.response,
+          prepared.streaming,
+          null,
+          prepared.requestedModel,
+          prepared.projectId,
+          prepared.endpoint,
+          prepared.effectiveModel,
+          prepared.sessionId,
+          prepared.toolDebugMissing,
+          prepared.toolDebugSummary,
+          prepared.toolDebugPayload,
+        );
+        event.response = transformed;
+      } catch (error) {
+        log.warn(`Response transform error in v2 adapter: ${error}`);
+      } finally {
+        pendingRequests.delete(event.sessionID);
+      }
+    });
+
+    // Native retry hook: fast failover to next account on HTTP 429
+    await context.session.hook("retry", async (event: any) => {
+      if (event.error?.status === 429) {
+        const storage = await loadAccounts();
+        if (storage && storage.accounts.length > 1) {
+          const nextIndex = ((storage.activeIndex ?? 0) + 1) % storage.accounts.length;
+          storage.activeIndex = nextIndex;
+          await saveAccounts(storage);
+          log.info(`Rate limit encountered; rotating to account index ${nextIndex}`);
+          event.decision = { retry: true, delay: 500 };
+        }
+      }
+    });
+  }
+
+  // 2. Model catalog transforms in OpenCode v2
+  if (context.model && typeof context.model.transform === "function") {
+    await context.model.transform((editor: any) => {
+      for (const [modelId, def] of Object.entries(OPENCODE_MODEL_DEFINITIONS)) {
+        try {
+          editor.update("google", modelId, (draft: any) => {
+            draft.name = def.name;
+            draft.limit = def.limit;
+          });
+        } catch {
+          // Model might not be pre-seeded in current candidate list; safe to ignore
+        }
+      }
+    });
+  }
+
+  // 3. Register tools in OpenCode v2 tool registry
   if (context.tool && typeof context.tool.transform === "function") {
-    await context.tool.transform((editor) => {
+    await context.tool.transform((editor: any) => {
       // antigravity_quota tool
       editor.add({
         id: "antigravity_quota",
@@ -145,9 +285,9 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
     });
   }
 
-  // 2. Register slash commands in OpenCode v2
+  // 4. Register slash commands in OpenCode v2
   if (context.command && typeof context.command.transform === "function") {
-    await context.command.transform((editor) => {
+    await context.command.transform((editor: any) => {
       editor.add({
         name: "antigravity-quota",
         description: "View current Antigravity API quotas across accounts",
@@ -164,6 +304,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
 
   // Return clean disposal function
   return () => {
+    pendingRequests.clear();
     log.info("Cleaning up opencode-antigravity-auth v2 adapter");
   };
 }
