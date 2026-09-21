@@ -1,16 +1,16 @@
 import { AntigravityCLIOAuthPlugin, GoogleOAuthPlugin } from "./src/plugin.js";
+import { type V2Context } from "./src/v2/adapter.js";
 /**
- * Hybrid Dual-Compatibility Plugin for OpenCode v1 and OpenCode v2.
- *
- * - In OpenCode v1 (opencode-ai): Executed directly as a plugin factory function:
- *     await defaultPlugin({ client, directory }) -> { auth, event, tool }
- *
- * - In OpenCode v2 (@opencode/cli): Inspected as a plugin definition object:
- *     id: "opencode-antigravity-auth"
- *     setup: async (v2Context) => cleanup
+ * Official Dual-Compatibility Plugin for OpenCode v1 and v2.
+ * - In v1 (1.18.29+): Invoked via export default .server(ctx)
+ * - In v2 (2.0+): Invoked via export default .setup(ctx)
  */
-declare const plugin: any;
-export default plugin;
+declare const _default: {
+    id: string;
+    setup(ctx: V2Context): Promise<void | import("./src/v2/adapter.js").CleanupFunction>;
+    server(ctx: any): Promise<import("./src/plugin/types.js").PluginResult>;
+};
+export default _default;
 export { AntigravityCLIOAuthPlugin, GoogleOAuthPlugin, };
 export { authorizeAntigravity, exchangeAntigravity, } from "./src/antigravity/oauth.js";
 export type { AntigravityAuthorization, AntigravityTokenExchangeResult, } from "./src/antigravity/oauth.js";
