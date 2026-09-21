@@ -62,6 +62,12 @@ describe("OpenCode v2 Adapter", () => {
     expect(searchTool).toBeDefined();
     expect(searchTool?.description).toContain("Google Search");
 
+    // Verify tools return structured content { content: ... }
+    expect(quotaTool?.input).toBeDefined();
+    expect(searchTool?.input).toBeDefined();
+    const quotaResult = await quotaTool?.execute();
+    expect(quotaResult).toHaveProperty("content");
+
     // Command verification
     expect(mockContext.command?.transform).toHaveBeenCalled();
     const quotaCommand = registeredCommands.find((c) => c.name === "antigravity-quota");

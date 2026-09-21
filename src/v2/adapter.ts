@@ -197,6 +197,30 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
           prepared.toolDebugMissing,
           prepared.toolDebugSummary,
           prepared.toolDebugPayload,
+          undefined,
+          async (ratings) => {
+            if (!config.safety_shield?.enabled) return;
+            const highRisk = ratings.filter(
+              (r) => r.probability === "HIGH" || r.probability === "MEDIUM"
+            );
+            if (highRisk.length === 0) return;
+
+            if (config.safety_shield.log_ratings) {
+              const details = highRisk.map((r) => `${r.category}:${r.probability}`).join(", ");
+              log.warn(`[Safety Shield] Filter risk detected: ${details}`);
+            }
+
+            const threshold = config.safety_shield.auto_rotate_threshold ?? 2;
+            if (threshold > 0) {
+              const storage = await loadAccounts();
+              if (storage && storage.accounts.length > 1) {
+                const nextIndex = ((storage.activeIndex ?? 0) + 1) % storage.accounts.length;
+                storage.activeIndex = nextIndex;
+                await saveAccounts(storage);
+                log.warn(`[Safety Shield] High risk threshold reached. Preventive rotation to account index ${nextIndex}`);
+              }
+            }
+          },
         );
         event.response = transformed;
       } catch (error) {
@@ -245,15 +269,17 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         id: "antigravity_quota",
         name: "antigravity_quota",
         description: "Check Antigravity quota (5h and weekly windows) across all configured Google accounts",
-        parameters: {
+        input: {
           type: "object",
           properties: {},
         },
         execute: async () => {
           try {
-            return await getQuotaReport();
+            const report = await getQuotaReport();
+            return { content: report };
           } catch (error) {
-            return `Error retrieving Antigravity quota: ${error instanceof Error ? error.message : String(error)}`;
+            const errMsg = `Error retrieving Antigravity quota: ${error instanceof Error ? error.message : String(error)}`;
+            return { content: errMsg };
           }
         },
       });
@@ -263,7 +289,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         id: "google_search",
         name: "google_search",
         description: "Search the web using Google Search and analyze URLs",
-        parameters: {
+        input: {
           type: "object",
           properties: {
             query: { type: "string", description: "The search query" },
@@ -277,9 +303,10 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         },
         execute: async (args: { query?: string; urls?: string[]; thinking?: boolean }, ctx?: { signal?: AbortSignal }) => {
           if (!args?.query) {
-            return "Error: Search query is required.";
+            return { content: "Error: Search query is required." };
           }
-          return await performSearch(args.query, args.urls, args.thinking, ctx?.signal);
+          const result = await performSearch(args.query, args.urls, args.thinking, ctx?.signal);
+          return { content: result };
         },
       });
     });
