@@ -16,6 +16,7 @@ import { homedir } from "node:os";
 import { tmpdir } from "node:os";
 import type { SignatureCacheConfig } from "../config";
 import { ensureGitignoreSync } from "../storage";
+import { EngineStatsManager } from "../stats";
 
 // =============================================================================
 // Types
@@ -251,6 +252,12 @@ export class SignatureCache {
    * Get cache statistics.
    */
   getStats(): CacheStats {
+    EngineStatsManager.getInstance().updateCacheStats({
+      memoryHits: this.stats.memoryHits,
+      diskHits: this.stats.diskHits,
+      misses: this.stats.misses,
+      writes: this.stats.writes,
+    });
     return {
       ...this.stats,
       memoryEntries: this.cache.size,

@@ -1,14 +1,19 @@
 # Changelog
 
-## [2.0.0-v2-adapter] - 2026-09-20
+## [2.0.0] - 2026-09-22
 
 ### Added
 
-- **OpenCode v2 Hybrid Dual-Compatibility Architecture (`src/v2/adapter.ts`)** - Full support for the new OpenCode v2 specification (`@opencode/cli` 2.0+ and `@opencode/plugin` v2) while retaining complete backward compatibility with OpenCode v1 (`1.18.x`):
-  - **Polymorphic Entrypoint (`index.ts`):** Default export functions simultaneously as a v1 factory function `(ctx) => PluginResult` and as a v2 plugin definition object exposing `.id` and lifecycle `.setup(context)`.
-  - **Native v2 Tool Registry:** Dispatches `antigravity_quota` (5h and weekly quota windows) and `google_search` (web grounding and URL analysis) via `context.tool.transform`.
-  - **Native v2 Slash Commands:** Dispatches `/antigravity-quota` via `context.command.transform`.
-  - **Zero Regressions:** 100% of existing v1 functionality, accounts storage, and test suites (1,048 Vitest tests) remain intact.
+- **OpenCode v2 Native Engine & Full Specification Support** - Major release elevating the plugin to full OpenCode v2 standards with hybrid backward compatibility:
+  - **Dynamic Model & Variant Registration:** Registers all Antigravity models (`gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.1-pro`, `claude-sonnet-4-6`, `claude-opus-4-6-thinking`, `gpt-oss-120b-medium`) with `active` status and complete variants (`low`, `medium`, `high`, `max`), eliminating `VariantUnavailableError`.
+  - **New Real-Time Stats Command & Tool (`/antigravity-stats` & `antigravity_stats`):** Instant local diagnostic dashboard reporting per-account request distribution (OK / 429 / Errors), live health score, active rotation state, and thinking signature cache hit rate (without external network latency).
+  - **Health Metrics in `/antigravity-quota`:** Integrated compact `HEALTH` column into the 5h and weekly quota tables.
+  - **Persistent Engine Stats (`antigravity-stats.json`):** Retains health scores and usage counters across daemon/service restarts in `~/.config/opencode/antigravity-stats.json` (auto-gitignored).
+
+### Fixed
+
+- **OpenCode v2 Model Selector Deprecation:** Cleansed catalog by ensuring unauthenticated native built-in Google Studio/Vertex models are suppressed from selection, presenting only authenticated Antigravity models.
+- **Plugin Directory Packaging:** Updated plugin structure to satisfy v2 directory requirements.
 
 ## [1.19.0] - 2026-09-20
 

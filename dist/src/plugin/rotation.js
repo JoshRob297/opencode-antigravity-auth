@@ -1,13 +1,4 @@
-/**
- * Account Rotation System
- *
- * Implements advanced account selection algorithms:
- * - Health Score: Track account wellness based on success/failure
- * - LRU Selection: Prefer accounts with longest rest periods
- * - Jitter: Add random variance to break predictable patterns
- *
- * Used by 'hybrid' strategy for improved ban prevention and load distribution.
- */
+import { EngineStatsManager } from "./stats";
 export const DEFAULT_HEALTH_SCORE_CONFIG = {
     initial: 70,
     successReward: 1,
@@ -30,9 +21,15 @@ export class HealthScoreTracker {
     /**
      * Get current health score for an account, applying time-based recovery.
      */
-    getScore(accountIndex) {
+    getScore(accountIndex, email) {
         const state = this.scores.get(accountIndex);
         if (!state) {
+            if (email) {
+                const saved = EngineStatsManager.getInstance().getSavedHealthScore(email);
+                if (saved !== undefined) {
+                    return saved;
+                }
+            }
             return this.config.initial;
         }
         // Apply passive recovery based on time since last update
@@ -44,43 +41,55 @@ export class HealthScoreTracker {
     /**
      * Record a successful request - improves health score.
      */
-    recordSuccess(accountIndex) {
+    recordSuccess(accountIndex, email) {
         const now = Date.now();
-        const current = this.getScore(accountIndex);
+        const current = this.getScore(accountIndex, email);
+        const newScore = Math.min(this.config.maxScore, current + this.config.successReward);
         this.scores.set(accountIndex, {
-            score: Math.min(this.config.maxScore, current + this.config.successReward),
+            score: newScore,
             lastUpdated: now,
             lastSuccess: now,
             consecutiveFailures: 0,
         });
+        if (email) {
+            EngineStatsManager.getInstance().recordSuccess(email, newScore);
+        }
     }
     /**
      * Record a rate limit hit - moderate penalty.
      */
-    recordRateLimit(accountIndex) {
+    recordRateLimit(accountIndex, email) {
         const now = Date.now();
         const state = this.scores.get(accountIndex);
-        const current = this.getScore(accountIndex);
+        const current = this.getScore(accountIndex, email);
+        const newScore = Math.max(0, current + this.config.rateLimitPenalty);
         this.scores.set(accountIndex, {
-            score: Math.max(0, current + this.config.rateLimitPenalty),
+            score: newScore,
             lastUpdated: now,
             lastSuccess: state?.lastSuccess ?? 0,
             consecutiveFailures: (state?.consecutiveFailures ?? 0) + 1,
         });
+        if (email) {
+            EngineStatsManager.getInstance().recordRateLimit(email, newScore);
+        }
     }
     /**
      * Record a failure (auth, network, etc.) - larger penalty.
      */
-    recordFailure(accountIndex) {
+    recordFailure(accountIndex, email) {
         const now = Date.now();
         const state = this.scores.get(accountIndex);
-        const current = this.getScore(accountIndex);
+        const current = this.getScore(accountIndex, email);
+        const newScore = Math.max(0, current + this.config.failurePenalty);
         this.scores.set(accountIndex, {
-            score: Math.max(0, current + this.config.failurePenalty),
+            score: newScore,
             lastUpdated: now,
             lastSuccess: state?.lastSuccess ?? 0,
             consecutiveFailures: (state?.consecutiveFailures ?? 0) + 1,
         });
+        if (email) {
+            EngineStatsManager.getInstance().recordError(email, newScore);
+        }
     }
     /**
      * Check if account is healthy enough to use.

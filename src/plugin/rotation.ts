@@ -1,3 +1,5 @@
+import { EngineStatsManager } from "./stats";
+
 /**
  * Account Rotation System
  * 
@@ -62,9 +64,15 @@ export class HealthScoreTracker {
   /**
    * Get current health score for an account, applying time-based recovery.
    */
-  getScore(accountIndex: number): number {
+  getScore(accountIndex: number, email?: string): number {
     const state = this.scores.get(accountIndex);
     if (!state) {
+      if (email) {
+        const saved = EngineStatsManager.getInstance().getSavedHealthScore(email);
+        if (saved !== undefined) {
+          return saved;
+        }
+      }
       return this.config.initial;
     }
 
@@ -82,48 +90,63 @@ export class HealthScoreTracker {
   /**
    * Record a successful request - improves health score.
    */
-  recordSuccess(accountIndex: number): void {
+  recordSuccess(accountIndex: number, email?: string): void {
     const now = Date.now();
-    const current = this.getScore(accountIndex);
+    const current = this.getScore(accountIndex, email);
+    const newScore = Math.min(this.config.maxScore, current + this.config.successReward);
     
     this.scores.set(accountIndex, {
-      score: Math.min(this.config.maxScore, current + this.config.successReward),
+      score: newScore,
       lastUpdated: now,
       lastSuccess: now,
       consecutiveFailures: 0,
     });
+
+    if (email) {
+      EngineStatsManager.getInstance().recordSuccess(email, newScore);
+    }
   }
 
   /**
    * Record a rate limit hit - moderate penalty.
    */
-  recordRateLimit(accountIndex: number): void {
+  recordRateLimit(accountIndex: number, email?: string): void {
     const now = Date.now();
     const state = this.scores.get(accountIndex);
-    const current = this.getScore(accountIndex);
+    const current = this.getScore(accountIndex, email);
+    const newScore = Math.max(0, current + this.config.rateLimitPenalty);
     
     this.scores.set(accountIndex, {
-      score: Math.max(0, current + this.config.rateLimitPenalty),
+      score: newScore,
       lastUpdated: now,
       lastSuccess: state?.lastSuccess ?? 0,
       consecutiveFailures: (state?.consecutiveFailures ?? 0) + 1,
     });
+
+    if (email) {
+      EngineStatsManager.getInstance().recordRateLimit(email, newScore);
+    }
   }
 
   /**
    * Record a failure (auth, network, etc.) - larger penalty.
    */
-  recordFailure(accountIndex: number): void {
+  recordFailure(accountIndex: number, email?: string): void {
     const now = Date.now();
     const state = this.scores.get(accountIndex);
-    const current = this.getScore(accountIndex);
+    const current = this.getScore(accountIndex, email);
+    const newScore = Math.max(0, current + this.config.failurePenalty);
     
     this.scores.set(accountIndex, {
-      score: Math.max(0, current + this.config.failurePenalty),
+      score: newScore,
       lastUpdated: now,
       lastSuccess: state?.lastSuccess ?? 0,
       consecutiveFailures: (state?.consecutiveFailures ?? 0) + 1,
     });
+
+    if (email) {
+      EngineStatsManager.getInstance().recordError(email, newScore);
+    }
   }
 
   /**

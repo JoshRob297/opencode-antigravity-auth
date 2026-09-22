@@ -14,6 +14,7 @@ import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { tmpdir } from "node:os";
 import { ensureGitignoreSync } from "../storage";
+import { EngineStatsManager } from "../stats";
 // =============================================================================
 // Path Utilities
 // =============================================================================
@@ -174,6 +175,12 @@ export class SignatureCache {
      * Get cache statistics.
      */
     getStats() {
+        EngineStatsManager.getInstance().updateCacheStats({
+            memoryHits: this.stats.memoryHits,
+            diskHits: this.stats.diskHits,
+            misses: this.stats.misses,
+            writes: this.stats.writes,
+        });
         return {
             ...this.stats,
             memoryEntries: this.cache.size,

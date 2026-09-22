@@ -3,6 +3,7 @@ import { accessTokenExpired, formatRefreshParts, parseRefreshParts } from "./aut
 import { logQuotaFetch } from "./debug";
 import { ensureProjectContext } from "./project";
 import { refreshAccessToken } from "./token";
+import { EngineStatsManager } from "./stats";
 const FETCH_TIMEOUT_MS = 10000;
 export function formatDuration(ms) {
     const absMs = Math.abs(ms);
@@ -333,9 +334,12 @@ export function formatQuotaReportMarkdown(results) {
                 if (!groupMap.has(groupKey)) {
                     groupMap.set(groupKey, []);
                 }
+                const email = result.email || `account-${result.index + 1}`;
+                const savedHealth = EngineStatsManager.getInstance().getSavedHealthScore(email) ?? 100;
                 groupMap.get(groupKey).push({
-                    email: result.email || `account-${result.index + 1}`,
+                    email,
                     disabled: result.disabled,
+                    health: savedHealth,
                     fiveHour: g.fiveHour ? { percentage: g.fiveHour.remainingPercentage, resetIn: g.fiveHour.timeUntilResetFormatted } : undefined,
                     weekly: g.weekly ? { percentage: g.weekly.remainingPercentage, resetIn: g.weekly.timeUntilResetFormatted } : undefined,
                 });
@@ -348,7 +352,7 @@ export function formatQuotaReportMarkdown(results) {
         for (const [groupName, accountsList] of sortedGroups) {
             output += `### ${groupName}\n`;
             output += "```text\n";
-            output += "QUOTA (5h)          RESET (5h)  QUOTA (Weekly)      RESET (Wk)  ACCOUNT\n";
+            output += "QUOTA (5h)          RESET (5h)  QUOTA (Weekly)      RESET (Wk)  HEALTH  ACCOUNT\n";
             const sorted = accountsList.sort((a, b) => {
                 const pA = a.weekly?.percentage ?? a.fiveHour?.percentage ?? 0;
                 const pB = b.weekly?.percentage ?? b.fiveHour?.percentage ?? 0;
@@ -359,12 +363,13 @@ export function formatQuotaReportMarkdown(results) {
                 const fiveHourReset = acc.fiveHour ? acc.fiveHour.resetIn : "-";
                 const weeklyBar = acc.weekly ? progressBar(acc.weekly.percentage) : "N/A";
                 const weeklyReset = acc.weekly ? acc.weekly.resetIn : "-";
+                const healthCol = `${acc.health ?? 100}%`.padEnd(8, " ");
                 const email = `${shortEmail(acc.email)}${acc.disabled ? " (disabled)" : ""}`;
                 const fBarCol = fiveHourBar.padEnd(20, " ");
                 const fResetCol = fiveHourReset.padEnd(12, " ");
                 const wBarCol = weeklyBar.padEnd(20, " ");
                 const wResetCol = weeklyReset.padEnd(12, " ");
-                output += `${fBarCol}${fResetCol}${wBarCol}${wResetCol}${email}\n`;
+                output += `${fBarCol}${fResetCol}${wBarCol}${wResetCol}${healthCol}${email}\n`;
             }
             output += "```\n\n";
         }

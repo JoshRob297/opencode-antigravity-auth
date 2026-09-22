@@ -8,10 +8,14 @@
 
 ---
 
-### What's New & Changed in this Fork (v2.0.0-v2-adapter)
+### What's New & Changed in this Fork (v2.0.0)
 
+- **OpenCode v2 Native Engine & Variant Registration**: Fully updated for OpenCode v2 (`@opencode/cli` 2.0+). Registers all models with explicit `variants` (`low`, `medium`, `high`, `max`) and `status: active`, preventing `VariantUnavailableError`.
+- **New Real-Time Engine Stats (`/antigravity-stats` & `antigravity_stats`)**: Instant local diagnostic dashboard reporting per-account request distribution (OK / 429 / Errors), live health score, active rotation state, and thinking signature cache hit rate (without external network latency).
+- **Integrated Health Metric in `/antigravity-quota`**: Compact `HEALTH` column inside quota tables for immediate wellness inspection.
+- **Persistent Engine Stats (`antigravity-stats.json`)**: Preserves health scores and usage counters across daemon/service restarts in `~/.config/opencode/antigravity-stats.json` (auto-gitignored).
 - **OpenCode v2 Dual-Compatibility Architecture**: Fully compatible with both OpenCode v1 (`opencode-ai` 1.18.x) and OpenCode v2 (`@opencode/cli` 2.0+). Uses a polymorphic entrypoint that exports a standard v1 callable factory while exposing native v2 `.id` and lifecycle `.setup(context)` methods.
-- **Native v2 Tool & Command Registries**: Dispatches `antigravity_quota`, `google_search`, and `/antigravity-quota` slash command natively via OpenCode v2's domain transforms (`context.tool.transform` and `context.command.transform`).
+- **Native v2 Tool & Command Registries**: Dispatches `antigravity_quota`, `antigravity_stats`, `google_search`, and `/antigravity-quota` slash command natively via OpenCode v2's domain transforms (`context.tool.transform` and `context.command.transform`).
 - **Strict Tool Schema Sanitization (Fix HTTP 400 `property is not defined`)**: Cloud Code API backed by Protobuf rejects tool calls when schema `required` arrays contain properties not declared in `properties`. The normalizer recursively cleans parameter schemas, prunes orphan required keys, and enforces validation on pre-packaged `functionDeclarations`.
 - **Model Addition: `antigravity-gpt-oss-120b-medium`**: Integrated Antigravity's native 120B open-source model into `OPENCODE_MODEL_DEFINITIONS` with 131k context window and multi-account routing support.
 - **Official Antigravity CLI v1.2.7 Signature Parity**: Synchronized client signature headers and User-Agent to `antigravity/cli/1.2.7 (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)`, matching the latest Google Antigravity binary release.
@@ -48,7 +52,8 @@ Enable OpenCode to authenticate against **Antigravity** (Google's IDE) via OAuth
 - **Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.1 Pro/Flash**, and **Claude Opus 4.6, Sonnet 4.6** via Google OAuth
 - **Multi-account support** — add multiple Google accounts, auto-rotates when rate-limited
 - **Request Normalization & Clean Feedback** — optimized parameters prevent false-positives on development tasks; clean one-line message on filter notices
-- **Native Quota Tool (`antigravity_quota`)** — dual-window 5h and Weekly quota tracking with progress bars
+- **Slash Commands** — `/antigravity-quota` to inspect dual-window limits, and `/antigravity-stats` for instant local metrics
+- **Native Tools** — `antigravity_quota`, `antigravity_stats`, and `google_search` tools registered directly in the agent runtime
 - **Thinking models** — extended thinking for Claude and Gemini 3 with configurable budgets / thinking levels
 - **Google Search grounding** — enable web search for Gemini models (auto or always-on)
 - **Auto-recovery** — handles session errors and tool failures automatically
@@ -161,7 +166,7 @@ Then in `~/.config/opencode/opencode.json`:
 | `antigravity-gemini-3.1-pro` 🧠 | `low`, `high` | **Gemini 3.1 Pro** with 1M token context |
 | `antigravity-claude-sonnet-4-6` | — | Claude Sonnet 4.6 |
 | `antigravity-claude-opus-4-6-thinking` | `low`, `medium`, `max` | Claude Opus 4.6 with extended thinking |
-| `antigravity-gpt-oss-120b-medium` | — | GPT-OSS 120B open-source model *(New in v1.19.0)* |
+| `antigravity-gpt-oss-120b-medium` | — | GPT-OSS 120B open-source model *(New in v2.0.0)* |
 
 ---
 

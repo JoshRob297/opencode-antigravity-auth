@@ -36,19 +36,19 @@ export declare class HealthScoreTracker {
     /**
      * Get current health score for an account, applying time-based recovery.
      */
-    getScore(accountIndex: number): number;
+    getScore(accountIndex: number, email?: string): number;
     /**
      * Record a successful request - improves health score.
      */
-    recordSuccess(accountIndex: number): void;
+    recordSuccess(accountIndex: number, email?: string): void;
     /**
      * Record a rate limit hit - moderate penalty.
      */
-    recordRateLimit(accountIndex: number): void;
+    recordRateLimit(accountIndex: number, email?: string): void;
     /**
      * Record a failure (auth, network, etc.) - larger penalty.
      */
-    recordFailure(accountIndex: number): void;
+    recordFailure(accountIndex: number, email?: string): void;
     /**
      * Check if account is healthy enough to use.
      */

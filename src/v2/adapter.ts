@@ -6,6 +6,7 @@
  */
 
 import { checkAccountsQuota, formatQuotaReportMarkdown } from "../plugin/quota";
+import { EngineStatsManager } from "../plugin/stats";
 import { loadConfig, initRuntimeConfig } from "../plugin/config";
 import { loadAccounts, saveAccounts } from "../plugin/storage";
 import { refreshAccessToken } from "../plugin/token";
@@ -316,6 +317,27 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
           return { content: result };
         },
       });
+
+      // antigravity_stats tool
+      editor.add({
+        id: "antigravity_stats",
+        name: "antigravity_stats",
+        description: "View real-time engine statistics: request counts, account health scores, rate limit tracking, and signature cache performance",
+        input: {
+          type: "object",
+          properties: {},
+        },
+        execute: async () => {
+          try {
+            const storage = await loadAccounts();
+            const activeAcc = storage?.accounts?.[storage.activeIndex]?.email;
+            const report = EngineStatsManager.getInstance().formatStatsReport(activeAcc);
+            return { content: report };
+          } catch (error) {
+            return { content: `Error retrieving Antigravity stats: ${error instanceof Error ? error.message : String(error)}` };
+          }
+        },
+      });
     });
   }
 
@@ -328,6 +350,20 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         execute: async () => {
           try {
             return await getQuotaReport();
+          } catch (error) {
+            return `Error: ${error instanceof Error ? error.message : String(error)}`;
+          }
+        },
+      });
+
+      editor.add({
+        name: "antigravity-stats",
+        description: "View real-time engine statistics (request counts, health scores, and signature cache)",
+        execute: async () => {
+          try {
+            const storage = await loadAccounts();
+            const activeAcc = storage?.accounts?.[storage.activeIndex]?.email;
+            return EngineStatsManager.getInstance().formatStatsReport(activeAcc);
           } catch (error) {
             return `Error: ${error instanceof Error ? error.message : String(error)}`;
           }
