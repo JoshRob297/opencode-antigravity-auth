@@ -105,15 +105,17 @@ No configuration changes are required when transitioning between OpenCode v1 and
 
 ## Installation
 
-### Option A: Install directly from GitHub (Recommended)
+### Option A: Direct from GitHub (Recommended)
 
-Add this to `~/.config/opencode/opencode.json`:
+Add to `plugins` in `~/.config/opencode/opencode.json`:
 
 ```json
 {
-  "plugin": ["github:JoshRob297/opencode-antigravity-auth"]
+  "plugins": ["github:JoshRob297/opencode-antigravity-auth"]
 }
 ```
+
+> OpenCode v2 will automatically clone, build, and update the plugin directly from the official repository.
 
 ### Option B: Local Directory (Development / Offline)
 
