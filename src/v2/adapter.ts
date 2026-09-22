@@ -253,6 +253,13 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
           editor.update("google", modelId, (draft: any) => {
             draft.name = def.name;
             draft.limit = def.limit;
+            draft.status = "active";
+            if (def.variants) {
+              draft.variants = Object.entries(def.variants).map(([vId, vOpt]) => ({
+                id: vId,
+                ...vOpt,
+              }));
+            }
           });
         } catch {
           // Model might not be pre-seeded in current candidate list; safe to ignore

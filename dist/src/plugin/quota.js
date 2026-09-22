@@ -310,9 +310,9 @@ export async function checkAccountsQuota(accounts, client, providerId = ANTIGRAV
 }
 export function formatQuotaReportMarkdown(results) {
     if (results.length === 0) {
-        return "# ☁️ Antigravity Quota Status\n\nNo accounts configured.\n";
+        return "# Antigravity Quota Status\n\nNo accounts configured.\n";
     }
-    let output = "# ☁️ Antigravity Quota Status\n\n";
+    let output = "# Antigravity Quota Status\n\n";
     const errors = [];
     const hasGroups = results.some((r) => r.status !== "error" && r.groups && r.groups.length > 0);
     if (hasGroups) {
@@ -325,10 +325,10 @@ export function formatQuotaReportMarkdown(results) {
             for (const g of result.groups) {
                 let groupKey = g.displayName;
                 if (groupKey.toLowerCase().includes("gemini")) {
-                    groupKey = "🤖 Gemini Models (Flash / Pro)";
+                    groupKey = "Gemini Models (Flash / Pro)";
                 }
                 else if (groupKey.toLowerCase().includes("claude") || groupKey.toLowerCase().includes("gpt")) {
-                    groupKey = "🧠 Claude & GPT Models (Opus / Sonnet / GPT-OSS)";
+                    groupKey = "Claude & GPT Models (Opus / Sonnet / GPT-OSS)";
                 }
                 if (!groupMap.has(groupKey)) {
                     groupMap.set(groupKey, []);
@@ -342,7 +342,7 @@ export function formatQuotaReportMarkdown(results) {
             }
         }
         if (errors.length > 0) {
-            output += `⚠️ Errors: ${errors.join(", ")}\n\n`;
+            output += `Errors: ${errors.join(", ")}\n\n`;
         }
         const sortedGroups = Array.from(groupMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
         for (const [groupName, accountsList] of sortedGroups) {
@@ -379,9 +379,9 @@ export function formatQuotaReportMarkdown(results) {
             }
             for (const model of result.models) {
                 const lower = model.label.toLowerCase();
-                let familyName = "🤖 Gemini Models (Flash / Pro)";
+                let familyName = "Gemini Models (Flash / Pro)";
                 if (lower.includes("claude") || lower.includes("gpt")) {
-                    familyName = "🧠 Claude Models (Opus / Sonnet)";
+                    familyName = "Claude Models (Opus / Sonnet)";
                 }
                 if (!familyMap.has(familyName)) {
                     familyMap.set(familyName, new Map());
@@ -398,7 +398,7 @@ export function formatQuotaReportMarkdown(results) {
             }
         }
         if (errors.length > 0) {
-            output += `⚠️ Errors: ${errors.join(", ")}\n\n`;
+            output += `Errors: ${errors.join(", ")}\n\n`;
         }
         const sortedFamilies = Array.from(familyMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
         for (const [familyName, accountMap] of sortedFamilies) {
