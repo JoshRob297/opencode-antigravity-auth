@@ -2126,7 +2126,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
 
                   await logResponseBody(debugContext, response, 429);
 
-                  getHealthTracker().recordRateLimit(account.index);
+                  getHealthTracker().recordRateLimit(account.index, account.email);
 
                   const accountLabel = account.email || `Account ${account.index + 1}`;
 
@@ -2346,7 +2346,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
                 // Success or non-retryable error - return the response
                 if (response.ok) {
                   account.consecutiveFailures = 0;
-                  getHealthTracker().recordSuccess(account.index);
+                  getHealthTracker().recordSuccess(account.index, account.email);
                   accountManager.markAccountUsed(account.index);
                   
                   void triggerAsyncQuotaRefreshForAccount(

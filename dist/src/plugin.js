@@ -1708,7 +1708,7 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                             }
                                             logRateLimitEvent(account.index, account.email, family, response.status, effectiveDelayMs, bodyInfo);
                                             await logResponseBody(debugContext, response, 429);
-                                            getHealthTracker().recordRateLimit(account.index);
+                                            getHealthTracker().recordRateLimit(account.index, account.email);
                                             const accountLabel = account.email || `Account ${account.index + 1}`;
                                             // Extract absolute timestamp if provided by Google RPC metadata
                                             let absoluteResetAtMs = null;
@@ -1860,7 +1860,7 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                         // Success or non-retryable error - return the response
                                         if (response.ok) {
                                             account.consecutiveFailures = 0;
-                                            getHealthTracker().recordSuccess(account.index);
+                                            getHealthTracker().recordSuccess(account.index, account.email);
                                             accountManager.markAccountUsed(account.index);
                                             void triggerAsyncQuotaRefreshForAccount(accountManager, account.index, client, providerId, config.quota_refresh_interval_minutes);
                                         }
