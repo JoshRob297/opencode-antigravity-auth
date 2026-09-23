@@ -5,63 +5,63 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "type": "module",
-    "license": "MIT",
-    "author": "JoshRob297",
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/JoshRob297/opencode-antigravity-auth.git"
-    },
-    "homepage": "https://github.com/JoshRob297/opencode-antigravity-auth#readme",
-    "bugs": {
-        "url": "https://github.com/JoshRob297/opencode-antigravity-auth/issues"
-    },
-    "keywords": [
-        "opencode",
-        "google",
-        "antigravity",
-        "gemini",
-        "oauth",
-        "plugin",
-        "auth",
-        "claude"
-    ],
-    "engines": {
-        "node": ">=20.0.0"
-    },
-    "files": [
-        "dist/",
-        "README.md",
-        "LICENSE"
-    ],
-    "scripts": {
-        "build": "tsc -p tsconfig.build.json",
-        "build:schema": "npx tsx script/build-schema.ts",
-        "typecheck": "tsc --noEmit",
-        "test": "vitest run",
-        "test:watch": "vitest",
-        "test:ui": "vitest --ui",
-        "test:coverage": "vitest run --coverage",
-        "prepublishOnly": "npm run build",
-        "test:e2e:models": "npx tsx script/test-models.ts",
-        "test:e2e:regression": "npx tsx script/test-regression.ts"
-    },
-    "peerDependencies": {
-        "typescript": "^5"
-    },
-    "devDependencies": {
-        "@types/node": "^26.5.0",
-        "@types/proper-lockfile": "^4.1.4",
-        "@vitest/coverage-v8": "^5.0.0",
-        "@vitest/ui": "^5.0.0",
-        "typescript": "^5.0.0",
-        "vitest": "^5.0.0",
-        "zod-to-json-schema": "^3.25.2"
-    },
-    "dependencies": {
-        "@opencode-ai/plugin": "^1.18.30",
-        "@openauthjs/openauth": "^0.4.3",
-        "proper-lockfile": "^4.1.2",
-        "xdg-basedir": "^5.1.0",
-        "zod": "^4.5.4"
-    }
+  "license": "MIT",
+  "author": "JoshRob297",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JoshRob297/opencode-antigravity-auth.git"
+  },
+  "homepage": "https://github.com/JoshRob297/opencode-antigravity-auth#readme",
+  "bugs": {
+    "url": "https://github.com/JoshRob297/opencode-antigravity-auth/issues"
+  },
+  "keywords": [
+    "opencode",
+    "google",
+    "antigravity",
+    "gemini",
+    "oauth",
+    "plugin",
+    "auth",
+    "claude"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:schema": "npx tsx script/build-schema.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build",
+    "test:e2e:models": "npx tsx script/test-models.ts",
+    "test:e2e:regression": "npx tsx script/test-regression.ts"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.1",
+    "@types/proper-lockfile": "^4.1.4",
+    "@vitest/coverage-v8": "5.0.1",
+    "@vitest/ui": "5.0.1",
+    "typescript": "^5.0.0",
+    "vitest": "5.0.1",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "dependencies": {
+    "@openauthjs/openauth": "^0.4.3",
+    "@opencode-ai/plugin": "1.18.31",
+    "proper-lockfile": "^4.1.2",
+    "xdg-basedir": "^5.1.0",
+    "zod": "4.6.5"
+  }
 }
