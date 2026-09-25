@@ -257,45 +257,45 @@ export async function fetchAccountQuotaDetails(
     try {
       const summaryResponse = await fetchQuotaSummary(auth.access ?? "", projectId);
       if (summaryResponse.groups && summaryResponse.groups.length > 0) {
-        const groups: GroupQuotaDisplay[] = [];
+    const groups: GroupQuotaDisplay[] = [];
 
-        for (const group of summaryResponse.groups) {
-          const groupDisplay: GroupQuotaDisplay = {
-            displayName: group.displayName || "Unknown Group",
-            description: group.description,
-          };
+    for (const group of summaryResponse.groups) {
+      const groupDisplay: GroupQuotaDisplay = {
+        displayName: group.displayName || "Unknown Group",
+        description: group.description,
+      };
 
-          for (const bucket of group.buckets || []) {
-            const fraction = normalizeRemainingFraction(bucket.remainingFraction);
-            let resetTime: Date;
-            if (bucket.resetTime) {
-              const parsed = new Date(bucket.resetTime);
-              resetTime = Number.isNaN(parsed.getTime()) ? new Date(now + 86400000) : parsed;
-            } else {
-              resetTime = new Date(now + 86400000);
-            }
-            const timeUntilReset = Math.max(0, resetTime.getTime() - now);
-
-            const bucketDisplay: BucketQuotaDisplay = {
-              window: bucket.window || bucket.bucketId || "unknown",
-              displayName: bucket.displayName || bucket.bucketId || "Limit",
-              remainingPercentage: Math.round(fraction * 100),
-              remainingFraction: fraction,
-              resetTime,
-              timeUntilReset,
-              timeUntilResetFormatted: formatDuration(timeUntilReset),
-            };
-
-            const windowKey = (bucket.window || bucket.bucketId || "").toLowerCase();
-            if (windowKey.includes("5h")) {
-              groupDisplay.fiveHour = bucketDisplay;
-            } else if (windowKey.includes("week")) {
-              groupDisplay.weekly = bucketDisplay;
-            }
-          }
-
-          groups.push(groupDisplay);
+      for (const bucket of group.buckets || []) {
+        const fraction = normalizeRemainingFraction(bucket.remainingFraction);
+        let resetTime: Date;
+        if (bucket.resetTime) {
+          const parsed = new Date(bucket.resetTime);
+          resetTime = Number.isNaN(parsed.getTime()) ? new Date(now + 86400000) : parsed;
+        } else {
+          resetTime = new Date(now + 86400000);
         }
+        const timeUntilReset = Math.max(0, resetTime.getTime() - now);
+
+        const bucketDisplay: BucketQuotaDisplay = {
+          window: bucket.window || bucket.bucketId || "unknown",
+          displayName: bucket.displayName || bucket.bucketId || "Limit",
+          remainingPercentage: Math.round(fraction * 100),
+          remainingFraction: fraction,
+          resetTime,
+          timeUntilReset,
+          timeUntilResetFormatted: formatDuration(timeUntilReset),
+        };
+
+        const windowKey = (bucket.window || bucket.bucketId || "").toLowerCase();
+        if (windowKey.includes("5h")) {
+          groupDisplay.fiveHour = bucketDisplay;
+        } else if (windowKey.includes("week")) {
+          groupDisplay.weekly = bucketDisplay;
+        }
+      }
+
+      groups.push(groupDisplay);
+    }
 
         const cachedQuota: Partial<Record<QuotaGroup, QuotaGroupSummary>> = {};
         for (const g of groups) {
@@ -393,6 +393,52 @@ export async function fetchAccountQuotaDetails(
 
     models.sort((a, b) => a.label.localeCompare(b.label));
 
+    // Synthesize dual groups from models fallback so formatQuotaReportMarkdown renders them in the dual-window report
+    const groups: GroupQuotaDisplay[] = [];
+    const claudeModels = Object.values(quotaResponse.models).filter((m) =>
+      (m.displayName || m.model || "").toLowerCase().includes("claude")
+    );
+    const geminiModels = Object.values(quotaResponse.models).filter((m) =>
+      (m.displayName || m.model || "").toLowerCase().includes("gemini")
+    );
+
+    const buildSynthesizedGroup = (displayName: string, modelList: any[]): GroupQuotaDisplay => {
+      let minFraction = 1.0;
+      let resetTime = new Date(now + 86400000);
+      for (const m of modelList) {
+        if (m.quotaInfo?.remainingFraction !== undefined) {
+          const f = normalizeRemainingFraction(m.quotaInfo.remainingFraction);
+          if (f < minFraction) minFraction = f;
+        }
+        if (m.quotaInfo?.resetTime) {
+          const p = new Date(m.quotaInfo.resetTime);
+          if (!Number.isNaN(p.getTime())) resetTime = p;
+        }
+      }
+      const timeUntilReset = Math.max(0, resetTime.getTime() - now);
+      const bucket: BucketQuotaDisplay = {
+        window: "5h",
+        displayName: "Limit Remaining",
+        remainingPercentage: Math.round(minFraction * 100),
+        remainingFraction: minFraction,
+        resetTime,
+        timeUntilReset,
+        timeUntilResetFormatted: formatDuration(timeUntilReset),
+      };
+      return {
+        displayName,
+        fiveHour: bucket,
+        weekly: bucket,
+      };
+    };
+
+    if (claudeModels.length > 0) {
+      groups.push(buildSynthesizedGroup("Claude and GPT models", claudeModels));
+    }
+    if (geminiModels.length > 0) {
+      groups.push(buildSynthesizedGroup("Gemini Models", geminiModels));
+    }
+
     const cachedQuota: Partial<Record<QuotaGroup, QuotaGroupSummary>> = {};
     for (const m of models) {
       const lower = m.label.toLowerCase();
@@ -419,6 +465,7 @@ export async function fetchAccountQuotaDetails(
       email: account.email,
       status: disabled ? "disabled" : "ok",
       disabled,
+      groups: groups.length > 0 ? groups : undefined,
       models,
       cachedQuota,
       updatedAccount,

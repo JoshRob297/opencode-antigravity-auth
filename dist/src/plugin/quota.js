@@ -259,6 +259,47 @@ export async function fetchAccountQuotaDetails(account, index, client, providerI
             });
         }
         models.sort((a, b) => a.label.localeCompare(b.label));
+        // Synthesize dual groups from models fallback so formatQuotaReportMarkdown renders them in the dual-window report
+        const groups = [];
+        const claudeModels = Object.values(quotaResponse.models).filter((m) => (m.displayName || m.model || "").toLowerCase().includes("claude"));
+        const geminiModels = Object.values(quotaResponse.models).filter((m) => (m.displayName || m.model || "").toLowerCase().includes("gemini"));
+        const buildSynthesizedGroup = (displayName, modelList) => {
+            let minFraction = 1.0;
+            let resetTime = new Date(now + 86400000);
+            for (const m of modelList) {
+                if (m.quotaInfo?.remainingFraction !== undefined) {
+                    const f = normalizeRemainingFraction(m.quotaInfo.remainingFraction);
+                    if (f < minFraction)
+                        minFraction = f;
+                }
+                if (m.quotaInfo?.resetTime) {
+                    const p = new Date(m.quotaInfo.resetTime);
+                    if (!Number.isNaN(p.getTime()))
+                        resetTime = p;
+                }
+            }
+            const timeUntilReset = Math.max(0, resetTime.getTime() - now);
+            const bucket = {
+                window: "5h",
+                displayName: "Limit Remaining",
+                remainingPercentage: Math.round(minFraction * 100),
+                remainingFraction: minFraction,
+                resetTime,
+                timeUntilReset,
+                timeUntilResetFormatted: formatDuration(timeUntilReset),
+            };
+            return {
+                displayName,
+                fiveHour: bucket,
+                weekly: bucket,
+            };
+        };
+        if (claudeModels.length > 0) {
+            groups.push(buildSynthesizedGroup("Claude and GPT models", claudeModels));
+        }
+        if (geminiModels.length > 0) {
+            groups.push(buildSynthesizedGroup("Gemini Models", geminiModels));
+        }
         const cachedQuota = {};
         for (const m of models) {
             const lower = m.label.toLowerCase();
@@ -286,6 +327,7 @@ export async function fetchAccountQuotaDetails(account, index, client, providerI
             email: account.email,
             status: disabled ? "disabled" : "ok",
             disabled,
+            groups: groups.length > 0 ? groups : undefined,
             models,
             cachedQuota,
             updatedAccount,

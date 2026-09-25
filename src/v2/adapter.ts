@@ -5,10 +5,11 @@
  * (OpenCode v2.0+) while sharing backend logic, accounts, and tools with v1.
  */
 
-import { checkAccountsQuota, formatQuotaReportMarkdown } from "../plugin/quota";
+import { checkAccountsQuota, formatQuotaReportMarkdown, fetchAvailableModels, type QuotaGroup, type QuotaGroupSummary } from "../plugin/quota";
 import { EngineStatsManager } from "../plugin/stats";
 import { loadConfig, initRuntimeConfig } from "../plugin/config";
-import { loadAccounts, saveAccounts } from "../plugin/storage";
+import { loadAccounts, saveAccounts, type ModelFamily } from "../plugin/storage";
+import { AccountManager, computeSoftQuotaCacheTtlMs } from "../plugin/accounts";
 import { refreshAccessToken } from "../plugin/token";
 import { executeSearch } from "../plugin/search";
 import { createLogger } from "../plugin/logger";
@@ -21,6 +22,151 @@ import {
 import { OPENCODE_MODEL_DEFINITIONS } from "../plugin/config/models";
 
 const log = createLogger("v2-adapter");
+
+function resolveFamilyFromRequest(url: string, bodyText: string): { family: ModelFamily; modelName?: string } {
+  let modelName = "";
+  try {
+    const json = JSON.parse(bodyText);
+    if (typeof json.model === "string") {
+      modelName = json.model;
+    }
+  } catch {
+    // not JSON
+  }
+
+  if (!modelName) {
+    const urlMatch = url.match(/models\/([^:]+)/);
+    if (urlMatch && urlMatch[1]) {
+      modelName = urlMatch[1];
+    }
+  }
+
+  const lower = modelName.toLowerCase();
+  if (lower.includes("claude") || lower.includes("opus") || lower.includes("sonnet")) {
+    return { family: "claude", modelName };
+  }
+  return { family: "gemini", modelName };
+}
+
+// Shared AccountManager so in-memory quota cache survives between requests.
+let sharedAccountManagerPromise: Promise<AccountManager> | null = null;
+let quotaRefreshInFlight: Promise<void> | null = null;
+
+function getSharedAccountManager(): Promise<AccountManager> {
+  if (!sharedAccountManagerPromise) {
+    sharedAccountManagerPromise = AccountManager.loadFromDisk().catch((err) => {
+      sharedAccountManagerPromise = null;
+      throw err;
+    });
+  }
+  return sharedAccountManagerPromise;
+}
+
+/**
+ * Refreshes the in-memory + on-disk quota cache from live fetchAvailableModels
+ * when it is stale, so getCurrentOrNextForFamily() can route by real remaining
+ * quota instead of blindly reusing a depleted account.
+ */
+async function refreshQuotaCacheForFamily(manager: AccountManager, family: ModelFamily): Promise<void> {
+  if (quotaRefreshInFlight) {
+    await quotaRefreshInFlight;
+    return;
+  }
+
+  const ttlMs = computeSoftQuotaCacheTtlMs("auto", 15);
+  const snapshot = manager.getAccountsSnapshot();
+  const now = Date.now();
+  const stale = snapshot.some(
+    (a) => a.enabled !== false && (a.cachedQuotaUpdatedAt == null || now - a.cachedQuotaUpdatedAt > ttlMs),
+  );
+  if (!stale) return;
+
+  const refresh = (async () => {
+    const mockClient: any = { tui: { showToast: async () => {} } };
+    const active = snapshot.filter((a) => a.enabled !== false);
+
+    const results = await Promise.all(
+      active.map(async (acc) => {
+        try {
+          const mockAuth: any = {
+            type: "oauth",
+            refresh: acc.parts.refreshToken,
+            access: "",
+            expires: 0,
+          };
+          const refreshed = await refreshAccessToken(mockAuth, mockClient, ANTIGRAVITY_PROVIDER_ID);
+          if (!refreshed?.access) return null;
+          const projectId = acc.parts.managedProjectId || acc.parts.projectId || "default-cli-project";
+          const resp = await fetchAvailableModels(refreshed.access, projectId);
+          return { index: acc.index, models: (resp.models || {}) as Record<string, any> };
+        } catch (e) {
+          log.warn(`[quota refresh] failed for ${acc.email}: ${e instanceof Error ? e.message : String(e)}`);
+          return null;
+        }
+      }),
+    );
+
+    for (const r of results) {
+      if (!r) continue;
+
+      let minClaude = Infinity;
+      let resetClaude: string | undefined;
+      let minFlash = Infinity;
+      let resetFlash: string | undefined;
+      let minPro = Infinity;
+      let resetPro: string | undefined;
+
+      for (const [key, m] of Object.entries(r.models)) {
+        const qi = m?.quotaInfo;
+        if (!qi || typeof qi.remainingFraction !== "number") continue;
+        const frac = Math.max(0, Math.min(1, qi.remainingFraction));
+        const label = (m.displayName || key || "").toLowerCase();
+        if (label.includes("claude")) {
+          if (frac < minClaude) { minClaude = frac; resetClaude = qi.resetTime; }
+        } else if (label.includes("flash")) {
+          if (frac < minFlash) { minFlash = frac; resetFlash = qi.resetTime; }
+        } else if (label.includes("pro")) {
+          if (frac < minPro) { minPro = frac; resetPro = qi.resetTime; }
+        }
+      }
+
+      const quota: Partial<Record<QuotaGroup, QuotaGroupSummary>> = {};
+      if (Number.isFinite(minClaude)) quota.claude = { remainingFraction: minClaude, resetTime: resetClaude };
+      if (Number.isFinite(minFlash)) quota["gemini-flash"] = { remainingFraction: minFlash, resetTime: resetFlash };
+      if (Number.isFinite(minPro)) quota["gemini-pro"] = { remainingFraction: minPro, resetTime: resetPro };
+      if (Object.keys(quota).length > 0) {
+        manager.updateQuotaCache(r.index, quota);
+      }
+    }
+
+    // Persist the refreshed cache to disk surgically so future restarts benefit.
+    try {
+      const storage = await loadAccounts();
+      if (!storage) return;
+      const updatedSnapshot = manager.getAccountsSnapshot();
+      for (const r of results) {
+        if (!r) continue;
+        const stored = storage.accounts[r.index];
+        const snap = updatedSnapshot[r.index];
+        if (stored && snap) {
+          stored.cachedQuota = snap.cachedQuota;
+          stored.cachedQuotaUpdatedAt = snap.cachedQuotaUpdatedAt;
+        }
+      }
+      await saveAccounts(storage);
+      log.info("[v2 routing] Quota cache refreshed from live fetchAvailableModels");
+    } catch (e) {
+      log.warn(`[v2 routing] Failed to persist quota cache: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  })();
+
+  quotaRefreshInFlight = refresh;
+  try {
+    await refresh;
+  } finally {
+    quotaRefreshInFlight = null;
+  }
+}
 
 export interface V2Context {
   readonly app?: any;
@@ -111,6 +257,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
   log.info("Initializing opencode-antigravity-auth in OpenCode v2 mode");
 
   const pendingRequests = new Map<string, any>();
+  const pendingFamily = new Map<string, { family: ModelFamily; accountIndex: number }>();
 
   // 1. Session hooks: Native HTTP request/response pipeline and multi-account retry
   if (context.session && typeof context.session.hook === "function") {
@@ -127,11 +274,58 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         return;
       }
 
-      const activeIndex = storage.activeIndex ?? 0;
-      const account = storage.accounts[activeIndex] || storage.accounts[0];
+      let bodyText = "";
+      try {
+        bodyText = await event.request.clone().text();
+      } catch {
+        bodyText = "";
+      }
+
+      const { family, modelName } = resolveFamilyFromRequest(url, bodyText);
+
+      // Multi-account rotation via AccountManager (shared singleton keeps quota cache warm)
+      let accountManager: AccountManager | null = null;
+      try {
+        accountManager = await getSharedAccountManager();
+        await refreshQuotaCacheForFamily(accountManager, family);
+      } catch (err) {
+        log.warn(`Failed to initialize AccountManager in v2 adapter: ${err}`);
+      }
+
+      let selectedAccount: any = null;
+      if (accountManager && accountManager.getAccountCount() > 0) {
+        const strategy = config.account_selection_strategy || "hybrid";
+        selectedAccount = accountManager.getCurrentOrNextForFamily(
+          family,
+          modelName,
+          strategy,
+          "antigravity",
+          config.pid_offset_enabled,
+          config.soft_quota_threshold_percent,
+        );
+      }
+
+      const activeIndex = selectedAccount ? selectedAccount.index : (storage.activeIndex ?? 0);
+      const account = (selectedAccount && selectedAccount.parts) 
+        ? {
+            email: selectedAccount.email,
+            refreshToken: selectedAccount.parts.refreshToken,
+            projectId: selectedAccount.parts.projectId,
+            managedProjectId: selectedAccount.parts.managedProjectId,
+          }
+        : (storage.accounts[activeIndex] || storage.accounts[0]);
+
       if (!account || !account.refreshToken) {
         return;
       }
+
+      // Keep storage activeIndex in sync for stats & CLI views
+      if (storage.activeIndex !== activeIndex) {
+        storage.activeIndex = activeIndex;
+        await saveAccounts(storage).catch(() => {});
+      }
+
+      log.info(`[v2 routing] Selected account idx=${activeIndex} (${account.email || "unknown"}) for family=${family} model=${modelName || "default"}`);
 
       const mockAuth: any = {
         type: "oauth",
@@ -146,13 +340,6 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         accessToken = refreshed?.access || "";
       } catch (err) {
         log.warn(`Token refresh error in v2 adapter: ${err}`);
-      }
-
-      let bodyText = "";
-      try {
-        bodyText = await event.request.clone().text();
-      } catch {
-        bodyText = "";
       }
 
       const headers = new Headers(event.request.headers);
@@ -174,6 +361,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
       );
 
       pendingRequests.set(event.sessionID, prepared);
+      pendingFamily.set(event.sessionID, { family, accountIndex: activeIndex });
 
       event.request = new Request(prepared.request, prepared.init);
     });
@@ -183,6 +371,17 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
       const prepared = pendingRequests.get(event.sessionID);
       if (!prepared) {
         return;
+      }
+
+      // Mark account as used on response arrival
+      const meta = pendingFamily.get(event.sessionID);
+      if (meta !== undefined && event.response?.ok) {
+        try {
+          const mgr = await getSharedAccountManager();
+          mgr.markAccountUsed(meta.accountIndex);
+        } catch {
+          // ignore
+        }
       }
 
       try {
@@ -228,21 +427,60 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         log.warn(`Response transform error in v2 adapter: ${error}`);
       } finally {
         pendingRequests.delete(event.sessionID);
+        pendingFamily.delete(event.sessionID);
       }
     });
 
-    // Native retry hook: fast failover to next account on HTTP 429
+    // Native retry hook: fast failover to next account on HTTP 429, 403,
+    // or transport failures (Decode error / truncated SSE streams).
     await context.session.hook("retry", async (event: any) => {
-      if (event.error?.status === 429) {
-        const storage = await loadAccounts();
-        if (storage && storage.accounts.length > 1) {
-          const nextIndex = ((storage.activeIndex ?? 0) + 1) % storage.accounts.length;
-          storage.activeIndex = nextIndex;
-          await saveAccounts(storage);
-          log.info(`Rate limit encountered; rotating to account index ${nextIndex}`);
-          event.decision = { retry: true, delay: 500 };
+      const status = event.error?.status;
+      const message = (event.error?.message || "").toLowerCase();
+
+      const isRotatable =
+        status === 429 ||
+        status === 403 ||
+        message.includes("decode") ||
+        message.includes("stream") ||
+        message.includes("eof") ||
+        message.includes("quota exceeded");
+
+      if (!isRotatable) return;
+
+      const storage = await loadAccounts();
+      if (!storage || storage.accounts.length <= 1) return;
+
+      const meta = pendingFamily.get(event.sessionID);
+      const family: ModelFamily = meta?.family ?? "claude";
+      const prevIndex = meta?.accountIndex ?? storage.activeIndex ?? 0;
+      const nextIndex = (prevIndex + 1) % storage.accounts.length;
+
+      storage.activeIndex = nextIndex;
+      await saveAccounts(storage).catch(() => {});
+
+      try {
+        // Advance the shared manager's cursor for this family so the next
+        // request for the same model family lands on the healthy account.
+        const mgr = await getSharedAccountManager();
+        const prevAcc = mgr.getAccountsSnapshot()[prevIndex];
+        if (prevAcc && (status === 429 || status === 403)) {
+          // Put the failed account on a temporary cooldown for this family
+          mgr.markRateLimited(prevAcc, 60_000, family, "antigravity");
         }
+        mgr.getCurrentOrNextForFamily(
+          family,
+          null,
+          "round-robin",
+          "antigravity",
+          false,
+          100,
+        );
+      } catch {
+        // Manager resync failure is non-fatal; storage.activeIndex already moved
       }
+
+      log.info(`[v2 routing] Failover rotate idx ${prevIndex} -> ${nextIndex} for family=${family} (status=${status ?? "transport"})`);
+      event.decision = { retry: true, delay: 500 };
     });
   }
 
