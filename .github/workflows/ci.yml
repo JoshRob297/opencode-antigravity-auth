@@ -32,3 +32,11 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Check dist/ is in sync with src/
+        run: |
+          git add -f dist
+          if ! git diff --cached --exit-code -- dist; then
+            echo "::error::committed dist/ is out of sync with src/ — run 'npm run build' and commit the result."
+            exit 1
+          fi
