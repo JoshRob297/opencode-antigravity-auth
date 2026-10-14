@@ -565,6 +565,42 @@ describe("request.ts", () => {
       expect(result.streaming).toBe(true);
     });
 
+    it("applies the thinking variant before resolving the backend model on wrapped bodies (#37)", () => {
+      // Wrapped body (what OpenCode sends) with effort=high must resolve to the -high backend model.
+      const wrapped = {
+        project: mockProjectId,
+        request: {
+          contents: [{ role: "user", parts: [{ text: "hi" }] }],
+          generationConfig: {},
+        },
+        providerOptions: { google: { thinkingLevel: "high" } },
+      };
+      const result = prepareAntigravityRequest(
+        "https://generativelanguage.googleapis.com/v1beta/models/antigravity-gemini-3.8-flash:streamGenerateContent",
+        { method: "POST", body: JSON.stringify(wrapped) },
+        mockAccessToken,
+        mockProjectId
+      );
+      expect(result.effectiveModel).toBe("gemini-3.8-flash-high");
+    });
+
+    it("applies the thinking variant from generationConfig on wrapped bodies (#37)", () => {
+      const wrapped = {
+        project: mockProjectId,
+        request: {
+          contents: [{ role: "user", parts: [{ text: "hi" }] }],
+          generationConfig: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+      };
+      const result = prepareAntigravityRequest(
+        "https://generativelanguage.googleapis.com/v1beta/models/antigravity-gemini-3.8-flash:streamGenerateContent",
+        { method: "POST", body: JSON.stringify(wrapped) },
+        mockAccessToken,
+        mockProjectId
+      );
+      expect(result.effectiveModel).toBe("gemini-3.8-flash-high");
+    });
+
     it("detects non-streaming from generateContent action", () => {
       const result = prepareAntigravityRequest(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",

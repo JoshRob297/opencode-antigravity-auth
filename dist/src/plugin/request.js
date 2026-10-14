@@ -632,6 +632,33 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
         try {
             const parsedBody = JSON.parse(baseInit.body);
             const isWrapped = typeof parsedBody.project === "string" && "request" in parsedBody;
+            // #37: apply the thinking variant (effort) BEFORE resolving the backend model
+            // so the selected tier is honored on both wrapped and unwrapped bodies.
+            const requestRootForVariant = isWrapped
+                ? parsedBody.request
+                : undefined;
+            // providerOptions may live at the top level (wrapped) or inline (unwrapped);
+            // generationConfig usually lives inside `request` when wrapped.
+            const variantProviderOptions = (parsedBody.providerOptions ?? requestRootForVariant?.providerOptions);
+            const variantGenerationConfig = (requestRootForVariant?.generationConfig ?? parsedBody.generationConfig);
+            const earlyVariantConfig = extractVariantThinkingConfig(variantProviderOptions, variantGenerationConfig);
+            const isGemini3Model = effectiveModel.toLowerCase().includes("gemini-3");
+            if (earlyVariantConfig?.thinkingLevel && isGemini3Model) {
+                tierThinkingLevel = earlyVariantConfig.thinkingLevel;
+                tierThinkingBudget = undefined;
+            }
+            else if (earlyVariantConfig?.thinkingBudget) {
+                if (isGemini3Model) {
+                    log.warn("[Deprecated] Using thinkingBudget for Gemini 3 model. Use thinkingLevel instead.");
+                    tierThinkingLevel = earlyVariantConfig.thinkingBudget <= 8192 ? "low"
+                        : earlyVariantConfig.thinkingBudget <= 16384 ? "medium" : "high";
+                    tierThinkingBudget = undefined;
+                }
+                else {
+                    tierThinkingBudget = earlyVariantConfig.thinkingBudget;
+                    tierThinkingLevel = undefined;
+                }
+            }
             if (isWrapped) {
                 const wrappedBody = {
                     ...parsedBody,
@@ -720,28 +747,8 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                 const requestPayload = { ...parsedBody };
                 const rawGenerationConfig = requestPayload.generationConfig;
                 const extraBody = requestPayload.extra_body;
-                const variantConfig = extractVariantThinkingConfig(requestPayload.providerOptions, rawGenerationConfig);
-                const isGemini3 = effectiveModel.toLowerCase().includes("gemini-3");
-                log.debug(`[ThinkingResolution] rawModel=${rawModel} resolvedModel=${effectiveModel} resolvedTier=${tierThinkingLevel ?? "none"} variantLevel=${variantConfig?.thinkingLevel ?? "none"} variantBudget=${variantConfig?.thinkingBudget ?? "none"} providerOptions.google=${JSON.stringify(requestPayload.providerOptions?.google ?? null)} generationConfig.thinkingConfig=${JSON.stringify(rawGenerationConfig?.thinkingConfig ?? null)}`);
-                if (variantConfig?.thinkingLevel && isGemini3) {
-                    // Gemini 3 native format - use thinkingLevel directly
-                    tierThinkingLevel = variantConfig.thinkingLevel;
-                    tierThinkingBudget = undefined;
-                }
-                else if (variantConfig?.thinkingBudget) {
-                    if (isGemini3) {
-                        // Legacy format for Gemini 3 - convert with deprecation warning
-                        log.warn("[Deprecated] Using thinkingBudget for Gemini 3 model. Use thinkingLevel instead.");
-                        tierThinkingLevel = variantConfig.thinkingBudget <= 8192 ? "low"
-                            : variantConfig.thinkingBudget <= 16384 ? "medium" : "high";
-                        tierThinkingBudget = undefined;
-                    }
-                    else {
-                        // Claude / Gemini 2.5 - use budget directly
-                        tierThinkingBudget = variantConfig.thinkingBudget;
-                        tierThinkingLevel = undefined;
-                    }
-                }
+                // Variant/effort was already applied above (before backend-model resolution, see #37).
+                log.debug(`[ThinkingResolution] rawModel=${rawModel} resolvedModel=${effectiveModel} resolvedTier=${tierThinkingLevel ?? "none"} variantLevel=${earlyVariantConfig?.thinkingLevel ?? "none"} variantBudget=${earlyVariantConfig?.thinkingBudget ?? "none"} providerOptions.google=${JSON.stringify(requestPayload.providerOptions?.google ?? null)} generationConfig.thinkingConfig=${JSON.stringify(rawGenerationConfig?.thinkingConfig ?? null)}`);
                 if (headerStyle === "antigravity") {
                     const gemini38FlashBackendModel = resolveAntigravityGemini38FlashBackendModel(rawModel, tierThinkingLevel);
                     if (gemini38FlashBackendModel) {
