@@ -54,27 +54,43 @@ jobs:
             exit 1
           fi
 
-      # Reports whether the PR branch is behind base or has merge conflicts, so an
-      # automated contributor (MCP client) knows to update or resolve it instead of guessing.
+      # Reports branch hygiene so an automated contributor (MCP client) knows whether to
+      # update the branch instead of guessing.
+      #
+      # NOTE: mergeable_state collapses to "unstable" while checks are pending, so staleness
+      # is read from the compare API (behind_by). Merge conflicts can NOT be reported from
+      # here: GitHub does not run pull_request workflows on a PR with conflicts, so this job
+      # never executes in that case. The agent must detect conflicts itself.
       - name: Check branch hygiene
         id: hygiene
         if: always() && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -e
           REPO="${{ github.repository }}"
-          state="unknown"
+          behind_by=$(gh api "repos/$REPO/compare/$BASE...$HEAD_SHA" --jq '.behind_by' 2>/dev/null || echo 0)
+          ms="unknown"
           for _ in 1 2 3 4 5; do
-            state=$(gh api "repos/$REPO/pulls/$PR" --jq '.mergeable_state' 2>/dev/null || echo unknown)
-            case "$state" in
+            ms=$(gh api "repos/$REPO/pulls/$PR" --jq '.mergeable_state' 2>/dev/null || echo unknown)
+            case "$ms" in
               unknown|"" ) sleep 4 ;;
               * ) break ;;
             esac
           done
-          echo "mergeable_state=$state"
-          echo "state=$state" >> "$GITHUB_OUTPUT"
+          state="clean"
+          if [ "${behind_by:-0}" -gt 0 ] 2>/dev/null; then state="behind"; fi
+          if [ "$ms" = "dirty" ]; then
+            if [ "$state" = "behind" ]; then state="behind+conflicts"; else state="conflicts"; fi
+          fi
+          echo "behind_by=$behind_by mergeable_state=$ms -> state=$state"
+          {
+            echo "state=$state"
+            echo "behind_by=$behind_by"
+          } >> "$GITHUB_OUTPUT"
 
       # Emit a machine-readable report on the PR so an automated contributor
       # (e.g. an MCP client) can read exactly what failed and iterate until green.
@@ -97,8 +113,8 @@ jobs:
               behind)
                 echo '> Branch is **behind** base. Action: call `update_pull_request_branch`, wait for CI, then re-read this comment.'
                 ;;
-              dirty)
-                echo '> Branch has **merge conflicts**. You cannot rebase (no shell): open the conflicted files, resolve the conflict markers by editing, and commit.'
+              conflicts|behind+conflicts)
+                echo '> Branch has **merge conflicts**. You cannot rebase (no shell): open the conflicted files, resolve the conflict markers by editing, commit, then call `update_pull_request_branch`.'
                 ;;
               unknown)
                 echo '> Mergeability could not be computed yet. Re-read this comment in a moment.'
@@ -146,7 +162,7 @@ jobs:
           gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@/tmp/pr-report.md >/dev/null
 
       - name: Fail job if any check failed or branch is conflicted
-        if: always() && (steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure' || steps.build.outcome == 'failure' || steps.hygiene.outputs.state == 'dirty')
+        if: always() && (steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure' || steps.build.outcome == 'failure' || contains(steps.hygiene.outputs.state, 'conflicts'))
         run: |
           echo "::error::Verification failed or the branch has merge conflicts. See the PR comment."
           exit 1
