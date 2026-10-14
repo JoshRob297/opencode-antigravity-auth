@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   test:
     name: Test on Node.js
@@ -24,19 +28,88 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run type check
-        run: npm run typecheck
+      - name: Type check
+        id: typecheck
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee /tmp/typecheck.log
 
       - name: Run tests
-        run: npm test
-
-      - name: Build
-        run: npm run build
-
-      - name: Check dist/ is in sync with src/
+        id: tests
+        continue-on-error: true
         run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/tests.log
+
+      - name: Build and check dist/ sync
+        id: build
+        continue-on-error: true
+        run: |
+          set -e
+          npm run build 2>&1 | tee /tmp/build.log
           git add -f dist
           if ! git diff --cached --exit-code -- dist; then
-            echo "::error::committed dist/ is out of sync with src/ — run 'npm run build' and commit the result."
+            echo "::error::committed dist/ is out of sync with src/ - run 'npm run build' and commit the result."
             exit 1
           fi
+
+      # Emit a machine-readable report on the PR so an automated contributor
+      # (e.g. an MCP client) can read exactly what failed and iterate until green.
+      - name: Build verification report
+        if: always()
+        run: |
+          {
+            echo '## Verificacion automatica'
+            echo ''
+            echo '| Check | Resultado |'
+            echo '|---|---|'
+            echo "| typecheck | ${{ steps.typecheck.outcome }} |"
+            echo "| tests | ${{ steps.tests.outcome }} |"
+            echo "| build + dist | ${{ steps.build.outcome }} |"
+            echo ''
+            echo '<details><summary>typecheck</summary>'
+            echo ''
+            echo '```'
+            tail -c 6000 /tmp/typecheck.log 2>/dev/null || echo '(sin log)'
+            echo '```'
+            echo '</details>'
+            echo ''
+            echo '<details><summary>tests</summary>'
+            echo ''
+            echo '```'
+            tail -c 6000 /tmp/tests.log 2>/dev/null || echo '(sin log)'
+            echo '```'
+            echo '</details>'
+            echo ''
+            echo '<details><summary>build</summary>'
+            echo ''
+            echo '```'
+            tail -c 3000 /tmp/build.log 2>/dev/null || echo '(sin log)'
+            echo '```'
+            echo '</details>'
+            echo ''
+            echo '<!-- pr-verify-report -->'
+          } > /tmp/pr-report.md
+
+      - name: Post/refresh PR verification comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -e
+          REPO="${{ github.repository }}"
+          MARKER='<!-- pr-verify-report -->'
+          ids=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" || true)
+          for id in $ids; do
+            gh api -X DELETE "repos/$REPO/issues/comments/$id" >/dev/null || true
+          done
+          gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@/tmp/pr-report.md >/dev/null
+
+      - name: Fail job if any check failed
+        if: always() && (steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure' || steps.build.outcome == 'failure')
+        run: |
+          echo "::error::Verificacion fallida. Revisar el comentario del PR."
+          exit 1
