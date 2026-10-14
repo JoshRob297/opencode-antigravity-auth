@@ -60,7 +60,7 @@ jobs:
         if: always()
         run: |
           {
-            echo '## Verificacion automatica'
+            echo '## Automated verification'
             echo ''
             echo '| Check | Resultado |'
             echo '|---|---|'
@@ -71,21 +71,21 @@ jobs:
             echo '<details><summary>typecheck</summary>'
             echo ''
             echo '```'
-            tail -c 6000 /tmp/typecheck.log 2>/dev/null || echo '(sin log)'
+            tail -c 6000 /tmp/typecheck.log 2>/dev/null || echo '(no log)'
             echo '```'
             echo '</details>'
             echo ''
             echo '<details><summary>tests</summary>'
             echo ''
             echo '```'
-            tail -c 6000 /tmp/tests.log 2>/dev/null || echo '(sin log)'
+            tail -c 6000 /tmp/tests.log 2>/dev/null || echo '(no log)'
             echo '```'
             echo '</details>'
             echo ''
             echo '<details><summary>build</summary>'
             echo ''
             echo '```'
-            tail -c 3000 /tmp/build.log 2>/dev/null || echo '(sin log)'
+            tail -c 3000 /tmp/build.log 2>/dev/null || echo '(no log)'
             echo '```'
             echo '</details>'
             echo ''
@@ -111,5 +111,5 @@ jobs:
       - name: Fail job if any check failed
         if: always() && (steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure' || steps.build.outcome == 'failure')
         run: |
-          echo "::error::Verificacion fallida. Revisar el comentario del PR."
+          echo "::error::Verification failed. See the PR comment."
           exit 1
