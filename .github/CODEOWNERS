@@ -1,0 +1,9 @@
+# Code owners for agent-governance surfaces.
+#
+# These paths are instructions/config consumed by AI agents and the CI gate, so they
+# must only change through owner review. This is enforced only when the branch ruleset
+# enables "Require review from Code Owners".
+
+/AGENTS.md              @JoshRob297
+/.github/CODEOWNERS     @JoshRob297
+/.github/workflows/     @JoshRob297
