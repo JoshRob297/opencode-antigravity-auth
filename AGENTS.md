@@ -5,6 +5,7 @@
 - Changes go through a draft PR. Never push to main.
 - Read before you write: find every use of a symbol; update all call sites in the same PR.
 - Minimal diff, one concern per PR. No unrequested refactors, reformatting, or dependency bumps.
+- Never commit secrets. Self-review the full diff before opening the PR.
 - Verify with CI before claiming done. Green checks are required.
 <!-- agent-baseline:end -->
 
