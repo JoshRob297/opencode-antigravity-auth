@@ -389,7 +389,7 @@ Permission 'cloudaicompanion.companions.generateChat' denied on resource
 
 Add this to your `google` provider config:
 
-```json
+```jsonc
 {
   "providers": {
     "google": {
@@ -476,7 +476,7 @@ If you encounter errors during a session:
 
 **Important:** Disable the built-in Google auth to prevent conflicts:
 
-```json
+```jsonc
 // ~/.config/opencode/oh-my-opencode.json
 {
   "google_auth": false,
