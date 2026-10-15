@@ -77,6 +77,8 @@ Gemini 3 models use string-based thinking levels. Available levels differ by mod
 ```
 
 > **Note (2026-10-13):** Gemini 3.7 Flash, Gemini 3.6 Flash and Gemini 3.1 Pro moved to **Google AI Ultra / Enterprise-only** and are no longer registered by this plugin for consumer plans. Gemini 3.8 Flash is the only Gemini model available on consumer plans.
+>
+> **Gemini 4 ("Argon") is not registered and is not planned for now.** The Antigravity backend exposes it to **Google AI Ultra / Enterprise** accounts only, which we cannot test against, and this project does not ship unverified model support. On consumer plans the recommended workhorse is **Gemini 3.8 Flash**; see the project status note in the [README](../README.md).
 
 ---
 
@@ -142,10 +144,9 @@ Tier-suffixed model names are still accepted:
 - `antigravity-claude-opus-4-6-thinking-low`
 - `antigravity-claude-opus-4-6-thinking-medium`
 - `antigravity-claude-opus-4-6-thinking-high`
-- `antigravity-gemini-3-pro-low`
-- `antigravity-gemini-3-pro-high`
-- `gemini-3-pro-low`
-- `gemini-3-flash-medium`
+- `antigravity-gemini-3.8-flash-low`
+- `antigravity-gemini-3.8-flash-medium`
+- `antigravity-gemini-3.8-flash-high`
 
 However, **we recommend using simplified model names with variants** for:
 

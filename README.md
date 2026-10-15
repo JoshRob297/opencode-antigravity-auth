@@ -9,15 +9,21 @@
 > [!IMPORTANT]
 > **Project Status (October 2026) - maintenance paused.**
 > After extended real-world use we are pausing new plugin work until Google ships a model that is genuinely worth paying for:
-> - **Gemini 3.8 Flash** is very fast at generating code, but it still produces failures and does not demonstrate parity with models such as **DeepSeek** - let alone the current frontier models.
-> - On **2026-10-13** Google released **Gemini 4 ("Argon")**, but it is restricted to **Google AI Ultra / Enterprise** - not to Google AI Pro. On the same day, **Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro moved to Enterprise-only**, leaving consumer plans with **Gemini 3.8 Flash** as the only Gemini model. **Gemini 3.5 Pro** has still not shipped.
+> - **Gemini 4 ("Argon") integration is not planned and not implemented.** On **2026-10-13** Google released Argon, but the Antigravity backend exposes it only to **Google AI Ultra / Enterprise** accounts - not to Google AI Pro or free-tier. We hold no account of that type, so the integration could neither be built nor verified end to end, and this project does not ship untested model support.
+> - **Paying the Ultra / Enterprise difference for Argon is not worth it today.** Argon has not demonstrated the value Google claims: on real repository work we cannot reproduce a quality gain over the current workhorse that justifies a frontier-tier price, and paying the tier would still not fix the Antigravity backend, which keeps treating the account as `free-tier`.
+> - **Recommended daily workhorse: Gemini 3.8 Flash.** It is the only Gemini model left on consumer plans, is very fast at generating code, and is free at the margin with Antigravity credentials. Use it for high-volume, low-risk work and escalate to a frontier model (e.g. **DeepSeek**) when output quality is the actual constraint.
+> - On the same **2026-10-13** change, **Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro moved to Enterprise-only**, leaving consumer plans with **Gemini 3.8 Flash** as the only Gemini model. **Gemini 3.5 Pro** has still not shipped.
 > - The Antigravity backend stays unreliable for paid plans: the tier is recognized (`paidTier = g1-pro-tier`) but not applied (`currentTier = free-tier`), Claude 5.5 is unavailable, and Claude 4.6 + GPT-OSS-120b are scheduled for removal on **2026-11-02**.
+>
+> Argon support will be reconsidered only when one of these changes: (a) the Antigravity backend exposes Argon to consumer plans, (b) an Ultra / Enterprise account becomes available for end-to-end verification, or (c) Argon shows a measurable advantage over the current workhorse on real repository tasks.
 >
 > The plugin remains functional as-is (pin a known-good release). Maintenance resumes when Google offers something actually worth paying for.
 
 ---
 
 ### What's New & Changed in this Fork (v2.0.0)
+
+> *Release notes for the v2.0.0 line.* Model availability described below reflects the state at that time. Since **2026-10-13**, **Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro are Ultra / Enterprise-only** and were pruned from the consumer catalog in **v2.0.4**; see [Models](#models) for the current catalog and the project status note above for the Argon decision.
 
 - **OpenCode v2 Native Engine & Variant Registration**: Fully updated for OpenCode v2 (`@opencode/cli` 2.0+). Registers all models with explicit `variants` (`low`, `medium`, `high`, `max`) and `status: active`, preventing `VariantUnavailableError`.
 - **New Real-Time Engine Stats (`/antigravity-stats` & `antigravity_stats`)**: Instant local diagnostic dashboard reporting per-account request distribution (OK / 429 / Errors), live health score, active rotation state, and thinking signature cache hit rate (without external network latency).
@@ -58,7 +64,7 @@ Enable OpenCode to authenticate against **Antigravity** (Google's IDE) via OAuth
 
 ## What You Get
 
-- **Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.1 Pro/Flash**, and **Claude Opus 4.6, Sonnet 4.6** via Google OAuth
+- **Gemini 3.8 Flash**, **Claude Opus 4.6 / Sonnet 4.6** and **GPT-OSS 120B** via Google OAuth - this is the complete consumer catalog; **Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro are Ultra / Enterprise-only** and no longer registered
 - **Multi-account support** — add multiple Google accounts, auto-rotates when rate-limited
 - **Request Normalization & Clean Feedback** — optimized parameters prevent false-positives on development tasks; clean one-line message on filter notices
 - **Slash Commands** — `/antigravity-quota` to inspect dual-window limits, and `/antigravity-stats` for instant local metrics
@@ -206,35 +212,6 @@ In OpenCode v2 this is **not required** because the plugin registers all models 
           "variants": {
             "low": { "thinkingLevel": "low" },
             "medium": { "thinkingLevel": "medium" },
-            "high": { "thinkingLevel": "high" }
-          }
-        },
-        "antigravity-gemini-3.7-flash": {
-          "name": "Gemini 3.7 Flash (Antigravity)",
-          "limit": { "context": 1048576, "output": 65536 },
-          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] },
-          "variants": {
-            "low": { "thinkingLevel": "low" },
-            "medium": { "thinkingLevel": "medium" },
-            "high": { "thinkingLevel": "high" }
-          }
-        },
-        "antigravity-gemini-3.6-flash": {
-          "name": "Gemini 3.6 Flash (Antigravity)",
-          "limit": { "context": 1048576, "output": 65536 },
-          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] },
-          "variants": {
-            "low": { "thinkingLevel": "low" },
-            "medium": { "thinkingLevel": "medium" },
-            "high": { "thinkingLevel": "high" }
-          }
-        },
-        "antigravity-gemini-3.1-pro": {
-          "name": "Gemini 3.1 Pro (Antigravity)",
-          "limit": { "context": 1048576, "output": 65535 },
-          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] },
-          "variants": {
-            "low": { "thinkingLevel": "low" },
             "high": { "thinkingLevel": "high" }
           }
         },
@@ -504,8 +481,8 @@ If you encounter errors during a session:
 {
   "google_auth": false,
   "agents": {
-    "frontend-ui-ux-engineer": { "model": "google/antigravity-gemini-3.1-pro" },
-    "document-writer": { "model": "google/antigravity-gemini-3.7-flash" }
+    "frontend-ui-ux-engineer": { "model": "google/antigravity-gemini-3.8-flash" },
+    "document-writer": { "model": "google/antigravity-gemini-3.8-flash" }
   }
 }
 ```
@@ -642,9 +619,9 @@ Disable built-in auth and override agent models in `oh-my-opencode.json`:
 {
   "google_auth": false,
   "agents": {
-    "frontend-ui-ux-engineer": { "model": "google/antigravity-gemini-3.1-pro" },
-    "document-writer": { "model": "google/antigravity-gemini-3.7-flash" },
-    "multimodal-looker": { "model": "google/antigravity-gemini-3.7-flash" }
+    "frontend-ui-ux-engineer": { "model": "google/antigravity-gemini-3.8-flash" },
+    "document-writer": { "model": "google/antigravity-gemini-3.8-flash" },
+    "multimodal-looker": { "model": "google/antigravity-gemini-3.8-flash" }
   }
 }
 ```

@@ -46,9 +46,10 @@ opencode auth login
 ```
 
 This shows remaining quota percentages and reset times for each model family:
-- **Claude** - Claude Opus/Sonnet quota
-- **Gemini 3 Pro** - Gemini 3 Pro quota
-- **Gemini 3 Flash** - Gemini 3 Flash quota
+- **Claude & GPT** - Claude Opus 4.6 / Sonnet 4.6 and GPT-OSS 120B quota
+- **Gemini** - Gemini Flash quota (on consumer plans `antigravity-gemini-3.8-flash` is the only registered Gemini model)
+
+> **Reading the report:** `N/A` in the 5h column means the API granted **no 5-hour bucket** for that account, which is what accounts without a paid plan get. Only accounts with a 5h window have burst capacity; a weekly window alone is the free-tier behaviour. Use this column, not the onboarding tier returned by `loadCodeAssist`, to decide which accounts are worth keeping in the pool.
 
 ### Standalone Quota Script
 
