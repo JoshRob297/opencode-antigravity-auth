@@ -80,9 +80,11 @@ Accept: text/event-stream
 |------------|----------|------|--------|
 | Claude Sonnet 4.6 | `claude-sonnet-4-6` | Anthropic | Verified |
 | Claude Opus 4.6 Thinking | `claude-opus-4-6-thinking` | Anthropic | Verified |
-| Gemini 3 Pro High | `gemini-3-pro-high` | Google | Verified |
-| Gemini 3 Pro Low | `gemini-3-pro-low` | Google | Verified |
+| Gemini 3.8 Flash (Low / Medium / High) | `gemini-3.8-flash-{low,medium,high}` | Google | Verified |
 | GPT-OSS 120B Medium | `gpt-oss-120b-medium` | Other | Verified |
+| Gemini 4 (Argon) | - | Google | Not exposed to consumer plans (Ultra / Enterprise only). Not integrated - no testable account. |
+
+> Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro were reachable from consumer plans until **2026-10-13**, when they moved to Ultra / Enterprise-only. Their backend resolvers are retained for future / Enterprise use but they are no longer registered as selectable models.
 
 ---
 
