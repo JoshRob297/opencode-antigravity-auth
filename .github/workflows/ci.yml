@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   test:
     name: Test on Node.js
@@ -24,19 +28,141 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run type check
-        run: npm run typecheck
+      - name: Type check
+        id: typecheck
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee /tmp/typecheck.log
 
       - name: Run tests
-        run: npm test
-
-      - name: Build
-        run: npm run build
-
-      - name: Check dist/ is in sync with src/
+        id: tests
+        continue-on-error: true
         run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/tests.log
+
+      - name: Build and check dist/ sync
+        id: build
+        continue-on-error: true
+        run: |
+          set -e
+          npm run build 2>&1 | tee /tmp/build.log
           git add -f dist
           if ! git diff --cached --exit-code -- dist; then
-            echo "::error::committed dist/ is out of sync with src/ — run 'npm run build' and commit the result."
+            echo "::error::committed dist/ is out of sync with src/ - run 'npm run build' and commit the result."
             exit 1
           fi
+
+      # Reports branch hygiene so an automated contributor (MCP client) knows whether to
+      # update the branch instead of guessing.
+      #
+      # NOTE: mergeable_state collapses to "unstable" while checks are pending, so staleness
+      # is read from the compare API (behind_by). Merge conflicts can NOT be reported from
+      # here: GitHub does not run pull_request workflows on a PR with conflicts, so this job
+      # never executes in that case. The agent must detect conflicts itself.
+      - name: Check branch hygiene
+        id: hygiene
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -e
+          REPO="${{ github.repository }}"
+          behind_by=$(gh api "repos/$REPO/compare/$BASE...$HEAD_SHA" --jq '.behind_by' 2>/dev/null || echo 0)
+          ms="unknown"
+          for _ in 1 2 3 4 5; do
+            ms=$(gh api "repos/$REPO/pulls/$PR" --jq '.mergeable_state' 2>/dev/null || echo unknown)
+            case "$ms" in
+              unknown|"" ) sleep 4 ;;
+              * ) break ;;
+            esac
+          done
+          state="clean"
+          if [ "${behind_by:-0}" -gt 0 ] 2>/dev/null; then state="behind"; fi
+          if [ "$ms" = "dirty" ]; then
+            if [ "$state" = "behind" ]; then state="behind+conflicts"; else state="conflicts"; fi
+          fi
+          echo "behind_by=$behind_by mergeable_state=$ms -> state=$state"
+          {
+            echo "state=$state"
+            echo "behind_by=$behind_by"
+          } >> "$GITHUB_OUTPUT"
+
+      # Emit a machine-readable report on the PR so an automated contributor
+      # (e.g. an MCP client) can read exactly what failed and iterate until green.
+      - name: Build verification report
+        if: always()
+        env:
+          HYGIENE: ${{ steps.hygiene.outputs.state }}
+        run: |
+          {
+            echo '## Automated verification'
+            echo ''
+            echo '| Check | Result |'
+            echo '|---|---|'
+            echo "| typecheck | ${{ steps.typecheck.outcome }} |"
+            echo "| tests | ${{ steps.tests.outcome }} |"
+            echo "| build + dist | ${{ steps.build.outcome }} |"
+            echo "| branch | ${HYGIENE:-n/a} |"
+            echo ''
+            case "$HYGIENE" in
+              behind)
+                echo '> Branch is **behind** base. Action: call `update_pull_request_branch`, wait for CI, then re-read this comment.'
+                ;;
+              conflicts|behind+conflicts)
+                echo '> Branch has **merge conflicts**. You cannot rebase (no shell): open the conflicted files, resolve the conflict markers by editing, commit, then call `update_pull_request_branch`.'
+                ;;
+              unknown)
+                echo '> Mergeability could not be computed yet. Re-read this comment in a moment.'
+                ;;
+            esac
+            echo ''
+            echo '<details><summary>typecheck</summary>'
+            echo ''
+            echo '```'
+            tail -c 6000 /tmp/typecheck.log 2>/dev/null || echo '(no log)'
+            echo '```'
+            echo '</details>'
+            echo ''
+            echo '<details><summary>tests</summary>'
+            echo ''
+            echo '```'
+            tail -c 6000 /tmp/tests.log 2>/dev/null || echo '(no log)'
+            echo '```'
+            echo '</details>'
+            echo ''
+            echo '<details><summary>build</summary>'
+            echo ''
+            echo '```'
+            tail -c 3000 /tmp/build.log 2>/dev/null || echo '(no log)'
+            echo '```'
+            echo '</details>'
+            echo ''
+            echo '<!-- pr-verify-report -->'
+          } > /tmp/pr-report.md
+
+      - name: Post/refresh PR verification comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -e
+          REPO="${{ github.repository }}"
+          MARKER='<!-- pr-verify-report -->'
+          ids=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" || true)
+          for id in $ids; do
+            gh api -X DELETE "repos/$REPO/issues/comments/$id" >/dev/null || true
+          done
+          gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@/tmp/pr-report.md >/dev/null
+
+      - name: Fail job if any check failed or branch is conflicted
+        if: always() && (steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure' || steps.build.outcome == 'failure' || contains(steps.hygiene.outputs.state, 'conflicts'))
+        run: |
+          echo "::error::Verification failed or the branch has merge conflicts. See the PR comment."
+          exit 1
