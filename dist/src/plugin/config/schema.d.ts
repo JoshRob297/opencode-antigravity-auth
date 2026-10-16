@@ -102,6 +102,7 @@ export declare const AntigravityConfigSchema: z.ZodObject<{
     max_all_blocked_wait_seconds: z.ZodDefault<z.ZodNumber>;
     quota_fallback: z.ZodDefault<z.ZodBoolean>;
     cli_first: z.ZodDefault<z.ZodBoolean>;
+    model_discovery: z.ZodDefault<z.ZodBoolean>;
     account_selection_strategy: z.ZodDefault<z.ZodEnum<{
         sticky: "sticky";
         "round-robin": "round-robin";
