@@ -88,11 +88,11 @@ Settings for managing multiple Google accounts.
 
 ## Model Discovery
 
-The Antigravity backend returns a per-account model catalog. With `model_discovery` enabled, the plugin registers the models that catalog reports (filtered) **in addition to** the curated catalog, so a model this plugin has not curated yet - for example the Gemini 4 "Argon" line - appears automatically for accounts that actually have it.
+With `model_discovery` enabled, the plugin reads the backend catalog for the active account and registers the models in it that are **newer than the curated catalog** - today that means the Gemini 4 "Argon" line and future Flash generations. This is how a model lands here without the plugin hardcoding it first.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `model_discovery` | `false` | Register the filtered backend catalog for the active account |
+| `model_discovery` | `false` | Register backend models newer than the curated catalog for the active account |
 
 ```json
 // ~/.config/opencode/antigravity.json
@@ -103,11 +103,12 @@ The Antigravity backend returns a per-account model catalog. With `model_discove
 
 Notes:
 
-- **Off by default.** Enabling it changes the visible model list.
-- Ids known to be unusable are filtered out. The backend catalog is *not* a list of usable models: it also reports decommissioned ids (HTTP `404`), ids that answer `200` with a canned "no longer available" message, and internal ids that are not chat models. Discovery applies an allowlist of id families plus a denylist of the ids measured as dead, so a `200` alone is never treated as proof.
-- Curated entries win: a discovered id never overrides a curated model definition.
+- **Forward-only.** Discovery never resurrects older generations. The backend catalog contains many ids the official Antigravity client does not offer, and a `200` does not identify them: measured against a real consumer account, 12 of 25 catalog ids answered `200` *and* performed tool calls, all of them older than `gemini-3.8-flash`, and one (`gemini-3.5-flash`) answers `200` while being decommissioned ("Gemini 3.5 Flash is no longer available"). Surfacing those would only widen an unsupported surface.
+- **Already curated ids are never duplicated** - curated entries win, and the catalog's own view of them adds nothing.
+- A denylist still runs first (internal ids, image models, tiered ids, and the ids measured as dead or retired).
 - Best-effort: if the catalog lookup fails (network, auth, backend change), the curated catalog is used and startup is unaffected.
-- OpenCode v1 registers models from `opencode.json`, so discovery applies to the v2 model registry.
+- Applies to the v2 model registry; v1 registers models from `opencode.json`.
+- The catalog is read for the **active** account at startup, so switching accounts requires a restart to re-discover.
 
 ---
 

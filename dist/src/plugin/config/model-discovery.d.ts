@@ -3,21 +3,40 @@ import type { OpencodeModelDefinition, OpencodeModelDefinitions } from "./models
  * Optional dynamic model discovery.
  *
  * The Antigravity backend returns a per-account model catalog through
- * `fetchAvailableModels`. That catalog is what an account can actually use, so
- * using it as the source of truth means new models (for example the Gemini 4
- * "Argon" line) show up for the accounts that have them, without this plugin
- * having to claim support for a model it cannot verify.
+ * `fetchAvailableModels`, which is an authoritative answer to "what can this
+ * account reach". Discovery uses it for one purpose only: surfacing a model
+ * **newer** than the curated catalog (the Gemini 4 "Argon" line and whatever
+ * follows) without waiting for a plugin release.
  *
- * The catalog is NOT a list of usable models, though: it also contains
- * decommissioned ids that answer with 404, ids that answer 200 with a canned
- * "no longer available" message, and internal ids that are not chat models.
- * Every entry below was measured against a real consumer account on
- * 2026-10-15 by replaying the plugin's own request envelope.
+ * It is deliberately not a mirror of the catalog. The catalog is full of ids the
+ * official Antigravity client does not offer, and they cannot be told apart by
+ * status code: measured against a real consumer account on 2026-10-15, 12 of 25
+ * ids answered `200` **and** performed tool calls, including generations older
+ * than the curated 3.8 Flash - one of them (`gemini-3.5-flash`) answers `200`
+ * while being decommissioned ("Gemini 3.5 Flash is no longer available").
+ * Adding those would only widen an unsupported surface.
  */
 /**
  * Id families that may be surfaced by discovery.
+ *
+ * Forward-only by design: discovery exists to expose a model **newer** than the
+ * curated catalog (Gemini 4 "Argon" and whatever follows), never to resurrect
+ * older generations. Everything the backend still lists but the official
+ * Antigravity client (`agy`) does not offer is either legacy kept alive for
+ * other clients or decommissioned: those ids are not surfaced even though they
+ * answer `200` and can do tool calls (measured 2026-10-15 - `gemini-3-flash`,
+ * `gemini-3.1-flash-lite`, `gemini-3.5-flash-lite`, `gemini-2.5-flash*` all did).
  */
 export declare const DISCOVERY_ALLOWLIST: RegExp[];
+/**
+ * Newest Gemini Flash generation in the curated catalog
+ * (`antigravity-gemini-3.8-flash`). Discovery only surfaces strictly newer ones,
+ * so a newer Flash tier shows up without waiting for a plugin release.
+ */
+export declare const DISCOVERY_GEMINI_FLASH_FLOOR: {
+    major: number;
+    minor: number;
+};
 /**
  * Ids (or id families) that must never be surfaced, with the measured reason.
  */
