@@ -86,6 +86,31 @@ Settings for managing multiple Google accounts.
 
 ---
 
+## Model Discovery
+
+The Antigravity backend returns a per-account model catalog. With `model_discovery` enabled, the plugin registers the models that catalog reports (filtered) **in addition to** the curated catalog, so a model this plugin has not curated yet - for example the Gemini 4 "Argon" line - appears automatically for accounts that actually have it.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `model_discovery` | `false` | Register the filtered backend catalog for the active account |
+
+```json
+// ~/.config/opencode/antigravity.json
+{
+  "model_discovery": true
+}
+```
+
+Notes:
+
+- **Off by default.** Enabling it changes the visible model list.
+- Ids known to be unusable are filtered out. The backend catalog is *not* a list of usable models: it also reports decommissioned ids (HTTP `404`), ids that answer `200` with a canned "no longer available" message, and internal ids that are not chat models. Discovery applies an allowlist of id families plus a denylist of the ids measured as dead, so a `200` alone is never treated as proof.
+- Curated entries win: a discovered id never overrides a curated model definition.
+- Best-effort: if the catalog lookup fails (network, auth, backend change), the curated catalog is used and startup is unaffected.
+- OpenCode v1 registers models from `opencode.json`, so discovery applies to the v2 model registry.
+
+---
+
 ## App Behavior
 
 Settings that control plugin behavior.

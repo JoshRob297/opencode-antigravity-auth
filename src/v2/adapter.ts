@@ -24,7 +24,8 @@ import {
   transformAntigravityResponse,
   isGenerativeLanguageRequest,
 } from "../plugin/request";
-import { OPENCODE_MODEL_DEFINITIONS } from "../plugin/config/models";
+import { OPENCODE_MODEL_DEFINITIONS, type OpencodeModelDefinitions } from "../plugin/config/models";
+import { collectDiscoveredModels } from "../plugin/config/model-discovery";
 import { updateOpencodeConfig } from "../plugin/config/updater";
 
 const log = createLogger("v2-adapter");
@@ -925,6 +926,32 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
     });
   }
 
+  // 1.6 Optional dynamic model discovery (config: `model_discovery`).
+  // Asks the backend which models the active account actually has, so models this
+  // plugin has not curated (for example the Gemini 4 "Argon" line) are registered
+  // for the accounts that own them. Best-effort: any failure keeps the curated
+  // catalog, and a failed startup must never break the provider.
+  let discoveredModels: OpencodeModelDefinitions = {};
+  if (config.model_discovery) {
+    try {
+      const storage = await loadAccounts();
+      const account = storage?.accounts?.[storage.activeIndex ?? 0] ?? storage?.accounts?.[0];
+      if (account?.refreshToken) {
+        const accessToken = await getAccessToken(account);
+        if (accessToken) {
+          discoveredModels = await collectDiscoveredModels(
+            accessToken,
+            account.managedProjectId || account.projectId,
+          );
+        }
+      }
+    } catch (error) {
+      log.warn(
+        `[v2] Model discovery failed, keeping the curated catalog: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   // 2. Model catalog transforms in OpenCode v2.
   // The v2 ModelEditor exposes only list/get/update/remove/default/provider.
   // `update(providerID, modelID, draft => ...)` seeds `Model.Info.default`
@@ -933,7 +960,9 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
   // Antigravity OAuth integration has at least one connection (section 1.5).
   if (context.model && typeof context.model.transform === "function") {
     await context.model.transform((editor) => {
-      for (const [modelId, def] of Object.entries(OPENCODE_MODEL_DEFINITIONS)) {
+      // Curated entries win over discovered ones for the same model id.
+      const catalog = { ...discoveredModels, ...OPENCODE_MODEL_DEFINITIONS };
+      for (const [modelId, def] of Object.entries(catalog)) {
         try {
           editor.update("google", modelId, (draft) => {
             draft.name = def.name;

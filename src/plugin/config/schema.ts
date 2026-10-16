@@ -324,6 +324,21 @@ export const AntigravityConfigSchema = z.object({
   cli_first: z.boolean().default(false),
   
   /**
+   * Register the models the backend reports for the active account, in addition
+   * to the curated catalog.
+   *
+   * The Antigravity backend returns a per-account model list. With this enabled,
+   * models an account actually has (for example the Gemini 4 "Argon" line) are
+   * registered automatically, instead of waiting for this plugin to hardcode
+   * them. Ids known to be dead, retired or internal are filtered out.
+   *
+   * Off by default: enabling it changes the visible model list.
+   *
+   * @default false
+   */
+  model_discovery: z.boolean().default(false),
+  
+  /**
    * Strategy for selecting accounts when making requests.
    * Env override: OPENCODE_ANTIGRAVITY_ACCOUNT_SELECTION_STRATEGY
    * @default "hybrid"
@@ -510,6 +525,7 @@ export const DEFAULT_CONFIG: AntigravityConfig = {
   max_all_blocked_wait_seconds: 120,
   quota_fallback: false,
   cli_first: false,
+  model_discovery: false,
   account_selection_strategy: 'hybrid',
   pid_offset_enabled: false,
   switch_on_first_rate_limit: true,
