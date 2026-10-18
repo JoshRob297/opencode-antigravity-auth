@@ -38,9 +38,30 @@ export declare const DISCOVERY_GEMINI_FLASH_FLOOR: {
     minor: number;
 };
 /**
+ * Newest Claude generation in the curated catalog (`antigravity-claude-opus-4-6-thinking`).
+ * Discovery surfaces strictly newer generations, which is what makes the
+ * successors of the Claude 4.6 trio - removed on 2026-11-02 for **every** plan -
+ * available to the accounts that are entitled to them (Claude Sonnet/Opus 5.5 on
+ * paid AI Pro, Ultra and Enterprise) without a plugin release or an unverifiable
+ * curated entry.
+ */
+export declare const DISCOVERY_CLAUDE_FLOOR: {
+    major: number;
+    minor: number;
+};
+/**
  * Ids (or id families) that must never be surfaced, with the measured reason.
  */
 export declare const DISCOVERY_DENYLIST: RegExp[];
+/**
+ * True when the curated catalog already registers this model (with or without
+ * the `-tiered` suffix), so discovery must not add a duplicate entry.
+ *
+ * This is what keeps `gemini-3.8-flash-tiered` out while still surfacing
+ * `gemini-4-argon-tiered`: a model with no curated entry has to stay selectable,
+ * otherwise a brand new family would be hidden by a naming detail.
+ */
+export declare function isCoveredByCuratedCatalog(id: string): boolean;
 /**
  * True when an id returned by the backend catalog may be surfaced to the user.
  */
