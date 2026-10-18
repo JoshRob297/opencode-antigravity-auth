@@ -38,6 +38,18 @@ export declare const DISCOVERY_GEMINI_FLASH_FLOOR: {
     minor: number;
 };
 /**
+ * Newest Claude generation in the curated catalog (`antigravity-claude-opus-4-6-thinking`).
+ * Discovery surfaces strictly newer generations, which is what makes the
+ * successors of the Claude 4.6 trio - removed on 2026-11-02 for **every** plan -
+ * available to the accounts that are entitled to them (Claude Sonnet/Opus 5.5 on
+ * paid AI Pro, Ultra and Enterprise) without a plugin release or an unverifiable
+ * curated entry.
+ */
+export declare const DISCOVERY_CLAUDE_FLOOR: {
+    major: number;
+    minor: number;
+};
+/**
  * Ids (or id families) that must never be surfaced, with the measured reason.
  */
 export declare const DISCOVERY_DENYLIST: RegExp[];

@@ -256,8 +256,8 @@ The Antigravity backend reports which models each account can use. With `model_d
 }
 ```
 
-- **If your account has Argon, it shows up.** Gemini 4 Argon (`gemini-4-argon`, `-low`, `-medium`, `-high`) is on the allowlist, so an AI Pro / Ultra / Enterprise account that the backend lists it for gets the selector entry automatically. Discovery never claims support: it mirrors what the backend grants that account.
-- **Forward-only.** Anything older than the curated workhorse (`gemini-3.8-flash`) stays out, curated ids are never duplicated, and ids measured as dead, retired or internal are filtered by a denylist. A `200` from the backend is not treated as proof of usability.
+- **If your account has Argon or Claude 5.5, they show up.** Gemini 4 Argon (`gemini-4-argon`, `-low`, `-medium`, `-high`) and the Claude Sonnet/Opus 5.5 successors are on the forward-only rule, so an AI Pro / Ultra / Enterprise account the backend lists them for gets the selector entry automatically - which matters on **2026-11-02**, when Claude 4.6 and GPT-OSS 120B are removed for every plan. Discovery never claims support: it mirrors what the backend grants that account.
+- **Forward-only.** Anything older than the curated workhorses (`gemini-3.8-flash`, Claude 4.6) stays out, curated ids are never duplicated, and ids measured as dead, retired or internal are filtered by a denylist. A `200` from the backend is not treated as proof of usability.
 - **Best-effort.** If the catalog lookup fails, the curated catalog is used and startup is unaffected.
 
 Full behavior, limits and caveats: [docs/CONFIGURATION.md](docs/CONFIGURATION.md#model-discovery).
