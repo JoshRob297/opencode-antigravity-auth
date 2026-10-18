@@ -197,4 +197,4 @@ Configúralo en `antigravity.json`:
 | `round-robin` | Rota a la siguiente cuenta en cada petición | Máximo throughput |
 | `hybrid` | Selección determinista según health score + token bucket + LRU | La mejor distribución general |
 
-Consulta [Configuración](CONFIGURATION.es.md#rotacion-de-cuentas) para más detalles.
+Consulta [Configuración](CONFIGURATION.es.md#rotación-de-cuentas) para más detalles.
