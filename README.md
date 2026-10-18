@@ -1,5 +1,7 @@
 # Antigravity OAuth Plugin for OpenCode (Revived & Extended)
 
+**English** | [Español](README.es.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/JoshRob297/opencode-antigravity-auth/actions/workflows/ci.yml/badge.svg)](https://github.com/JoshRob297/opencode-antigravity-auth/actions/workflows/ci.yml)
 
@@ -749,6 +751,10 @@ See the full [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for solutions to c
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — Common issues and fixes
 - [Architecture](docs/ARCHITECTURE.md) — How the plugin works
 - [API Spec](docs/ANTIGRAVITY_API_SPEC.md) — Antigravity API reference
+
+Translations:
+
+- [Español (README.es.md)](README.es.md) — Spanish translation of this README. English is the source of truth; the translation may lag behind.
 
 ---
 
