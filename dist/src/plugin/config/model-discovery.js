@@ -39,7 +39,17 @@ export const DISCOVERY_ALLOWLIST = [
  * so a newer Flash tier shows up without waiting for a plugin release.
  */
 export const DISCOVERY_GEMINI_FLASH_FLOOR = { major: 3, minor: 8 };
+/**
+ * Newest Claude generation in the curated catalog (`antigravity-claude-opus-4-6-thinking`).
+ * Discovery surfaces strictly newer generations, which is what makes the
+ * successors of the Claude 4.6 trio - removed on 2026-11-02 for **every** plan -
+ * available to the accounts that are entitled to them (Claude Sonnet/Opus 5.5 on
+ * paid AI Pro, Ultra and Enterprise) without a plugin release or an unverifiable
+ * curated entry.
+ */
+export const DISCOVERY_CLAUDE_FLOOR = { major: 4, minor: 6 };
 const GEMINI_FLASH_VERSION = /^gemini-(\d+)(?:\.(\d+))?-flash(?:[-.]|$)/i;
+const CLAUDE_VERSION = /^claude-(?:sonnet|opus)-(\d+)(?:-(\d+))?/i;
 /**
  * True when a Gemini Flash id is a newer generation than the curated floor.
  */
@@ -50,6 +60,21 @@ function isNewerGeminiFlash(id) {
     const major = Number(match[1]);
     const minor = Number(match[2] ?? 0);
     const floor = DISCOVERY_GEMINI_FLASH_FLOOR;
+    return major > floor.major || (major === floor.major && minor > floor.minor);
+}
+/**
+ * True when a Claude id is a newer generation than the curated floor.
+ * The backend names these with a dash, e.g. `claude-opus-5-5` or
+ * `claude-sonnet-5-5-max`; older ones (`claude-opus-4-8`, `claude-opus-4-6-thinking`)
+ * stay out.
+ */
+function isNewerClaude(id) {
+    const match = CLAUDE_VERSION.exec(id);
+    if (!match)
+        return false;
+    const major = Number(match[1]);
+    const minor = Number(match[2] ?? 0);
+    const floor = DISCOVERY_CLAUDE_FLOOR;
     return major > floor.major || (major === floor.major && minor > floor.minor);
 }
 /**
@@ -115,7 +140,7 @@ export function isDiscoverableModelId(id) {
         return false;
     if (DISCOVERY_ALLOWLIST.some((pattern) => pattern.test(candidate)))
         return true;
-    return isNewerGeminiFlash(candidate);
+    return isNewerGeminiFlash(candidate) || isNewerClaude(candidate);
 }
 /**
  * Human-readable label for a backend id that has no curated entry.
@@ -126,6 +151,16 @@ export function displayNameForModelId(id) {
     };
     if (overrides[id])
         return overrides[id];
+    // `claude-opus-5-5-max` reads better as "Claude Opus 5.5 Max" than as a
+    // dash-split humanization ("Claude Opus 5 5 Max").
+    const claude = /^claude-(sonnet|opus)-(\d+)-(\d+)(?:-(.+))?$/i.exec(id);
+    if (claude) {
+        const family = claude[1].charAt(0).toUpperCase() + claude[1].slice(1).toLowerCase();
+        const tier = claude[4]
+            ? " " + claude[4].split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ")
+            : "";
+        return `Claude ${family} ${claude[2]}.${claude[3]}${tier} (Antigravity)`;
+    }
     // The `-tiered` suffix is a backend mechanic (the thinking level is chosen per
     // request through the variants), so it is dropped from the label only.
     const formatted = id
@@ -151,16 +186,18 @@ export function buildDiscoveredModelDefinition(id) {
     const lower = id.toLowerCase();
     const isClaude = lower.startsWith("claude-");
     const isGptOss = lower.startsWith("gpt-oss-");
-    const isClaudeThinking = isClaude && lower.includes("thinking");
     const definition = {
         name: displayNameForModelId(id),
         limit: isClaude ? CLAUDE_LIMIT : isGptOss ? GPT_OSS_LIMIT : GEMINI_LIMIT,
         modalities: { input: [...MODALITIES.input], output: [...MODALITIES.output] },
     };
-    if (isClaudeThinking) {
+    if (isClaude) {
+        // Mirrors the curated `antigravity-claude-sonnet-4-6`: the budgets are inert
+        // for ids without "thinking" (see models.ts) and active for the thinking ones,
+        // so defining them here is safe either way.
         definition.variants = { ...CLAUDE_THINKING_VARIANTS };
     }
-    else if (!isClaude && !isGptOss) {
+    else if (!isGptOss) {
         definition.variants = { ...GEMINI_THINKING_VARIANTS };
     }
     return definition;

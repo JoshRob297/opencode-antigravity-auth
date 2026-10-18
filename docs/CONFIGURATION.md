@@ -108,7 +108,9 @@ The Antigravity backend reports the models each account can use (`fetchAvailable
 | `gemini-3.8-flash-tiered` | has `antigravity-gemini-3.8-flash` | skipped (already curated) |
 | `gemini-4-argon`, `gemini-4-argon-low/medium/high` | none | **registered** as `antigravity-gemini-4-argon`, `...-low`, `...-medium`, `...-high` |
 | `gemini-3.9-flash`, `gemini-5-flash` | none | registered (strictly newer than the 3.8 floor) |
-| `gemini-3-flash`, `gemini-3.5-flash-lite`, `gemini-2.5-*` | none | skipped (older than the floor) |
+| `claude-sonnet-5-5`, `claude-opus-5-5-max` | none | registered (strictly newer than the curated 4.6 floor) |
+| `claude-opus-4-6-thinking`, `claude-sonnet-4-6` | has them | skipped (already curated) |
+| `claude-opus-4-5`, `gemini-3-flash`, `gemini-3.5-flash-lite`, `gemini-2.5-*` | none | skipped (older than the floor) |
 | `gemini-3.6-flash-*`, `gemini-3.1-pro-*`, `gemini-3.5-flash-low`, `gemini-3-flash-agent` | none | skipped (measured: `404` or retired) |
 | `chat_*`, `tab_*`, `*-image` | none | skipped (internal ids and image output) |
 
@@ -124,7 +126,7 @@ Discovered models are registered with low/medium/high thinking variants (Claude 
 - **Plan-gated by Google, not by the plugin.** Argon and Claude 5.5 need paid Google AI Pro, Ultra or Enterprise; discovery cannot create an entitlement, it only reflects one.
 - **Applies to the OpenCode v2 model registry.** v1 registers models from `opencode.json` and stays curated.
 - The catalog is read for the **active** account at startup; switching accounts requires a restart to re-discover.
-- **Claude 4.6 and GPT-OSS 120B are removed on 2026-11-02** for every plan. Discovery is Gemini-forward-only today, so those ids will not be replaced automatically: the curated catalog has to add their successors (Claude Sonnet/Opus 5.5, Pro and Ultra plans) when that happens.
+- **Claude 4.6 and GPT-OSS 120B are removed on 2026-11-02** for every plan. Discovery is forward-only for Gemini **and** Claude, so an account entitled to the Claude successors (Sonnet/Opus 5.5, on paid AI Pro / Ultra / Enterprise) gets them registered automatically. Two things still need attention from a maintainer: the dead `claude-*-4-6` entries must be pruned from the curated catalog, and GPT-OSS has no successor to discover.
 
 ---
 
