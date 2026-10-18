@@ -8,7 +8,7 @@ import {
 } from "./request";
 import { DEFAULT_CONFIG } from "./config";
 import { initializeDebug } from "./debug";
-import { SKIP_THOUGHT_SIGNATURE } from "../constants";
+import { SKIP_THOUGHT_SIGNATURE, getAntigravityCliVersion, setAntigravityCliVersion } from "../constants";
 import * as config from "./config";
 import type { SignatureStore, ThoughtBuffer, StreamingCallbacks, StreamingOptions } from "./core/streaming/types";
 
@@ -1227,5 +1227,37 @@ it("removes x-api-key header", () => {
         ),
       ).rejects.toMatchObject({ message: "MODEL_TURN_RECOVERY_NEEDED" });
     });
+  });
+});
+
+describe("CLI client signature User-Agent", () => {
+  const genlang = (model: string) =>
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent`;
+
+  it("carries the runtime-resolved CLI version, not a hardcoded one", () => {
+    setAntigravityCliVersion("7.7.7");
+    const result = prepareAntigravityRequest(
+      genlang("antigravity-gemini-3.8-flash"),
+      { method: "POST", body: JSON.stringify({ contents: [] }) },
+      "token",
+      "project",
+    );
+    const headers = new Headers(result.init.headers as HeadersInit);
+    expect(headers.get("User-Agent")).toBe(
+      "antigravity/cli/7.7.7 (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)",
+    );
+    // Sanity: the value came from the constants module, not from the test literal.
+    expect(getAntigravityCliVersion()).toBe("7.7.7");
+  });
+
+  it("keeps the generic UA for models that do not need the CLI signature", () => {
+    const result = prepareAntigravityRequest(
+      genlang("antigravity-claude-sonnet-4-6"),
+      { method: "POST", body: JSON.stringify({ contents: [] }) },
+      "token",
+      "project",
+    );
+    const headers = new Headers(result.init.headers as HeadersInit);
+    expect(headers.get("User-Agent")).not.toContain("aidev_client");
   });
 });

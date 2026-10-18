@@ -9,13 +9,13 @@
 > [!IMPORTANT]
 > **Project Status (October 2026) - maintenance paused.**
 > After extended real-world use we are pausing new plugin work until Google ships a model that is genuinely worth paying for:
-> - **Gemini 4 ("Argon") integration is not planned and not implemented.** On **2026-10-13** Google released Argon, but the Antigravity backend exposes it only to **Google AI Ultra / Enterprise** accounts - not to Google AI Pro or free-tier. We hold no account of that type, so the integration could neither be built nor verified end to end, and this project does not ship untested model support.
-> - **Paying the Ultra / Enterprise difference for Argon is not worth it today.** Argon has not demonstrated the value Google claims: on real repository work we cannot reproduce a quality gain over the current workhorse that justifies a frontier-tier price, and paying the tier would still not fix the Antigravity backend, which keeps treating the account as `free-tier`.
+> - **Gemini 4 ("Argon") is available on paid plans, and the plugin no longer needs a release to support it.** Since **2026-10-13** Argon rolls out in the Antigravity App, the Antigravity CLI and the IDE extensions (not the standalone IDE) for **Google AI Pro (paid, non-trial), Ultra and Enterprise**. Our own accounts are on the **Free / AI Plus** tier, so we cannot verify it end to end - but with [`model_discovery`](#model-discovery) enabled a newer model is registered automatically for any account that has it, so no plugin change is required to select Argon.
+> - **Paying for Argon is still not worth it here.** Argon has not demonstrated the value Google claims: on real repository work we cannot reproduce a quality gain over the current workhorse that justifies a frontier-tier price, and paying the tier would still not fix the Antigravity backend, which keeps treating the account as `free-tier`.
 > - **Recommended daily workhorse: Gemini 3.8 Flash.** It is the only Gemini model left on consumer plans, is very fast at generating code, and is free at the margin with Antigravity credentials. Use it for high-volume, low-risk work and escalate to a frontier model (e.g. **DeepSeek**) when output quality is the actual constraint.
-> - On the same **2026-10-13** change, **Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro moved to Enterprise-only**, leaving consumer plans with **Gemini 3.8 Flash** as the only Gemini model. **Gemini 3.5 Pro** has still not shipped.
-> - The Antigravity backend stays unreliable for paid plans: the tier is recognized (`paidTier = g1-pro-tier`) but not applied (`currentTier = free-tier`), Claude 5.5 is unavailable, and Claude 4.6 + GPT-OSS-120b are scheduled for removal on **2026-11-02**.
+> - **Plan matrix (2026-10-18):** Argon and Claude Sonnet/Opus **5.5** require **paid** Google AI Pro, Ultra or Enterprise. **Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro are Enterprise-only.** Consumer plans keep **Gemini 3.8 Flash**, **Claude Sonnet/Opus 4.6** and **GPT-OSS 120B** - and the latter two are scheduled for removal on **2026-11-02** for **every** plan, including Ultra.
+> - The Antigravity backend stays unreliable for paid plans: the tier is recognized (`paidTier = g1-pro-tier`) but not applied (`currentTier = free-tier`).
 >
-> Argon support will be reconsidered only when one of these changes: (a) the Antigravity backend exposes Argon to consumer plans, (b) an Ultra / Enterprise account becomes available for end-to-end verification, or (c) Argon shows a measurable advantage over the current workhorse on real repository tasks.
+> Model discovery will be reconsidered only when one of these changes: (a) an entitled account becomes available for end-to-end verification, (b) Argon shows a measurable advantage over the current workhorse on real repository tasks, or (c) a curator is needed again because the backend catalog cannot be trusted.
 >
 > The plugin remains functional as-is (pin a known-good release). Maintenance resumes when Google offers something actually worth paying for.
 
@@ -33,7 +33,7 @@
 - **Native v2 Tool & Command Registries**: Dispatches `antigravity_quota`, `antigravity_stats`, `google_search`, and `/antigravity-quota` slash command natively via OpenCode v2's domain transforms (`context.tool.transform` and `context.command.transform`).
 - **Strict Tool Schema Sanitization (Fix HTTP 400 `property is not defined`)**: Cloud Code API backed by Protobuf rejects tool calls when schema `required` arrays contain properties not declared in `properties`. The normalizer recursively cleans parameter schemas, prunes orphan required keys, and enforces validation on pre-packaged `functionDeclarations`.
 - **Model Addition: `antigravity-gpt-oss-120b-medium`**: Integrated Antigravity's native 120B open-source model into `OPENCODE_MODEL_DEFINITIONS` with 131k context window and multi-account routing support.
-- **Official Antigravity CLI v1.2.7 Signature Parity**: Synchronized client signature headers and User-Agent to `antigravity/cli/1.2.7 (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)`, matching the latest Google Antigravity binary release.
+- **Official Antigravity CLI Signature Parity**: Synchronized client signature headers and User-Agent to `antigravity/cli/<version> (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)`, matching the latest Google Antigravity binary release. The signature was pinned to `1.2.7` at the time; it is now resolved at startup from the CLI auto-updater endpoint (see [docs/ANTIGRAVITY_API_SPEC.md](docs/ANTIGRAVITY_API_SPEC.md#client-signature-cli-user-agent)).
 - **OPSEC Safety Shield & Telemetry (`safety_shield`)**: Intercepts Google Gemini's `safetyRatings` in real-time. Emits UI warnings on high-risk classifications and automatically executes **preventive account rotation** (`Account Shield`) after consecutive triggers to disperse suspicious telemetry across your account pool.
 - **Strip `x-goog-api-key` Header (Fix 400 `API_KEY_INVALID`)**: OpenCode automatically injects an AI Studio key into `x-goog-api-key` when intercepting `generativelanguage.googleapis.com` calls. Antigravity backend prioritized this header over `Bearer` auth, returning `400 API_KEY_INVALID`. The header is now stripped alongside `x-api-key`.
 - **Legacy `gemini-cli` Mode Removed (Definitive 403 `#3501` Fix)**: Completely stripped legacy VS Code headers and `-preview` model fallbacks. All requests route cleanly through official Antigravity CLI signatures (`aidev_client`), eliminating false license errors across all accounts.
@@ -242,6 +242,25 @@ In OpenCode v2 this is **not required** because the plugin registers all models 
 ```
 
 </details>
+
+---
+
+## Model Discovery
+
+The Antigravity backend reports which models each account can use. With `model_discovery` enabled the plugin registers the ones **newer than the curated catalog** on top of it, so a model released to your plan becomes selectable without waiting for a plugin release:
+
+```json
+// ~/.config/opencode/antigravity.json
+{
+  "model_discovery": true
+}
+```
+
+- **If your account has Argon or Claude 5.5, they show up.** Gemini 4 Argon (`gemini-4-argon`, `-low`, `-medium`, `-high`) and the Claude Sonnet/Opus 5.5 successors are on the forward-only rule, so an AI Pro / Ultra / Enterprise account the backend lists them for gets the selector entry automatically - which matters on **2026-11-02**, when Claude 4.6 and GPT-OSS 120B are removed for every plan. Discovery never claims support: it mirrors what the backend grants that account.
+- **Forward-only.** Anything older than the curated workhorses (`gemini-3.8-flash`, Claude 4.6) stays out, curated ids are never duplicated, and ids measured as dead, retired or internal are filtered by a denylist. A `200` from the backend is not treated as proof of usability.
+- **Best-effort.** If the catalog lookup fails, the curated catalog is used and startup is unaffected.
+
+Full behavior, limits and caveats: [docs/CONFIGURATION.md](docs/CONFIGURATION.md#model-discovery).
 
 ---
 

@@ -49,7 +49,7 @@ This shows remaining quota percentages and reset times for each model family:
 - **Claude & GPT** - Claude Opus 4.6 / Sonnet 4.6 and GPT-OSS 120B quota
 - **Gemini** - Gemini Flash quota (on consumer plans `antigravity-gemini-3.8-flash` is the only registered Gemini model)
 
-> **Reading the report:** `N/A` in the 5h column means the API granted **no 5-hour bucket** for that account, which is what accounts without a paid plan get. Only accounts with a 5h window have burst capacity; a weekly window alone is the free-tier behaviour. Use this column, not the onboarding tier returned by `loadCodeAssist`, to decide which accounts are worth keeping in the pool.
+> **Reading the report:** the 5h column shows what the backend grants that account, and it is **not** a plan marker: the official client shows both windows on Free / AI Plus too. Use the model set to tell plans apart (Argon and Claude 5.5 mean paid AI Pro, Ultra or Enterprise; see `docs/models` upstream). A missing 5h bucket means the account has no burst window at all, which is a good signal for pruning the pool.
 
 ### Standalone Quota Script
 
