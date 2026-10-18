@@ -1,5 +1,7 @@
 # Multi-Account Setup
 
+**English** | [Español](MULTI-ACCOUNT.es.md)
+
 Add multiple Google accounts to increase your combined quota and improve availability. The plugin automatically rotates between accounts when one is rate-limited.
 
 ```bash
