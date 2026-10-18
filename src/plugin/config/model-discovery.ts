@@ -1,4 +1,5 @@
 import type { OpencodeModelDefinition, OpencodeModelDefinitions, ModelVariant } from "./models";
+import { OPENCODE_WHITELIST_MODELS } from "./models";
 import { fetchAvailableModels } from "../quota";
 import { createLogger } from "../logger";
 
@@ -65,7 +66,6 @@ export const DISCOVERY_DENYLIST: RegExp[] = [
   /^chat_\d+/i, // internal ids, HTTP 400
   /^tab_/i, // internal tab preview models
   /-image/i, // image output needs capabilities this catalog does not declare
-  /-tiered$/i, // backend mechanic for the curated 3.8 Flash entry, not a user-facing model id
   /^gemini-3\.6-flash/i, // 404 NOT_FOUND
   /^gemini-3\.1-pro/i, // 404 NOT_FOUND
   /^gemini-pro-agent$/i, // 404 NOT_FOUND
@@ -74,6 +74,28 @@ export const DISCOVERY_DENYLIST: RegExp[] = [
   /^gemini-3\.5-flash-(?:low|high|extra-low)$/i, // retired or 404
   /^gemini-2\.5-pro$/i, // 503 "no capacity available for model" (2026-10-15)
 ];
+
+/**
+ * How the backend names the tiered variant of a model whose thinking level is
+ * chosen per request (`gemini-3.8-flash-tiered` is what the catalog reports for
+ * the curated 3.8 Flash). It is a legitimate id, not junk: the only reason to
+ * skip it is that the curated catalog already registers that same model.
+ */
+const TIERED_SUFFIX = /-tiered$/i;
+
+/**
+ * True when the curated catalog already registers this model (with or without
+ * the `-tiered` suffix), so discovery must not add a duplicate entry.
+ *
+ * This is what keeps `gemini-3.8-flash-tiered` out while still surfacing
+ * `gemini-4-argon-tiered`: a model with no curated entry has to stay selectable,
+ * otherwise a brand new family would be hidden by a naming detail.
+ */
+export function isCoveredByCuratedCatalog(id: string): boolean {
+  const curated = new Set(OPENCODE_WHITELIST_MODELS);
+  const candidates = [id, id.replace(TIERED_SUFFIX, "")];
+  return candidates.some((candidate) => curated.has(`antigravity-${candidate}`));
+}
 
 const CLAUDE_LIMIT = { context: 200000, output: 64000 };
 const GPT_OSS_LIMIT = { context: 131072, output: 8192 };
@@ -115,7 +137,10 @@ export function displayNameForModelId(id: string): string {
   };
   if (overrides[id]) return overrides[id]!;
 
+  // The `-tiered` suffix is a backend mechanic (the thinking level is chosen per
+  // request through the variants), so it is dropped from the label only.
   const formatted = id
+    .replace(TIERED_SUFFIX, "")
     .split("-")
     .map((segment) => {
       if (/^\d+b$/i.test(segment)) return segment.toUpperCase();
@@ -162,6 +187,7 @@ export function buildDiscoveredModels(backendIds: Iterable<string>): OpencodeMod
   const discovered: OpencodeModelDefinitions = {};
   for (const id of backendIds) {
     if (!isDiscoverableModelId(id)) continue;
+    if (isCoveredByCuratedCatalog(id)) continue;
     discovered[`antigravity-${id}`] = buildDiscoveredModelDefinition(id);
   }
   return discovered;
