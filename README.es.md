@@ -748,14 +748,12 @@ Consulta la [Guía de solución de problemas](docs/TROUBLESHOOTING.md) completa 
 
 ## Documentación
 
-Toda la documentación técnica está en inglés:
-
-- [Configuration](docs/CONFIGURATION.md) — Todas las opciones de configuración
-- [Multi-Account](docs/MULTI-ACCOUNT.md) — Balanceo de carga, pools de cuota duales, almacenamiento de cuentas
-- [Model Variants](docs/MODEL-VARIANTS.md) — Presupuestos de thinking y sistema de variantes
-- [Troubleshooting](docs/TROUBLESHOOTING.md) — Problemas comunes y soluciones
-- [Architecture](docs/ARCHITECTURE.md) — Cómo funciona el plugin
-- [API Spec](docs/ANTIGRAVITY_API_SPEC.md) — Referencia de la API de Antigravity
+- [Configuración](docs/CONFIGURATION.es.md) — Todas las opciones de configuración (también en [inglés](docs/CONFIGURATION.md))
+- [Multi-cuenta](docs/MULTI-ACCOUNT.es.md) — Balanceo de carga, pools de cuota duales, almacenamiento de cuentas (también en [inglés](docs/MULTI-ACCOUNT.md))
+- [Solución de problemas](docs/TROUBLESHOOTING.es.md) — Problemas comunes y soluciones (también en [inglés](docs/TROUBLESHOOTING.md))
+- [Model Variants](docs/MODEL-VARIANTS.md) — Presupuestos de thinking y sistema de variantes (solo en inglés)
+- [Architecture](docs/ARCHITECTURE.md) — Cómo funciona el plugin (solo en inglés)
+- [API Spec](docs/ANTIGRAVITY_API_SPEC.md) — Referencia de la API de Antigravity (solo en inglés)
 
 ---
 

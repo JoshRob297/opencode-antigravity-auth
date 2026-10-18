@@ -1,5 +1,7 @@
 # Configuration
 
+**English** | [Español](CONFIGURATION.es.md)
+
 Create `~/.config/opencode/antigravity.json` (or `.opencode/antigravity.json` in project root):
 
 ```json

@@ -755,6 +755,9 @@ See the full [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for solutions to c
 Translations:
 
 - [Español (README.es.md)](README.es.md) — Spanish translation of this README. English is the source of truth; the translation may lag behind.
+- [Español (docs/CONFIGURATION.es.md)](docs/CONFIGURATION.es.md) — Configuration
+- [Español (docs/MULTI-ACCOUNT.es.md)](docs/MULTI-ACCOUNT.es.md) — Multi-Account
+- [Español (docs/TROUBLESHOOTING.es.md)](docs/TROUBLESHOOTING.es.md) — Troubleshooting
 
 ---
 
