@@ -11,6 +11,7 @@ import {
   buildDiscoveredModels,
   collectDiscoveredModels,
   displayNameForModelId,
+  isCoveredByCuratedCatalog,
   isDiscoverableModelId,
 } from "./model-discovery";
 
@@ -69,6 +70,19 @@ describe("model discovery is forward-only", () => {
     expect(buildDiscoveredModels(["gemini-4-argon"])["antigravity-gemini-4-argon"]).toBeDefined();
   });
 
+  it("surfaces the tiered form of a model the curated catalog does not have", () => {
+    // This is the shape the catalog uses for a tiered model. For a curated family
+    // it must be skipped; for a new one it is the only id the account reports, so
+    // skipping it would hide the model and defeat the point of discovery.
+    expect(isCoveredByCuratedCatalog("gemini-3.8-flash-tiered")).toBe(true);
+    expect(isCoveredByCuratedCatalog("gemini-4-argon-tiered")).toBe(false);
+
+    const discovered = buildDiscoveredModels(["gemini-3.8-flash-tiered", "gemini-4-argon-tiered"]);
+    expect(Object.keys(discovered)).toEqual(["antigravity-gemini-4-argon-tiered"]);
+    expect(discovered["antigravity-gemini-4-argon-tiered"]!.name).toBe("Gemini 4 Argon (Antigravity)");
+    expect(discovered["antigravity-gemini-4-argon-tiered"]!.variants?.high).toEqual({ thinkingLevel: "high" });
+  });
+
   it("surfaces Gemini Flash generations newer than the curated floor", () => {
     expect(DISCOVERY_GEMINI_FLASH_FLOOR).toEqual({ major: 3, minor: 8 });
     expect(isDiscoverableModelId("gemini-3.9-flash")).toBe(true);
@@ -82,7 +96,14 @@ describe("model discovery is forward-only", () => {
 
   it("keeps the denylist ahead of the version floor", () => {
     expect(isDiscoverableModelId("gemini-4-argon-image")).toBe(false);
-    expect(isDiscoverableModelId("gemini-4-argon-tiered")).toBe(false);
+    expect(isDiscoverableModelId("gemini-4-argon-high")).toBe(true);
+  });
+
+  it("does not treat the -tiered suffix as junk", () => {
+    // The catalog reports the curated 3.8 Flash as `gemini-3.8-flash-tiered`; the
+    // id itself is legitimate, it is only skipped because it is already curated.
+    expect(isDiscoverableModelId("gemini-3.8-flash-tiered")).toBe(false); // older than the floor
+    expect(isDiscoverableModelId("gemini-4-argon-tiered")).toBe(true);
   });
 
   it("rejects unknown families and malformed ids", () => {

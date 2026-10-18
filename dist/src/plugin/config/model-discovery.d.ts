@@ -42,6 +42,15 @@ export declare const DISCOVERY_GEMINI_FLASH_FLOOR: {
  */
 export declare const DISCOVERY_DENYLIST: RegExp[];
 /**
+ * True when the curated catalog already registers this model (with or without
+ * the `-tiered` suffix), so discovery must not add a duplicate entry.
+ *
+ * This is what keeps `gemini-3.8-flash-tiered` out while still surfacing
+ * `gemini-4-argon-tiered`: a model with no curated entry has to stay selectable,
+ * otherwise a brand new family would be hidden by a naming detail.
+ */
+export declare function isCoveredByCuratedCatalog(id: string): boolean;
+/**
  * True when an id returned by the backend catalog may be surfaced to the user.
  */
 export declare function isDiscoverableModelId(id: string): boolean;
