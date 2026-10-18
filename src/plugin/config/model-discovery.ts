@@ -1,4 +1,5 @@
 import type { OpencodeModelDefinition, OpencodeModelDefinitions, ModelVariant } from "./models";
+import { OPENCODE_WHITELIST_MODELS } from "./models";
 import { fetchAvailableModels } from "../quota";
 import { createLogger } from "../logger";
 
@@ -44,7 +45,18 @@ export const DISCOVERY_ALLOWLIST: RegExp[] = [
  */
 export const DISCOVERY_GEMINI_FLASH_FLOOR = { major: 3, minor: 8 };
 
+/**
+ * Newest Claude generation in the curated catalog (`antigravity-claude-opus-4-6-thinking`).
+ * Discovery surfaces strictly newer generations, which is what makes the
+ * successors of the Claude 4.6 trio - removed on 2026-11-02 for **every** plan -
+ * available to the accounts that are entitled to them (Claude Sonnet/Opus 5.5 on
+ * paid AI Pro, Ultra and Enterprise) without a plugin release or an unverifiable
+ * curated entry.
+ */
+export const DISCOVERY_CLAUDE_FLOOR = { major: 4, minor: 6 };
+
 const GEMINI_FLASH_VERSION = /^gemini-(\d+)(?:\.(\d+))?-flash(?:[-.]|$)/i;
+const CLAUDE_VERSION = /^claude-(?:sonnet|opus)-(\d+)(?:-(\d+))?/i;
 
 /**
  * True when a Gemini Flash id is a newer generation than the curated floor.
@@ -59,13 +71,27 @@ function isNewerGeminiFlash(id: string): boolean {
 }
 
 /**
+ * True when a Claude id is a newer generation than the curated floor.
+ * The backend names these with a dash, e.g. `claude-opus-5-5` or
+ * `claude-sonnet-5-5-max`; older ones (`claude-opus-4-8`, `claude-opus-4-6-thinking`)
+ * stay out.
+ */
+function isNewerClaude(id: string): boolean {
+  const match = CLAUDE_VERSION.exec(id);
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2] ?? 0);
+  const floor = DISCOVERY_CLAUDE_FLOOR;
+  return major > floor.major || (major === floor.major && minor > floor.minor);
+}
+
+/**
  * Ids (or id families) that must never be surfaced, with the measured reason.
  */
 export const DISCOVERY_DENYLIST: RegExp[] = [
   /^chat_\d+/i, // internal ids, HTTP 400
   /^tab_/i, // internal tab preview models
   /-image/i, // image output needs capabilities this catalog does not declare
-  /-tiered$/i, // backend mechanic for the curated 3.8 Flash entry, not a user-facing model id
   /^gemini-3\.6-flash/i, // 404 NOT_FOUND
   /^gemini-3\.1-pro/i, // 404 NOT_FOUND
   /^gemini-pro-agent$/i, // 404 NOT_FOUND
@@ -74,6 +100,28 @@ export const DISCOVERY_DENYLIST: RegExp[] = [
   /^gemini-3\.5-flash-(?:low|high|extra-low)$/i, // retired or 404
   /^gemini-2\.5-pro$/i, // 503 "no capacity available for model" (2026-10-15)
 ];
+
+/**
+ * How the backend names the tiered variant of a model whose thinking level is
+ * chosen per request (`gemini-3.8-flash-tiered` is what the catalog reports for
+ * the curated 3.8 Flash). It is a legitimate id, not junk: the only reason to
+ * skip it is that the curated catalog already registers that same model.
+ */
+const TIERED_SUFFIX = /-tiered$/i;
+
+/**
+ * True when the curated catalog already registers this model (with or without
+ * the `-tiered` suffix), so discovery must not add a duplicate entry.
+ *
+ * This is what keeps `gemini-3.8-flash-tiered` out while still surfacing
+ * `gemini-4-argon-tiered`: a model with no curated entry has to stay selectable,
+ * otherwise a brand new family would be hidden by a naming detail.
+ */
+export function isCoveredByCuratedCatalog(id: string): boolean {
+  const curated = new Set(OPENCODE_WHITELIST_MODELS);
+  const candidates = [id, id.replace(TIERED_SUFFIX, "")];
+  return candidates.some((candidate) => curated.has(`antigravity-${candidate}`));
+}
 
 const CLAUDE_LIMIT = { context: 200000, output: 64000 };
 const GPT_OSS_LIMIT = { context: 131072, output: 8192 };
@@ -103,7 +151,7 @@ export function isDiscoverableModelId(id: string): boolean {
   if (!candidate) return false;
   if (DISCOVERY_DENYLIST.some((pattern) => pattern.test(candidate))) return false;
   if (DISCOVERY_ALLOWLIST.some((pattern) => pattern.test(candidate))) return true;
-  return isNewerGeminiFlash(candidate);
+  return isNewerGeminiFlash(candidate) || isNewerClaude(candidate);
 }
 
 /**
@@ -115,7 +163,21 @@ export function displayNameForModelId(id: string): string {
   };
   if (overrides[id]) return overrides[id]!;
 
+  // `claude-opus-5-5-max` reads better as "Claude Opus 5.5 Max" than as a
+  // dash-split humanization ("Claude Opus 5 5 Max").
+  const claude = /^claude-(sonnet|opus)-(\d+)-(\d+)(?:-(.+))?$/i.exec(id);
+  if (claude) {
+    const family = claude[1]!.charAt(0).toUpperCase() + claude[1]!.slice(1).toLowerCase();
+    const tier = claude[4]
+      ? " " + claude[4].split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ")
+      : "";
+    return `Claude ${family} ${claude[2]}.${claude[3]}${tier} (Antigravity)`;
+  }
+
+  // The `-tiered` suffix is a backend mechanic (the thinking level is chosen per
+  // request through the variants), so it is dropped from the label only.
   const formatted = id
+    .replace(TIERED_SUFFIX, "")
     .split("-")
     .map((segment) => {
       if (/^\d+b$/i.test(segment)) return segment.toUpperCase();
@@ -136,7 +198,6 @@ export function buildDiscoveredModelDefinition(id: string): OpencodeModelDefinit
   const lower = id.toLowerCase();
   const isClaude = lower.startsWith("claude-");
   const isGptOss = lower.startsWith("gpt-oss-");
-  const isClaudeThinking = isClaude && lower.includes("thinking");
 
   const definition: OpencodeModelDefinition = {
     name: displayNameForModelId(id),
@@ -144,9 +205,12 @@ export function buildDiscoveredModelDefinition(id: string): OpencodeModelDefinit
     modalities: { input: [...MODALITIES.input], output: [...MODALITIES.output] },
   };
 
-  if (isClaudeThinking) {
+  if (isClaude) {
+    // Mirrors the curated `antigravity-claude-sonnet-4-6`: the budgets are inert
+    // for ids without "thinking" (see models.ts) and active for the thinking ones,
+    // so defining them here is safe either way.
     definition.variants = { ...CLAUDE_THINKING_VARIANTS };
-  } else if (!isClaude && !isGptOss) {
+  } else if (!isGptOss) {
     definition.variants = { ...GEMINI_THINKING_VARIANTS };
   }
 
@@ -162,6 +226,7 @@ export function buildDiscoveredModels(backendIds: Iterable<string>): OpencodeMod
   const discovered: OpencodeModelDefinitions = {};
   for (const id of backendIds) {
     if (!isDiscoverableModelId(id)) continue;
+    if (isCoveredByCuratedCatalog(id)) continue;
     discovered[`antigravity-${id}`] = buildDiscoveredModelDefinition(id);
   }
   return discovered;

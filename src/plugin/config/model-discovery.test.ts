@@ -11,6 +11,7 @@ import {
   buildDiscoveredModels,
   collectDiscoveredModels,
   displayNameForModelId,
+  isCoveredByCuratedCatalog,
   isDiscoverableModelId,
 } from "./model-discovery";
 
@@ -69,6 +70,43 @@ describe("model discovery is forward-only", () => {
     expect(buildDiscoveredModels(["gemini-4-argon"])["antigravity-gemini-4-argon"]).toBeDefined();
   });
 
+  it("surfaces Claude generations newer than the curated floor", () => {
+    // Successors of the Claude 4.6 trio that Google removes on 2026-11-02.
+    expect(isDiscoverableModelId("claude-sonnet-5-5")).toBe(true);
+    expect(isDiscoverableModelId("claude-opus-5-5-max")).toBe(true);
+    expect(isDiscoverableModelId("claude-opus-6-0-thinking")).toBe(true);
+    // The curated generation, and anything older, stays out.
+    expect(isDiscoverableModelId("claude-opus-4-6-thinking")).toBe(false);
+    expect(isDiscoverableModelId("claude-sonnet-4-6")).toBe(false);
+    expect(isDiscoverableModelId("claude-opus-4-5")).toBe(false);
+    // Strictly newer than the curated 4.6 floor, including 4.8 (seen in the App bundle).
+    expect(isDiscoverableModelId("claude-opus-4-8")).toBe(true);
+
+    const discovered = buildDiscoveredModels(["claude-sonnet-5-5", "claude-opus-5-5-max"]);
+    expect(Object.keys(discovered).sort()).toEqual([
+      "antigravity-claude-opus-5-5-max",
+      "antigravity-claude-sonnet-5-5",
+    ]);
+    expect(discovered["antigravity-claude-opus-5-5-max"]!.name).toBe("Claude Opus 5.5 Max (Antigravity)");
+    expect(discovered["antigravity-claude-opus-5-5-max"]!.limit).toEqual({ context: 200000, output: 64000 });
+    expect(discovered["antigravity-claude-opus-5-5-max"]!.variants?.max).toEqual({
+      thinkingConfig: { thinkingBudget: 32768 },
+    });
+  });
+
+  it("surfaces the tiered form of a model the curated catalog does not have", () => {
+    // This is the shape the catalog uses for a tiered model. For a curated family
+    // it must be skipped; for a new one it is the only id the account reports, so
+    // skipping it would hide the model and defeat the point of discovery.
+    expect(isCoveredByCuratedCatalog("gemini-3.8-flash-tiered")).toBe(true);
+    expect(isCoveredByCuratedCatalog("gemini-4-argon-tiered")).toBe(false);
+
+    const discovered = buildDiscoveredModels(["gemini-3.8-flash-tiered", "gemini-4-argon-tiered"]);
+    expect(Object.keys(discovered)).toEqual(["antigravity-gemini-4-argon-tiered"]);
+    expect(discovered["antigravity-gemini-4-argon-tiered"]!.name).toBe("Gemini 4 Argon (Antigravity)");
+    expect(discovered["antigravity-gemini-4-argon-tiered"]!.variants?.high).toEqual({ thinkingLevel: "high" });
+  });
+
   it("surfaces Gemini Flash generations newer than the curated floor", () => {
     expect(DISCOVERY_GEMINI_FLASH_FLOOR).toEqual({ major: 3, minor: 8 });
     expect(isDiscoverableModelId("gemini-3.9-flash")).toBe(true);
@@ -82,7 +120,14 @@ describe("model discovery is forward-only", () => {
 
   it("keeps the denylist ahead of the version floor", () => {
     expect(isDiscoverableModelId("gemini-4-argon-image")).toBe(false);
-    expect(isDiscoverableModelId("gemini-4-argon-tiered")).toBe(false);
+    expect(isDiscoverableModelId("gemini-4-argon-high")).toBe(true);
+  });
+
+  it("does not treat the -tiered suffix as junk", () => {
+    // The catalog reports the curated 3.8 Flash as `gemini-3.8-flash-tiered`; the
+    // id itself is legitimate, it is only skipped because it is already curated.
+    expect(isDiscoverableModelId("gemini-3.8-flash-tiered")).toBe(false); // older than the floor
+    expect(isDiscoverableModelId("gemini-4-argon-tiered")).toBe(true);
   });
 
   it("rejects unknown families and malformed ids", () => {
@@ -101,10 +146,15 @@ describe("model discovery definitions", () => {
     expect(def.modalities).toEqual({ input: ["text", "image", "pdf"], output: ["text"] });
   });
 
-  it("gives Claude thinking ids Claude limits and thinking budgets", () => {
-    const claude = buildDiscoveredModelDefinition("claude-sonnet-5-thinking");
+  it("gives Claude ids Claude limits and thinking budgets", () => {
+    const claude = buildDiscoveredModelDefinition("claude-sonnet-5-5-thinking");
     expect(claude.limit).toEqual({ context: 200000, output: 64000 });
     expect(claude.variants?.max).toEqual({ thinkingConfig: { thinkingBudget: 32768 } });
+    // Non-thinking Claude ids get the same variants on purpose (inert at runtime,
+    // mirrors the curated antigravity-claude-sonnet-4-6 entry).
+    expect(buildDiscoveredModelDefinition("claude-opus-5-5").variants?.high).toEqual({
+      thinkingConfig: { thinkingBudget: 24576 },
+    });
   });
 
   it("gives GPT-OSS ids its own limits and no variants", () => {

@@ -88,7 +88,7 @@ Settings for managing multiple Google accounts.
 
 ## Model Discovery
 
-With `model_discovery` enabled, the plugin reads the backend catalog for the active account and registers the models in it that are **newer than the curated catalog** - today that means the Gemini 4 "Argon" line and future Flash generations. This is how a model lands here without the plugin hardcoding it first.
+The Antigravity backend reports the models each account can use (`fetchAvailableModels` - the same call the quota tool uses). With `model_discovery` enabled, the plugin registers the ones **newer than the curated catalog** on top of the 4 curated models.
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -101,14 +101,32 @@ With `model_discovery` enabled, the plugin reads the backend catalog for the act
 }
 ```
 
-Notes:
+### What appears
 
-- **Forward-only.** Discovery never resurrects older generations. The backend catalog contains many ids the official Antigravity client does not offer, and a `200` does not identify them: measured against a real consumer account, 12 of 25 catalog ids answered `200` *and* performed tool calls, all of them older than `gemini-3.8-flash`, and one (`gemini-3.5-flash`) answers `200` while being decommissioned ("Gemini 3.5 Flash is no longer available"). Surfacing those would only widen an unsupported surface.
-- **Already curated ids are never duplicated** - curated entries win, and the catalog's own view of them adds nothing.
-- A denylist still runs first (internal ids, image models, tiered ids, and the ids measured as dead or retired).
-- Best-effort: if the catalog lookup fails (network, auth, backend change), the curated catalog is used and startup is unaffected.
-- Applies to the v2 model registry; v1 registers models from `opencode.json`.
-- The catalog is read for the **active** account at startup, so switching accounts requires a restart to re-discover.
+| Backend id | Curated catalog | Result |
+|---|---|---|
+| `gemini-3.8-flash-tiered` | has `antigravity-gemini-3.8-flash` | skipped (already curated) |
+| `gemini-4-argon`, `gemini-4-argon-low/medium/high` | none | **registered** as `antigravity-gemini-4-argon`, `...-low`, `...-medium`, `...-high` |
+| `gemini-3.9-flash`, `gemini-5-flash` | none | registered (strictly newer than the 3.8 floor) |
+| `claude-sonnet-5-5`, `claude-opus-5-5-max` | none | registered (strictly newer than the curated 4.6 floor) |
+| `claude-opus-4-6-thinking`, `claude-sonnet-4-6` | has them | skipped (already curated) |
+| `claude-opus-4-5`, `gemini-3-flash`, `gemini-3.5-flash-lite`, `gemini-2.5-*` | none | skipped (older than the floor) |
+| `gemini-3.6-flash-*`, `gemini-3.1-pro-*`, `gemini-3.5-flash-low`, `gemini-3-flash-agent` | none | skipped (measured: `404` or retired) |
+| `chat_*`, `tab_*`, `*-image` | none | skipped (internal ids and image output) |
+
+So the practical statement is: **enable it and whatever your plan grants shows up.** An account with Argon gets Argon; an account with only Gemini 3.8 Flash gets nothing extra, which is the current state of Free / AI Plus accounts.
+
+Discovered models are registered with low/medium/high thinking variants (Claude thinking models get budget variants) and Gemini-sized limits, and they resolve through the same request path as the curated catalog.
+
+### Caveats
+
+- **Off by default.** Enabling it changes the visible model list.
+- **The catalog is not a list of usable models.** Measured on a real consumer account: 12 of 25 ids answered `200` **and** performed tool calls while being older generations the official Antigravity client does not offer, and one (`gemini-3.5-flash`) answers `200` while decommissioned. That is why discovery is forward-only plus a denylist, and why a `200` is never treated as proof.
+- **Curated entries win** and are never duplicated: a discovered id that the curated catalog already registers is skipped.
+- **Plan-gated by Google, not by the plugin.** Argon and Claude 5.5 need paid Google AI Pro, Ultra or Enterprise; discovery cannot create an entitlement, it only reflects one.
+- **Applies to the OpenCode v2 model registry.** v1 registers models from `opencode.json` and stays curated.
+- The catalog is read for the **active** account at startup; switching accounts requires a restart to re-discover.
+- **Claude 4.6 and GPT-OSS 120B are removed on 2026-11-02** for every plan. Discovery is forward-only for Gemini **and** Claude, so an account entitled to the Claude successors (Sonnet/Opus 5.5, on paid AI Pro / Ultra / Enterprise) gets them registered automatically. Two things still need attention from a maintainer: the dead `claude-*-4-6` entries must be pruned from the curated catalog, and GPT-OSS has no successor to discover.
 
 ---
 
