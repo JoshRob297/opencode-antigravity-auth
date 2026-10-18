@@ -110,3 +110,61 @@ describe("initAntigravityVersion — network failure path", () => {
     expect(headers["User-Agent"]).toContain(ANTIGRAVITY_VERSION_FALLBACK)
   })
 })
+
+describe("Antigravity CLI version", () => {
+  it("defaults to the exported fallback constant", async () => {
+    const { ANTIGRAVITY_CLI_VERSION_FALLBACK, getAntigravityCliVersion } = await import("../constants.ts")
+    expect(getAntigravityCliVersion()).toBe(ANTIGRAVITY_CLI_VERSION_FALLBACK)
+  })
+
+  it("is a version the CLI signature format expects", async () => {
+    const { getAntigravityCliVersion } = await import("../constants.ts")
+    expect(getAntigravityCliVersion()).toMatch(/^\d+\.\d+\.\d+$/)
+  })
+
+  it("locks after the first set, like the IDE version", async () => {
+    const { setAntigravityCliVersion, getAntigravityCliVersion } = await import("../constants.ts")
+    setAntigravityCliVersion("1.4.2")
+    setAntigravityCliVersion("9.9.9")
+    expect(getAntigravityCliVersion()).toBe("1.4.2")
+  })
+})
+
+describe("initAntigravityCliVersion", () => {
+  it("updates the version from the CLI auto-updater endpoint", async () => {
+    const { initAntigravityCliVersion, CLI_VERSION_URL } = await import("./version.ts")
+    const { getAntigravityCliVersion } = await import("../constants.ts")
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        "Antigravity CLI auto updater is running! Stable Version: 1.4.2. Rolled out to 100%",
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await initAntigravityCliVersion()
+
+    expect(fetchMock).toHaveBeenCalledWith(CLI_VERSION_URL, expect.anything())
+    expect(getAntigravityCliVersion()).toBe("1.4.2")
+  })
+
+  it("keeps the fallback when the endpoint fails", async () => {
+    const { initAntigravityCliVersion } = await import("./version.ts")
+    const { ANTIGRAVITY_CLI_VERSION_FALLBACK, getAntigravityCliVersion } = await import("../constants.ts")
+
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")))
+
+    await expect(initAntigravityCliVersion()).resolves.toBeUndefined()
+    expect(getAntigravityCliVersion()).toBe(ANTIGRAVITY_CLI_VERSION_FALLBACK)
+  })
+
+  it("keeps the fallback when the endpoint returns a non-ok response", async () => {
+    const { initAntigravityCliVersion } = await import("./version.ts")
+    const { ANTIGRAVITY_CLI_VERSION_FALLBACK, getAntigravityCliVersion } = await import("../constants.ts")
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, text: async () => "" }))
+
+    await initAntigravityCliVersion()
+    expect(getAntigravityCliVersion()).toBe(ANTIGRAVITY_CLI_VERSION_FALLBACK)
+  })
+})

@@ -74,6 +74,20 @@ Accept: text/event-stream
 
 ---
 
+## Client Signature (CLI User-Agent)
+
+Gemini 3.7 / 3.8 Flash are only served to the official Antigravity **CLI** signature. Requests for those models carry:
+
+```http
+User-Agent: antigravity/cli/<version> (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)
+```
+
+Everything else keeps the generic Electron-style UA (`Antigravity/<version> ...`). Sending the generic one for a 3.7/3.8 Flash model returns `404 NOT_FOUND` (rewritten as *"enable preview features"*).
+
+`<version>` is resolved at plugin startup from the CLI auto-updater endpoint (`https://antigravity-cli-auto-updater-974169037036.us-central1.run.app`), falling back to `ANTIGRAVITY_CLI_VERSION_FALLBACK` in `src/constants.ts` when unreachable. It used to be hardcoded, which meant it silently drifted behind the real client: only the version string is spoofed, so bumping it is a one-line change once the endpoint is reachable. The IDE-style version (`Antigravity/<version>`) is resolved the same way from the IDE auto-updater endpoint.
+
+---
+
 ## Available Models
 
 | Model Name | Model ID | Type | Status |
@@ -82,7 +96,8 @@ Accept: text/event-stream
 | Claude Opus 4.6 Thinking | `claude-opus-4-6-thinking` | Anthropic | Verified |
 | Gemini 3.8 Flash (Low / Medium / High) | `gemini-3.8-flash-{low,medium,high}` | Google | Verified |
 | GPT-OSS 120B Medium | `gpt-oss-120b-medium` | Other | Verified |
-| Gemini 4 (Argon) | - | Google | Not exposed to consumer plans (Ultra / Enterprise only). Not integrated - no testable account. |
+| Gemini 4 (Argon) | `gemini-4-argon`, `gemini-4-argon-{low,medium,high}` | Google | Plan-gated: paid Google AI Pro, Ultra, Enterprise. Registered automatically by `model_discovery`; not in the curated catalog (no entitled account here to verify it). |
+| Claude Sonnet / Opus 5.5 | `claude-sonnet-5-5`, `claude-opus-5-5` | Anthropic | Plan-gated the same way; registered by `model_discovery`. |
 
 > Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro were reachable from consumer plans until **2026-10-13**, when they moved to Ultra / Enterprise-only. Their backend resolvers are retained for future / Enterprise use but they are no longer registered as selectable models.
 

@@ -68,6 +68,24 @@ export function setAntigravityVersion(version) {
     antigravityVersion = version;
     versionLocked = true;
 }
+/**
+ * Fallback for the Antigravity **CLI** (agy) version, used in the CLI client
+ * signature that the backend requires for Gemini 3.7/3.8 Flash. Kept current by
+ * `initAntigravityCliVersion()`; see docs/ANTIGRAVITY_API_SPEC.md.
+ */
+export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.4.2";
+let antigravityCliVersion = ANTIGRAVITY_CLI_VERSION_FALLBACK;
+let cliVersionLocked = false;
+export function getAntigravityCliVersion() { return antigravityCliVersion; }
+/**
+ * Set the runtime Antigravity CLI version. Can only be called once (at startup).
+ */
+export function setAntigravityCliVersion(version) {
+    if (cliVersionLocked)
+        return;
+    antigravityCliVersion = version;
+    cliVersionLocked = true;
+}
 /** @deprecated Use getAntigravityVersion() for runtime access. */
 export const ANTIGRAVITY_VERSION = ANTIGRAVITY_VERSION_FALLBACK;
 export function getAntigravityHeaders() {
