@@ -23,7 +23,7 @@ import { initDiskSignatureCache } from "./plugin/cache";
 import { createProactiveRefreshQueue } from "./plugin/refresh-queue";
 import { initLogger, createLogger } from "./plugin/logger";
 import { initHealthTracker, getHealthTracker, initTokenTracker, getTokenTracker } from "./plugin/rotation";
-import { initAntigravityVersion } from "./plugin/version";
+import { initAntigravityVersion, initAntigravityCliVersion } from "./plugin/version";
 import { executeSearch } from "./plugin/search";
 const MAX_OAUTH_ACCOUNTS = 10;
 const MAX_WARMUP_SESSIONS = 1000;
@@ -1027,6 +1027,7 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
     initLogger(client);
     // Fetch latest Antigravity version from remote API (non-blocking, falls back to hardcoded)
     await initAntigravityVersion();
+    await initAntigravityCliVersion();
     // Initialize health tracker for hybrid strategy
     if (config.health_score) {
         initHealthTracker({
