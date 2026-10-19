@@ -238,6 +238,36 @@ async function performSearch(query, urls, thinking = true, signal) {
  * OpenCode v2 setup hook.
  * Called automatically by the v2 plugin supervisor during startup.
  */
+/**
+ * Disables every model of a provider that is not part of the curated catalog.
+ *
+ * models.dev publishes a `google` provider with the full Gemini lineup. The
+ * Antigravity OAuth credential makes that provider available, so all of those
+ * models show up in the picker even though only the curated Antigravity ones
+ * can be served. Returns how many entries were disabled.
+ *
+ * Fail-open: an editor without `list`, or any throw, leaves the list untouched.
+ */
+export function hideForeignModels(editor, providerID, curatedIds) {
+    try {
+        const listFn = editor?.list;
+        if (typeof listFn !== "function")
+            return 0;
+        let hidden = 0;
+        for (const existing of listFn.call(editor, providerID) ?? []) {
+            if (!existing?.id || curatedIds.has(existing.id))
+                continue;
+            editor.update(providerID, existing.id, (draft) => {
+                draft.enabled = false;
+            });
+            hidden++;
+        }
+        return hidden;
+    }
+    catch {
+        return 0;
+    }
+}
 export async function setupV2(context) {
     const directory = context.location?.directory || process.cwd();
     const config = loadConfig(directory);
@@ -688,6 +718,12 @@ export async function setupV2(context) {
                 catch (error) {
                     log.warn(`[v2] Failed to register model ${modelId}: ${error instanceof Error ? error.message : String(error)}`);
                 }
+            }
+            // Opt-in: keep the picker limited to the curated Antigravity catalog.
+            if (config.hide_foreign_models) {
+                const hidden = hideForeignModels(editor, "google", new Set(Object.keys(catalog)));
+                if (hidden > 0)
+                    log.info(`[v2] disabled ${hidden} non-Antigravity google models`);
             }
         });
     }
