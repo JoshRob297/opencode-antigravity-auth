@@ -264,6 +264,27 @@ The Antigravity backend reports which models each account can use. With `model_d
 
 Full behavior, limits and caveats: [docs/CONFIGURATION.md](docs/CONFIGURATION.md#model-discovery).
 
+## Hiding Foreign Google Models
+
+`models.dev` publishes a `google` provider with the full Gemini lineup. Because the
+Antigravity OAuth credential makes that provider available, every one of those models
+shows up in the picker even though only the curated Antigravity models can be served.
+With `hide_foreign_models` enabled the plugin disables every `google` model that is not
+part of its curated catalog:
+
+```json
+// ~/.config/opencode/antigravity.json
+{
+  "hide_foreign_models": true
+}
+```
+
+- **Opt-in on purpose.** If you have your own Google API key (`GEMINI_API_KEY`) the full
+  `models.dev` list is valid, so the default is `false`.
+- **Re-evaluated on every load**, so a catalog refresh can no longer push the full Gemini
+  lineup back into the selector.
+- **Fail-open.** An editor that cannot list models, or any error, leaves the list as is.
+
 ---
 
 ## Multi-Account Setup

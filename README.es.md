@@ -269,6 +269,30 @@ Comportamiento completo, límites y salvedades: [docs/CONFIGURATION.md](docs/CON
 
 ---
 
+## Ocultar modelos de Google ajenos
+
+`models.dev` publica un provider `google` con toda la linea Gemini. Como la credencial
+OAuth de Antigravity hace que ese provider este disponible, todos esos modelos aparecen
+en el selector aunque solo los modelos curados de Antigravity se puedan servir. Con
+`hide_foreign_models` activado, el plugin desactiva todo modelo `google` que no forme
+parte de su catalogo curado:
+
+```json
+// ~/.config/opencode/antigravity.json
+{
+  "hide_foreign_models": true
+}
+```
+
+- **Opt-in a proposito.** Si tenes tu propia API key de Google (`GEMINI_API_KEY`), la
+  lista completa de `models.dev` es valida, por eso el default es `false`.
+- **Se reevalua en cada carga**, asi que un refresco del catalogo ya no puede devolver
+  toda la linea Gemini al selector.
+- **Fail-open.** Un editor que no puede listar modelos, o cualquier error, deja la lista
+  como esta.
+
+---
+
 ## Configuración multi-cuenta
 
 Añade varias cuentas de Google para obtener una cuota combinada mayor. El plugin rota automáticamente entre cuentas cuando alguna está limitada.

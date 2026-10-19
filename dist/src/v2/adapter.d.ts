@@ -259,5 +259,16 @@ export type CleanupFunction = () => Promise<void> | void;
  * OpenCode v2 setup hook.
  * Called automatically by the v2 plugin supervisor during startup.
  */
+/**
+ * Disables every model of a provider that is not part of the curated catalog.
+ *
+ * models.dev publishes a `google` provider with the full Gemini lineup. The
+ * Antigravity OAuth credential makes that provider available, so all of those
+ * models show up in the picker even though only the curated Antigravity ones
+ * can be served. Returns how many entries were disabled.
+ *
+ * Fail-open: an editor without `list`, or any throw, leaves the list untouched.
+ */
+export declare function hideForeignModels(editor: any, providerID: string, curatedIds: Set<string>): number;
 export declare function setupV2(context: V2Context): Promise<CleanupFunction | void>;
 //# sourceMappingURL=adapter.d.ts.map

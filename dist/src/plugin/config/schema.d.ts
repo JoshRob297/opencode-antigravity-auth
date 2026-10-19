@@ -103,6 +103,7 @@ export declare const AntigravityConfigSchema: z.ZodObject<{
     quota_fallback: z.ZodDefault<z.ZodBoolean>;
     cli_first: z.ZodDefault<z.ZodBoolean>;
     model_discovery: z.ZodDefault<z.ZodBoolean>;
+    hide_foreign_models: z.ZodDefault<z.ZodBoolean>;
     account_selection_strategy: z.ZodDefault<z.ZodEnum<{
         sticky: "sticky";
         "round-robin": "round-robin";

@@ -120,6 +120,51 @@
       "type": "boolean",
       "description": "Enable Claude prompt auto-caching by adding top-level cache_control when absent."
     },
+    "safety_level": {
+      "default": "medium",
+      "type": "string",
+      "enum": [
+        "medium",
+        "high",
+        "none"
+      ]
+    },
+    "safety_shield": {
+      "default": {
+        "enabled": true,
+        "log_ratings": true,
+        "show_toast": true,
+        "auto_rotate_threshold": 2
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "log_ratings": {
+          "default": true,
+          "type": "boolean"
+        },
+        "show_toast": {
+          "default": true,
+          "type": "boolean"
+        },
+        "auto_rotate_threshold": {
+          "default": 2,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        }
+      },
+      "required": [
+        "enabled",
+        "log_ratings",
+        "show_toast",
+        "auto_rotate_threshold"
+      ],
+      "additionalProperties": false
+    },
     "proactive_token_refresh": {
       "default": true,
       "type": "boolean",
@@ -145,6 +190,12 @@
       "minimum": 0,
       "maximum": 3600
     },
+    "max_all_blocked_wait_seconds": {
+      "default": 120,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 3600
+    },
     "quota_fallback": {
       "default": false,
       "type": "boolean",
@@ -154,6 +205,14 @@
       "default": false,
       "type": "boolean",
       "description": "Prefer gemini-cli routing before Antigravity for Gemini models. When false (default), Antigravity is tried first and gemini-cli is fallback."
+    },
+    "model_discovery": {
+      "default": false,
+      "type": "boolean"
+    },
+    "hide_foreign_models": {
+      "default": false,
+      "type": "boolean"
     },
     "account_selection_strategy": {
       "default": "hybrid",
@@ -173,7 +232,7 @@
       "type": "boolean"
     },
     "scheduling_mode": {
-      "default": "cache_first",
+      "default": "balance",
       "type": "string",
       "enum": [
         "cache_first",
