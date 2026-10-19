@@ -205,3 +205,49 @@ describe("OpenCode v2 Adapter", () => {
     }
   }, 15000);
 });
+
+describe("hideForeignModels", () => {
+  it("disables google models outside the curated catalog, keeping the curated ones", async () => {
+    const { hideForeignModels } = await import("./adapter");
+    const updates: Array<{ id: string; enabled: any }> = [];
+    const editor = {
+      list: (providerID: string) =>
+        providerID === "google"
+          ? [
+              { id: "antigravity-gemini-3.8-flash" },
+              { id: "antigravity-claude-sonnet-4-6" },
+              { id: "gemini-2.5-pro" },
+              { id: "gemini-2.5-flash" },
+              { id: "deep-research-preview-04-2026" },
+            ]
+          : [],
+      update: (providerID: string, modelId: string, updater: Function) => {
+        const draft: any = {};
+        updater(draft);
+        updates.push({ id: modelId, enabled: draft.enabled });
+      },
+    };
+
+    const hidden = hideForeignModels(editor, "google", new Set(["antigravity-gemini-3.8-flash", "antigravity-claude-sonnet-4-6"]));
+
+    expect(hidden).toBe(3);
+    expect(updates.map((u) => u.id)).toEqual(["gemini-2.5-pro", "gemini-2.5-flash", "deep-research-preview-04-2026"]);
+    expect(updates.every((u) => u.enabled === false)).toBe(true);
+  });
+
+  it("returns 0 when the editor cannot list models (fail-open)", async () => {
+    const { hideForeignModels } = await import("./adapter");
+    expect(hideForeignModels({ update: () => {} }, "google", new Set())).toBe(0);
+  });
+
+  it("returns 0 when the editor throws", async () => {
+    const { hideForeignModels } = await import("./adapter");
+    const editor = {
+      list: () => {
+        throw new Error("boom");
+      },
+      update: () => {},
+    };
+    expect(hideForeignModels(editor, "google", new Set())).toBe(0);
+  });
+});

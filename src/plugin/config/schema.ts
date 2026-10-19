@@ -337,6 +337,20 @@ export const AntigravityConfigSchema = z.object({
    * @default false
    */
   model_discovery: z.boolean().default(false),
+
+  /**
+   * Hide Google models that are not part of the curated Antigravity catalog.
+   *
+   * models.dev publishes a `google` provider with the full Gemini lineup, and
+   * the Antigravity OAuth credential makes that provider available, so every
+   * catalog model appears in the picker even though only the Antigravity ones
+   * can be served. Enable this to keep the list limited to the curated models.
+   *
+   * Off by default: users with their own Google API key may want the full list.
+   *
+   * @default false
+   */
+  hide_foreign_models: z.boolean().default(false),
   
   /**
    * Strategy for selecting accounts when making requests.
@@ -526,6 +540,7 @@ export const DEFAULT_CONFIG: AntigravityConfig = {
   quota_fallback: false,
   cli_first: false,
   model_discovery: false,
+  hide_foreign_models: false,
   account_selection_strategy: 'hybrid',
   pid_offset_enabled: false,
   switch_on_first_rate_limit: true,
