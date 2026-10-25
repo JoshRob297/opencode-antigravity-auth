@@ -12,17 +12,10 @@
 > **Revival comunitario y edición extendida**: Este repositorio es una continuación activa y de código abierto del proyecto archivado de [NoeFabris](https://github.com/NoeFabris/opencode-antigravity-auth) (y del trabajo previo de [@jenslys](https://github.com/jenslys) y [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)). Corrige bugs críticos del upstream y desbloquea los modelos más nuevos de Google Antigravity.
 
 > [!IMPORTANT]
-> **Estado del proyecto (octubre de 2026) - mantenimiento en pausa.**
-> Después de un uso extenso en condiciones reales, pausamos el trabajo nuevo en el plugin hasta que Google lance un modelo que realmente valga la pena pagar:
-> - **Gemini 4 ("Argon") está disponible en planes de pago, y el plugin ya no necesita una release para soportarlo.** Desde el **2026-10-13** Argon se despliega en la Antigravity App, la Antigravity CLI y las extensiones de IDE (no en el IDE standalone) para **Google AI Pro (de pago, no trial), Ultra y Enterprise**. Nuestras propias cuentas están en el tier **Free / AI Plus**, así que no podemos verificarlo de punta a punta; pero con [`model_discovery`](#descubrimiento-de-modelos) activado, cualquier modelo más nuevo se registra automáticamente en cualquier cuenta que lo tenga, de modo que no hace falta cambiar el plugin para poder seleccionar Argon.
-> - **Pagar por Argon sigue sin valer la pena aquí.** Argon no ha demostrado el valor que Google promete: en trabajo real de repositorio no reproducimos una ganancia de calidad sobre el caballo de batalla actual que justifique un precio de tier frontier, y pagar el tier tampoco arreglaría el backend de Antigravity, que sigue tratando la cuenta como `free-tier`.
-> - **Caballo de batalla diario recomendado: Gemini 3.8 Flash.** Es el único modelo Gemini que queda en planes de consumidor, es muy rápido generando código y es gratis en el margen con credenciales de Antigravity. Úsalo para trabajo de alto volumen y bajo riesgo, y escala a un modelo frontier (por ejemplo **DeepSeek**) cuando la calidad de salida sea la restricción real.
-> - **Matriz de planes (2026-10-18):** Argon y Claude Sonnet/Opus **5.5** requieren Google AI Pro **de pago**, Ultra o Enterprise. **Gemini 3.7 Flash, 3.6 Flash y 3.1 Pro son exclusivos de Enterprise.** Los planes de consumidor conservan **Gemini 3.8 Flash**, **Claude Sonnet/Opus 4.6** y **GPT-OSS 120B**, y estos dos últimos están programados para eliminarse el **2026-11-02** en **todos** los planes, incluido Ultra.
-> - El backend de Antigravity sigue siendo poco fiable para planes de pago: el tier se reconoce (`paidTier = g1-pro-tier`) pero no se aplica (`currentTier = free-tier`).
->
-> El descubrimiento de modelos se reconsiderará solo cuando cambie algo de esto: (a) haya una cuenta con entitlement disponible para verificación de punta a punta, (b) Argon muestre una ventaja medible sobre el caballo de batalla actual en tareas reales de repositorio, o (c) vuelva a hacer falta un curador porque el catálogo del backend no sea confiable.
->
-> El plugin sigue funcionando tal como está (fija una release que sepas que funciona). El mantenimiento se reanuda cuando Google ofrezca algo que valga la pena pagar de verdad.
+> **Estado del proyecto (octubre de 2026) - Compatibilidad con Gemini 4 ("Argon") habilitada.**
+> - **Gemini 4 ("Argon") está soportado para cuentas con el plan correspondiente.** Google ofrece Argon en el ecosistema de Antigravity para **Google AI Pro (de pago, no trial), Ultra y Enterprise**. El plugin maneja automáticamente las cabeceras de firma oficial del CLI para `gemini-4` / `argon` y lo expone a través de [`model_discovery`](#descubrimiento-de-modelos).
+> - **Usa Argon con moderación:** Los modelos frontier como Argon consumen la cuota de la cuenta y las ventanas de ráfaga (5 horas y semanal) mucho más rápido que los modelos Flash. Recomendamos a los usuarios con acceso utilizarlo para tareas complejas de arquitectura y razonamiento, conservando **Gemini 3.8 Flash** como el caballo de batalla para trabajo diario de alto volumen.
+> - **Matriz de planes (octubre de 2026):** Argon y Claude Sonnet/Opus **5.5** requieren Google AI Pro **de pago**, Ultra o Enterprise. **Gemini 3.7 Flash, 3.6 Flash y 3.1 Pro son exclusivos de Enterprise.** Los planes de consumidor conservan **Gemini 3.8 Flash**, **Claude Sonnet/Opus 4.6** y **GPT-OSS 120B** (estos dos últimos programados para eliminarse en todos los planes el **2026-11-02**).
 
 ---
 
@@ -262,6 +255,7 @@ El backend de Antigravity reporta qué modelos puede usar cada cuenta. Con `mode
 ```
 
 - **Si tu cuenta tiene Argon o Claude 5.5, aparecen.** Gemini 4 Argon (`gemini-4-argon`, `-low`, `-medium`, `-high`) y los sucesores Claude Sonnet/Opus 5.5 siguen la regla forward-only, así que una cuenta AI Pro / Ultra / Enterprise para la que el backend los liste obtiene la entrada en el selector automáticamente; esto importa el **2026-11-02**, cuando Claude 4.6 y GPT-OSS 120B se eliminan en todos los planes. El descubrimiento nunca declara soporte: refleja lo que el backend le concede a esa cuenta.
+- **Aviso sobre consumo de cuota en modelos frontier:** Ten en cuenta que utilizar **Gemini 4 Argon** agota las ventanas de 5 horas y semanales de Antigravity notablemente más rápido que los modelos Flash. Utilízalo de forma moderada para decisiones críticas de diseño o problemas difíciles, y mantén **Gemini 3.8 Flash** para el flujo de trabajo continuo.
 - **Solo hacia adelante (forward-only).** Todo lo más viejo que los caballos de batalla curados (`gemini-3.8-flash`, Claude 4.6) queda fuera, los ids curados nunca se duplican, y los ids medidos como muertos, retirados o internos se filtran con una denylist. Un `200` del backend no se toma como prueba de que el modelo sirva.
 - **Best-effort.** Si la consulta al catálogo falla, se usa el catálogo curado y el arranque no se ve afectado.
 
