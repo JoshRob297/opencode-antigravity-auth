@@ -1,4 +1,4 @@
-import { ANTIGRAVITY_ENDPOINT_PROD, getAntigravityHeaders, ANTIGRAVITY_PROVIDER_ID, } from "../constants";
+import { ANTIGRAVITY_ENDPOINT_PROD, getAntigravityHeaders, getAntigravityCliUserAgent, ANTIGRAVITY_PROVIDER_ID, } from "../constants";
 import { accessTokenExpired, formatRefreshParts, parseRefreshParts } from "./auth";
 import { logQuotaFetch } from "./debug";
 import { ensureProjectContext } from "./project";
@@ -67,6 +67,7 @@ export async function fetchQuotaSummary(accessToken, projectId) {
         method: "POST",
         headers: {
             ...antigravityHeaders,
+            "User-Agent": getAntigravityCliUserAgent(),
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
         },
@@ -85,6 +86,7 @@ export async function fetchAvailableModels(accessToken, projectId) {
         method: "POST",
         headers: {
             ...antigravityHeaders,
+            "User-Agent": getAntigravityCliUserAgent(),
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
         },
