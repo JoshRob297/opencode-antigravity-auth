@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.2.0] - 2026-10-24
+
+### Added
+
+- **Full Gemini 4 ("Argon") routing compatibility:** Requests invoking `gemini-4` and `argon` now automatically present the official Antigravity CLI client signature (`antigravity/cli/... (aidev_client; ...)`), eliminating false `404 NOT_FOUND` responses for accounts entitled to Argon.
+- **Model Discovery support for Argon:** Accounts with active Google AI Pro (paid), Ultra, or Enterprise tiers automatically discover and register `antigravity-gemini-4-argon` (with `low`, `medium`, `high` thinking tiers) via `model_discovery: true`.
+
+### Changed
+
+- **CLI signature fallback updated to 1.4.7:** Synchronized with the latest upstream Antigravity CLI release.
+- **Official CLI headers for Quota Summary:** `retrieveUserQuotaSummary` and `fetchAvailableModels` now send CLI headers to preserve both `Gemini Models` and `Claude and GPT models` dual-window groups.
+- **Documentation:** Updated `README.md` and `README.es.md` highlighting Argon availability for entitled accounts, with explicit usage recommendations regarding accelerated quota consumption.
+
+## [2.1.0] - 2026-10-19
+
+### Added
+
+- **Hide foreign Google models (`hide_foreign_models`):** Opt-in setting to suppress models.dev built-in Google models from polluting the picker when using Antigravity OAuth credentials.
+
 ## [2.0.5] - 2026-10-14
 
 ### Fixed
