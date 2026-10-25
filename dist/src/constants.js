@@ -73,10 +73,13 @@ export function setAntigravityVersion(version) {
  * signature that the backend requires for Gemini 3.7/3.8 Flash. Kept current by
  * `initAntigravityCliVersion()`; see docs/ANTIGRAVITY_API_SPEC.md.
  */
-export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.4.2";
+export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.4.7";
 let antigravityCliVersion = ANTIGRAVITY_CLI_VERSION_FALLBACK;
 let cliVersionLocked = false;
 export function getAntigravityCliVersion() { return antigravityCliVersion; }
+export function getAntigravityCliUserAgent() {
+    return `antigravity/cli/${getAntigravityCliVersion()} (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)`;
+}
 /**
  * Set the runtime Antigravity CLI version. Can only be called once (at startup).
  */

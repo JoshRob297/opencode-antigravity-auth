@@ -6,6 +6,7 @@ import {
   SKIP_THOUGHT_SIGNATURE,
   getRandomizedHeaders,
   getAntigravityCliVersion,
+  getAntigravityCliUserAgent,
   type HeaderStyle,
 } from "../constants";
 import { cacheSignature, getCachedSignature } from "./cache";
@@ -1653,7 +1654,7 @@ export function prepareAntigravityRequest(
   // The version is resolved at startup from the CLI auto-updater (see version.ts);
   // it used to be hardcoded and silently drifted behind the real client.
   if (/gemini-3\.[78]-flash/i.test(effectiveModel)) {
-    userAgent = `antigravity/cli/${getAntigravityCliVersion()} (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)`;
+    userAgent = getAntigravityCliUserAgent();
   }
   headers.set("User-Agent", userAgent);
 
