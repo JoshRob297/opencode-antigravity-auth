@@ -1082,6 +1082,13 @@ export class AccountManager {
         const t1 = a.rateLimitResetTimes[antigravityKey];
         if (t1 !== undefined) waitTimes.push(Math.max(0, t1 - now));
       }
+
+      const quotaGroup = resolveQuotaGroup(family, model);
+      const groupData = a.cachedQuota?.[quotaGroup];
+      if (groupData?.resetTime) {
+        const resetMs = new Date(groupData.resetTime).getTime();
+        if (resetMs > now) waitTimes.push(resetMs - now);
+      }
     }
 
     return waitTimes.length > 0 ? Math.min(...waitTimes) : 0;
@@ -1138,6 +1145,29 @@ export class AccountManager {
           reason: `quota/rate-limited (resets at ~${resetDate}, in ${durationStr})`,
           waitMs: remainingMs,
         };
+      }
+
+      // Check soft quota / exhausted cached quota
+      const quotaGroup = resolveQuotaGroup(family, model);
+      const groupData = a.cachedQuota?.[quotaGroup];
+      if (groupData?.resetTime) {
+        const resetMs = new Date(groupData.resetTime).getTime();
+        if (resetMs > now) {
+          const remainingMs = resetMs - now;
+          const remSec = Math.ceil(remainingMs / 1000);
+          const durationStr = remSec >= 3600
+            ? `${(remSec / 3600).toFixed(1)}h`
+            : remSec >= 60
+            ? `${Math.ceil(remSec / 60)}m`
+            : `${remSec}s`;
+          const resetDate = new Date(resetMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const remainingFrac = groupData.remainingFraction ?? 0;
+          return {
+            email: label,
+            reason: `quota exhausted (${(remainingFrac * 100).toFixed(0)}% remaining, resets at ~${resetDate}, in ${durationStr})`,
+            waitMs: remainingMs,
+          };
+        }
       }
 
       return { email: label, reason: "temporarily unavailable", waitMs: null };

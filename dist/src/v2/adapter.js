@@ -8,7 +8,7 @@ import { checkAccountsQuota, formatQuotaReportMarkdown, fetchAvailableModels } f
 import { EngineStatsManager } from "../plugin/stats";
 import { loadConfig, initRuntimeConfig } from "../plugin/config";
 import { loadAccounts, saveAccounts } from "../plugin/storage";
-import { AccountManager, computeSoftQuotaCacheTtlMs } from "../plugin/accounts";
+import { AccountManager, computeSoftQuotaCacheTtlMs, resolveQuotaGroup } from "../plugin/accounts";
 import { refreshAccessToken } from "../plugin/token";
 import { formatRefreshParts, parseRefreshParts, accessTokenExpired } from "../plugin/auth";
 import { persistAccountPool } from "../plugin";
@@ -106,7 +106,9 @@ async function refreshQuotaCacheForFamily(manager, family) {
     const snapshot = manager.getAccountsSnapshot();
     const now = Date.now();
     const stale = snapshot.some((a) => a.enabled !== false && (a.cachedQuotaUpdatedAt == null || now - a.cachedQuotaUpdatedAt > ttlMs));
-    if (!stale)
+    const quotaGroup = resolveQuotaGroup(family);
+    const allDepleted = snapshot.every((a) => a.enabled === false || (a.cachedQuota && (a.cachedQuota[quotaGroup]?.remainingFraction ?? 1) <= 0.1));
+    if (!stale && !allDepleted)
         return;
     const refresh = (async () => {
         const active = snapshot.filter((a) => a.enabled !== false);
@@ -188,7 +190,9 @@ async function refreshQuotaCacheForFamily(manager, family) {
                     stored.cachedQuotaUpdatedAt = snap.cachedQuotaUpdatedAt;
                 }
             }
-            await saveAccounts(storage);
+            if (!process.env.VITEST) {
+                await saveAccounts(storage);
+            }
             log.info("[v2 routing] Quota cache refreshed from live fetchAvailableModels");
         }
         catch (e) {
@@ -438,26 +442,24 @@ export async function setupV2(context) {
                     else if (isRateLimitedOrQuota) {
                         // Immediately mark failed account as limited in shared AccountManager & disk cache
                         mgr.markRateLimitedByIndex(meta.accountIndex, 60_000, meta.family, "antigravity");
-                        // Set cached quota remainingFraction for this family to 0 so next prompt won't reuse it
-                        const familyGroup = meta.family === "claude" ? "claude" : "gemini-flash";
-                        mgr.updateQuotaCache(meta.accountIndex, {
-                            [familyGroup]: { remainingFraction: 0, resetTime: new Date(Date.now() + 3600_000).toISOString() }
-                        });
+                        // Invalidate cached quota updatedAt so next request refreshes from live backend
+                        const failedAccountSnap = mgr.getAccounts()[meta.accountIndex];
+                        if (failedAccountSnap) {
+                            failedAccountSnap.cachedQuotaUpdatedAt = 0;
+                        }
                         // Advance activeIndex immediately in storage
-                        const storage = await loadAccounts();
-                        if (storage && storage.accounts.length > 1) {
-                            const nextIdx = (meta.accountIndex + 1) % storage.accounts.length;
-                            storage.activeIndex = nextIdx;
-                            const failedAccount = storage.accounts[meta.accountIndex];
-                            if (failedAccount) {
-                                failedAccount.cachedQuota = {
-                                    ...failedAccount.cachedQuota,
-                                    [familyGroup]: { remainingFraction: 0, resetTime: new Date(Date.now() + 3600_000).toISOString() }
-                                };
-                                failedAccount.cachedQuotaUpdatedAt = Date.now();
+                        if (!process.env.VITEST) {
+                            const storage = await loadAccounts();
+                            if (storage && storage.accounts.length > 1) {
+                                const nextIdx = (meta.accountIndex + 1) % storage.accounts.length;
+                                storage.activeIndex = nextIdx;
+                                const failedAccount = storage.accounts[meta.accountIndex];
+                                if (failedAccount) {
+                                    failedAccount.cachedQuotaUpdatedAt = 0;
+                                }
+                                await saveAccounts(storage).catch(() => { });
+                                log.warn(`[v2 routing] Account idx=${meta.accountIndex} encountered status=${event.response.status}. Switched activeIndex -> ${nextIdx}`);
                             }
-                            await saveAccounts(storage).catch(() => { });
-                            log.warn(`[v2 routing] Account idx=${meta.accountIndex} encountered status=${event.response.status}. Switched activeIndex -> ${nextIdx}`);
                         }
                     }
                 }
@@ -482,7 +484,9 @@ export async function setupV2(context) {
                         if (storage && storage.accounts.length > 1) {
                             const nextIndex = ((storage.activeIndex ?? 0) + 1) % storage.accounts.length;
                             storage.activeIndex = nextIndex;
-                            await saveAccounts(storage);
+                            if (!process.env.VITEST) {
+                                await saveAccounts(storage);
+                            }
                             log.warn(`[Safety Shield] High risk threshold reached. Preventive rotation to account index ${nextIndex}`);
                         }
                     }
