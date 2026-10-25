@@ -1296,7 +1296,7 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
     // returns 200 with modelVersion gemini-3.7-flash / gemini-3.8-flash for low/medium/high.
     // The version is resolved at startup from the CLI auto-updater (see version.ts);
     // it used to be hardcoded and silently drifted behind the real client.
-    if (/gemini-3\.[78]-flash/i.test(effectiveModel)) {
+    if (/gemini-3\.[78]-flash|gemini-4|argon/i.test(effectiveModel)) {
         userAgent = getAntigravityCliUserAgent();
     }
     headers.set("User-Agent", userAgent);
