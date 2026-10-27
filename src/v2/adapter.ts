@@ -807,6 +807,8 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         message.includes("decode") ||
         message.includes("stream") ||
         message.includes("eof") ||
+        message.includes("econnreset") ||
+        message.includes("socket connection was closed") ||
         message.includes("quota exceeded");
 
       const sessionKey = event.sessionID ?? "default";

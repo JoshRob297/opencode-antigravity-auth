@@ -523,6 +523,8 @@ export async function setupV2(context) {
                 message.includes("decode") ||
                 message.includes("stream") ||
                 message.includes("eof") ||
+                message.includes("econnreset") ||
+                message.includes("socket connection was closed") ||
                 message.includes("quota exceeded");
             const sessionKey = event.sessionID ?? "default";
             let meta = lastFailedMetaBySession.get(sessionKey);
