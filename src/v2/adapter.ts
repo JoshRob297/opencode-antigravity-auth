@@ -506,6 +506,8 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
   }
   const pendingBySession = new Map<string, PendingEntry[]>();
   const lastFailedMetaBySession = new Map<string, { family: ModelFamily; accountIndex: number }>();
+  const transportFailureCountBySession = new Map<string, number>();
+  const MAX_CONSECUTIVE_TRANSPORT_FAILURES = 3;
   const MAX_PENDING_PER_SESSION = 32;
   const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
 
@@ -706,6 +708,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
           const mgr = await getSharedAccountManager();
           if (event.response?.ok) {
             mgr.markAccountUsed(meta.accountIndex);
+            transportFailureCountBySession.delete(sessionKey);
           } else if (isRateLimitedOrQuota) {
             // Immediately mark failed account as limited in shared AccountManager & disk cache
             mgr.markRateLimitedByIndex(meta.accountIndex, 60_000, meta.family, "antigravity");
@@ -823,8 +826,34 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
 
       if (!isRotatable) return;
 
+      const isTransportFailure =
+        message.includes("econnreset") ||
+        message.includes("socket connection was closed") ||
+        message.includes("decode") ||
+        message.includes("stream") ||
+        message.includes("eof");
+
+      if (isTransportFailure) {
+        const currentFailures = (transportFailureCountBySession.get(sessionKey) ?? 0) + 1;
+        transportFailureCountBySession.set(sessionKey, currentFailures);
+
+        if (currentFailures >= MAX_CONSECUTIVE_TRANSPORT_FAILURES) {
+          log.warn(
+            `[v2 routing] Circuit breaker triggered: ${currentFailures} consecutive transport dropouts on session ${sessionKey}. Halting retry loop to prevent runaway cycles. Prompt compaction required.`
+          );
+          transportFailureCountBySession.delete(sessionKey);
+          event.decision = { retry: false };
+          return;
+        }
+      }
+
       const storage = await loadAccounts();
-      if (!storage || storage.accounts.length <= 1) return;
+      if (!storage || storage.accounts.length <= 1) {
+        if (isTransportFailure) {
+          event.decision = { retry: true, delay: 500 };
+        }
+        return;
+      }
 
       const family: ModelFamily = meta?.family ?? "claude";
       const prevIndex = meta?.accountIndex ?? storage.activeIndex ?? 0;

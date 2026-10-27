@@ -251,3 +251,43 @@ describe("hideForeignModels", () => {
     expect(hideForeignModels(editor, "google", new Set())).toBe(0);
   });
 });
+
+describe("transport failure circuit breaker", () => {
+  it("stops retrying after consecutive transport failures on the same session", async () => {
+    const registeredHooks: Record<string, Function> = {};
+    const mockContext: V2Context = {
+      session: {
+        hook: vi.fn().mockImplementation(async (name, callback) => {
+          registeredHooks[name] = callback;
+          return { dispose: async () => {} };
+        }),
+      },
+    };
+
+    const cleanup = await setupV2(mockContext);
+    const retryHook = registeredHooks["retry"];
+    expect(retryHook).toBeDefined();
+
+    const sessionID = "ses-circuit-breaker-test";
+    const econnresetError = { status: undefined, message: "ECONNRESET: The socket connection was closed unexpectedly." };
+
+    // Failure 1 -> retry
+    const event1: any = { sessionID, error: econnresetError };
+    await retryHook!(event1);
+    expect(event1.decision?.retry).toBe(true);
+
+    // Failure 2 -> retry
+    const event2: any = { sessionID, error: econnresetError };
+    await retryHook!(event2);
+    expect(event2.decision?.retry).toBe(true);
+
+    // Failure 3 -> circuit breaker triggers, halts retry
+    const event3: any = { sessionID, error: econnresetError };
+    await retryHook!(event3);
+    expect(event3.decision?.retry).toBe(false);
+
+    if (typeof cleanup === "function") {
+      cleanup();
+    }
+  });
+});

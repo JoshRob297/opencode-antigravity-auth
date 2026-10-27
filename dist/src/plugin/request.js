@@ -522,6 +522,84 @@ function ensureThinkingBeforeToolUseInMessages(messages, signatureSessionKey) {
     });
 }
 /**
+ * Maximum character length allowed for historical tool responses before pruning.
+ * Historical turns with outputs larger than 30,000 characters (e.g. huge file reads or bash dumps)
+ * cause Google Cloud Gateways to time out (ECONNRESET at 60s) before issuing the first SSE chunk.
+ */
+export const MAX_HISTORICAL_TOOL_RESPONSE_CHARS = 30_000;
+/**
+ * Prunes oversized tool responses from historical turns (all except the last 2 turns).
+ * Preserves the active conversation context while preventing 60-second gateway socket drops.
+ */
+export function pruneHistoricalToolResponses(contents, maxChars = MAX_HISTORICAL_TOOL_RESPONSE_CHARS) {
+    if (!Array.isArray(contents) || contents.length <= 2) {
+        return contents;
+    }
+    const cutoffIndex = contents.length - 2;
+    return contents.map((turn, index) => {
+        if (index >= cutoffIndex || !turn || !Array.isArray(turn.parts)) {
+            return turn;
+        }
+        let modified = false;
+        const newParts = turn.parts.map((part) => {
+            if (part && typeof part === "object" && part.functionResponse) {
+                const resp = part.functionResponse;
+                if (resp && typeof resp === "object" && resp.response && typeof resp.response === "object") {
+                    const content = resp.response.content || resp.response.output || resp.response.result;
+                    if (typeof content === "string" && content.length > maxChars) {
+                        modified = true;
+                        const head = content.slice(0, 1500);
+                        const tail = content.slice(-500);
+                        const truncated = `${head}\n\n[... output truncado preventivamente por tamaño histórico (${content.length} caracteres) ...]\n\n${tail}`;
+                        return {
+                            ...part,
+                            functionResponse: {
+                                ...resp,
+                                response: {
+                                    ...resp.response,
+                                    ...(resp.response.content !== undefined ? { content: truncated } : {}),
+                                    ...(resp.response.output !== undefined ? { output: truncated } : {}),
+                                    ...(resp.response.result !== undefined ? { result: truncated } : {}),
+                                },
+                            },
+                        };
+                    }
+                }
+            }
+            return part;
+        });
+        return modified ? { ...turn, parts: newParts } : turn;
+    });
+}
+/**
+ * Prunes oversized tool results from historical Claude messages (all except the last 2 turns).
+ */
+export function pruneHistoricalClaudeToolResponses(messages, maxChars = MAX_HISTORICAL_TOOL_RESPONSE_CHARS) {
+    if (!Array.isArray(messages) || messages.length <= 2) {
+        return messages;
+    }
+    const cutoffIndex = messages.length - 2;
+    return messages.map((msg, index) => {
+        if (index >= cutoffIndex || !msg || !Array.isArray(msg.content)) {
+            return msg;
+        }
+        let modified = false;
+        const newContent = msg.content.map((block) => {
+            if (block && typeof block === "object" && block.type === "tool_result") {
+                if (typeof block.content === "string" && block.content.length > maxChars) {
+                    modified = true;
+                    const head = block.content.slice(0, 1500);
+                    const tail = block.content.slice(-500);
+                    const truncated = `${head}\n\n[... output truncado preventivamente por tamaño histórico (${block.content.length} caracteres) ...]\n\n${tail}`;
+                    return { ...block, content: truncated };
+                }
+            }
+            return block;
+        });
+        return modified ? { ...msg, content: newContent } : msg;
+    });
+}
+/**
  * Gets the stable session ID for this plugin instance.
  */
 export function getPluginSessionId() {
@@ -709,6 +787,13 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                     // Use stable session ID for signature caching across multi-turn conversations
                     req.sessionId = signatureSessionKey;
                     stripInjectedDebugFromRequestPayload(req);
+                    // Prune giant tool responses in historical turns to prevent 60-second ECONNRESET drops
+                    if (Array.isArray(req.contents)) {
+                        req.contents = pruneHistoricalToolResponses(req.contents);
+                    }
+                    if (Array.isArray(req.messages)) {
+                        req.messages = pruneHistoricalClaudeToolResponses(req.messages);
+                    }
                     if (isClaude) {
                         // Step 0: Sanitize cross-model metadata (strips Gemini signatures when sending to Claude)
                         sanitizeCrossModelPayloadInPlace(req, { targetModel: effectiveModel });
@@ -749,6 +834,13 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                 const extraBody = requestPayload.extra_body;
                 // Variant/effort was already applied above (before backend-model resolution, see #37).
                 log.debug(`[ThinkingResolution] rawModel=${rawModel} resolvedModel=${effectiveModel} resolvedTier=${tierThinkingLevel ?? "none"} variantLevel=${earlyVariantConfig?.thinkingLevel ?? "none"} variantBudget=${earlyVariantConfig?.thinkingBudget ?? "none"} providerOptions.google=${JSON.stringify(requestPayload.providerOptions?.google ?? null)} generationConfig.thinkingConfig=${JSON.stringify(rawGenerationConfig?.thinkingConfig ?? null)}`);
+                // Prune giant tool responses in historical turns to prevent 60-second ECONNRESET drops
+                if (Array.isArray(requestPayload.contents)) {
+                    requestPayload.contents = pruneHistoricalToolResponses(requestPayload.contents);
+                }
+                if (Array.isArray(requestPayload.messages)) {
+                    requestPayload.messages = pruneHistoricalClaudeToolResponses(requestPayload.messages);
+                }
                 if (headerStyle === "antigravity") {
                     const gemini38FlashBackendModel = resolveAntigravityGemini38FlashBackendModel(rawModel, tierThinkingLevel);
                     if (gemini38FlashBackendModel) {

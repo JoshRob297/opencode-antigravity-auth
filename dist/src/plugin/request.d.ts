@@ -21,6 +21,21 @@ declare function hasToolUseInMessages(messages: any[]): boolean;
 declare function hasSignedThinkingInMessages(messages: any[], sessionId?: string): boolean;
 declare function ensureThinkingBeforeToolUseInMessages(messages: any[], signatureSessionKey: string): any[];
 /**
+ * Maximum character length allowed for historical tool responses before pruning.
+ * Historical turns with outputs larger than 30,000 characters (e.g. huge file reads or bash dumps)
+ * cause Google Cloud Gateways to time out (ECONNRESET at 60s) before issuing the first SSE chunk.
+ */
+export declare const MAX_HISTORICAL_TOOL_RESPONSE_CHARS = 30000;
+/**
+ * Prunes oversized tool responses from historical turns (all except the last 2 turns).
+ * Preserves the active conversation context while preventing 60-second gateway socket drops.
+ */
+export declare function pruneHistoricalToolResponses(contents: unknown[], maxChars?: number): unknown[];
+/**
+ * Prunes oversized tool results from historical Claude messages (all except the last 2 turns).
+ */
+export declare function pruneHistoricalClaudeToolResponses(messages: unknown[], maxChars?: number): unknown[];
+/**
  * Gets the stable session ID for this plugin instance.
  */
 export declare function getPluginSessionId(): string;

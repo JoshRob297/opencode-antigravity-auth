@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0] - 2026-10-27
+
+### Added
+
+- **Historical Tool Response Pruning (`pruneHistoricalToolResponses`):** Automatically trims oversized tool outputs (>30,000 characters) in historical conversation turns (turns older than the last 2). Prevents massive prompt bloating from giant log dumps or large file reads that cause Google Cloud Gateways to terminate TCP sockets (`ECONNRESET`) after 60 seconds of silent pre-computation.
+- **Transport Failure Circuit Breaker in v2 Adapter:** Implements a sliding failure counter for socket dropouts (`ECONNRESET`, stream truncation, EOF). After 3 consecutive transport failures on the same session, the circuit breaker halts the retry loop with `{ retry: false }`, preventing runaway 11-attempt retry loops and alerting the runner to compact context.
+
 ## [2.2.1] - 2026-10-27
 
 ### Fixed
