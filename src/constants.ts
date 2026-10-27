@@ -85,7 +85,7 @@ export function setAntigravityVersion(version: string): void {
  * signature that the backend requires for Gemini 3.7/3.8 Flash. Kept current by
  * `initAntigravityCliVersion()`; see docs/ANTIGRAVITY_API_SPEC.md.
  */
-export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.4.7";
+export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.4.8";
 let antigravityCliVersion = ANTIGRAVITY_CLI_VERSION_FALLBACK;
 let cliVersionLocked = false;
 

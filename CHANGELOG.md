@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.1] - 2026-10-27
+
+### Fixed
+
+- **Transport error failover for ECONNRESET in OpenCode v2 adapter:** The `retry` hook now marks socket connection closures (`ECONNRESET` / `socket connection was closed unexpectedly`) as rotatable events, immediately advancing to the next healthy account instead of endlessly retrying on the failing account.
+- **Soft Quota default threshold set to 100:** Disables artificial "quota exhausted" / "temporarily unavailable" blocking when weekly/5h quotas are heavily utilized, allowing full consumption of remaining quota across accounts.
+- **Antigravity CLI fallback version updated to 1.4.8:** Synchronized hardcoded fallback with Google's latest stable 100% rollout of the Antigravity CLI auto-updater.
+
 ## [2.2.0] - 2026-10-24
 
 ### Added
