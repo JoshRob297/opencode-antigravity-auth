@@ -704,15 +704,17 @@ La mayoría de usuarios no necesita configurar nada: los valores por defecto fun
 | **5+ cuentas** | `"account_selection_strategy": "round-robin"` |
 | **Agentes en paralelo** | Añade `"pid_offset_enabled": true` |
 
-### Protección de cuota
+### Protección de cuota y resiliencia de transporte
 
 | Opción | Por defecto | Qué hace |
 |--------|---------|--------------|
-| `soft_quota_threshold_percent` | `90` | Omite la cuenta cuando el uso de cuota supera este porcentaje. Evita que Google penalice a cuentas que agotan la cuota por completo. Ponlo en `100` para desactivarlo. |
+| `soft_quota_threshold_percent` | `100` | Omite la cuenta cuando el uso de cuota supera este porcentaje. Por defecto en `100` (desactivado) para evitar bloqueos prematuros cuando el remanente de cuota es bajo. Ponlo en `90` para una protección conservadora contra penalizaciones de Google. |
 | `quota_refresh_interval_minutes` | `15` | Intervalo de refresco de cuota en segundo plano. Tras peticiones exitosas a la API, refresca la caché de cuota si es más antigua que este intervalo. Ponlo en `0` para desactivarlo. |
 | `soft_quota_cache_ttl_minutes` | `"auto"` | Cuánto tiempo se considera fresca la caché de cuota. `"auto"` = max(2 × intervalo de refresco, 10 minutos). Define un número (1-120) para un TTL fijo. |
 
 > **Cómo funciona**: la caché de cuota se refresca automáticamente tras las peticiones a la API (cuando es más antigua que `quota_refresh_interval_minutes`) y manualmente desde "Check quotas" en `opencode auth login`. La comprobación de umbral usa `soft_quota_cache_ttl_minutes` para determinar la frescura de la caché: si la caché es más antigua, la cuenta se considera "desconocida" y se permite (fail-open). Cuando TODAS las cuentas superan el umbral, el plugin espera al primer reset de cuota disponible (igual que el comportamiento de rate limit). Si el tiempo de espera supera `max_rate_limit_wait_seconds`, falla de inmediato.
+>
+> **Circuit Breaker de transporte y poda de herramientas (v2.3.0+)**: para prevenir resets TCP de 60 segundos (`ECONNRESET`) generados por outputs colosales de comandos, los resultados de herramientas que superen 30,000 caracteres en turnos históricos (anteriores a los 2 últimos) se truncan automáticamente con un snippet de resumen explicativo. Adicionalmente, un circuit breaker interrumpe los reintentos tras 3 caídas consecutivas de socket en una misma sesión para advertir de la necesidad de compactar contexto.
 
 ### Programación de rate limits
 

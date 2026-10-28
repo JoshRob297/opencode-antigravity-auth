@@ -400,6 +400,22 @@ No los necesitas. Este plugin cubre todo el OAuth de Google.
 
 ---
 
+## ECONNRESET / Conexión de socket cerrada inesperadamente (Timeout 60s)
+
+**Síntomas:**
+- Mensaje de error: `TypeError: ECONNRESET: The socket connection was closed unexpectedly. For more information, pass verbose: true in the second argument to fetch()`
+- Fallos continuos con intervalos exactos de ~60 segundos en sesiones densas o largas.
+
+**Causa:**
+Cuando una conversación acumula payloads masivos (como salidas gigantes de git diff, árboles de archivos o dumps de terminal), el balanceador de Google Cloud cierra la conexión TCP inactiva (`TCP RST`) si el modelo tarda más de 60 segundos de pre-procesamiento antes de emitir el primer token de streaming.
+
+**Soluciones (Nativas desde v2.3.0+):**
+1. **Poda automática de respuestas históricas:** El plugin trunca preventivamente outputs de herramientas de más de 30.000 caracteres en turnos históricos (más antiguos que los 2 últimos), aligerando drásticamente el peso de la petición sin perder contexto activo.
+2. **Circuit breaker de transporte:** Tras 3 caídas consecutivas de socket en una misma sesión, se detiene el bucle de reintentos en lugar de congelar la sesión en bucles infinitos.
+3. **Compactación de sesión:** Si la sesión sigue saturada, ejecuta `/compact` o inicia un nuevo hilo para reiniciar la memoria caché del backend.
+
+---
+
 ## Guías de migración
 
 ### v1.2.8+ (variantes)
