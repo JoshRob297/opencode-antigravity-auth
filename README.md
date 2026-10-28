@@ -698,15 +698,17 @@ Most users don't need to configure anything — defaults work well.
 | **5+ accounts** | `"account_selection_strategy": "round-robin"` |
 | **Parallel agents** | Add `"pid_offset_enabled": true` |
 
-### Quota Protection
+### Quota Protection & Transport Resilience
 
 | Option | Default | What it does |
 |--------|---------|--------------|
-| `soft_quota_threshold_percent` | `90` | Skip account when quota usage exceeds this percentage. Prevents Google from penalizing accounts that fully exhaust quota. Set to `100` to disable. |
+| `soft_quota_threshold_percent` | `100` | Skip account when quota usage exceeds this percentage. Defaults to `100` (disabled) to avoid premature account exhaustion lockouts on low quotas. Set to `90` for conservative protection against Google penalties. |
 | `quota_refresh_interval_minutes` | `15` | Background quota refresh interval. After successful API requests, refreshes quota cache if older than this interval. Set to `0` to disable. |
 | `soft_quota_cache_ttl_minutes` | `"auto"` | How long quota cache is considered fresh. `"auto"` = max(2 × refresh interval, 10 minutes). Set a number (1-120) for fixed TTL. |
 
 > **How it works**: Quota cache is refreshed automatically after API requests (when older than `quota_refresh_interval_minutes`) and manually via "Check quotas" in `opencode auth login`. The threshold check uses `soft_quota_cache_ttl_minutes` to determine cache freshness - if cache is older, the account is considered "unknown" and allowed (fail-open). When ALL accounts exceed the threshold, the plugin waits for the earliest quota reset time (like rate limit behavior). If wait time exceeds `max_rate_limit_wait_seconds`, it errors immediately.
+>
+> **Transport Circuit Breaker & Tool Pruning (v2.3.0+)**: To prevent 60-second gateway TCP resets (`ECONNRESET`) caused by massive command/tool dumps, outputs exceeding 30,000 characters in historical turns (older than the last 2) are automatically pruned with a clear summary snippet. Furthermore, a circuit breaker halts runaway retries after 3 consecutive transport dropouts on the same session, prompting context compaction.
 
 ### Rate Limit Scheduling
 
