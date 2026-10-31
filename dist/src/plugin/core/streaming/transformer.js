@@ -292,7 +292,7 @@ export function deduplicateThinkingText(response, sentBuffer, displayedThinkingH
     }
     return response;
 }
-export function transformSseLine(line, signatureStore, thoughtBuffer, sentThinkingBuffer, callbacks, options, debugState) {
+export function transformSseLine(line, signatureStore, thoughtBuffer, sentThinkingBuffer, callbacks, options, debugState, usageState) {
     if (!line.startsWith('data:')) {
         return line;
     }
@@ -303,6 +303,11 @@ export function transformSseLine(line, signatureStore, thoughtBuffer, sentThinki
     try {
         const parsed = JSON.parse(json);
         if (parsed.response !== undefined) {
+            const usageMetadata = parsed.response?.["usageMetadata"];
+            if (usageMetadata && usageState) {
+                // Cumulative across chunks: keep the newest block and report once.
+                usageState.value = usageMetadata;
+            }
             if (options.cacheSignatures && options.signatureSessionKey) {
                 cacheThinkingSignaturesFromResponse(parsed.response, options.signatureSessionKey, signatureStore, thoughtBuffer, callbacks.onCacheSignature);
             }
@@ -398,6 +403,7 @@ export function createStreamingTransformer(signatureStore, callbacks, options = 
     const thoughtBuffer = createThoughtBuffer();
     const sentThinkingBuffer = createThoughtBuffer();
     const debugState = { injected: false };
+    const usageState = {};
     let hasSeenUsageMetadata = false;
     return new TransformStream({
         transform(chunk, controller) {
@@ -409,7 +415,7 @@ export function createStreamingTransformer(signatureStore, callbacks, options = 
                 if (line.includes('usageMetadata')) {
                     hasSeenUsageMetadata = true;
                 }
-                const transformedLine = transformSseLine(line, signatureStore, thoughtBuffer, sentThinkingBuffer, callbacks, options, debugState);
+                const transformedLine = transformSseLine(line, signatureStore, thoughtBuffer, sentThinkingBuffer, callbacks, options, debugState, usageState);
                 controller.enqueue(encoder.encode(transformedLine + '\n'));
             }
         },
@@ -419,8 +425,11 @@ export function createStreamingTransformer(signatureStore, callbacks, options = 
                 if (buffer.includes('usageMetadata')) {
                     hasSeenUsageMetadata = true;
                 }
-                const transformedLine = transformSseLine(buffer, signatureStore, thoughtBuffer, sentThinkingBuffer, callbacks, options, debugState);
+                const transformedLine = transformSseLine(buffer, signatureStore, thoughtBuffer, sentThinkingBuffer, callbacks, options, debugState, usageState);
                 controller.enqueue(encoder.encode(transformedLine));
+            }
+            if (usageState.value) {
+                callbacks.onUsage?.(usageState.value);
             }
             // Inject synthetic usage metadata if missing (fixes "Context % used: 0%" issue)
             if (!hasSeenUsageMetadata) {

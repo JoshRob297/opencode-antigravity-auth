@@ -238,6 +238,32 @@ archivo cuando otro proceso lo escribió.
 
 El archivo no es un log: solo conteos y marcas de tiempo, sin prompts.
 
+### Consumo de tokens y capacidad medida por bucket
+
+Google no publica ninguna asignación de tokens por bucket, así que el plugin la mide:
+cada respuesta agrega una línea a `antigravity-usage.jsonl` (cuenta, modelo, conteos
+de `usageMetadata`) y cada consulta de cuota agrega sus porcentajes a
+`antigravity-quota-history.jsonl`. Cruzar ambos da cuántos tokens (y cuántas
+llamadas) cuesta un punto porcentual del bucket.
+
+`/antigravity-usage` y el tool `antigravity_usage` (`days` opcional, 7 por defecto)
+reportan:
+
+- tokens por cuenta, por modelo y por día, separados en entrada, salida, razonamiento
+  y lectura de caché;
+- `TOKENS/1%`, `CALLS/1%` y la proporción `MOVED` de ventanas en las que el bucket
+  realmente bajó, más una estimación lineal marcada como informativa.
+
+`MOVED` importa más que la estimación. Medido el 2026-10-31 en el bucket de Argon: dos
+llamadas de 32k tokens lo movieron 1.01 puntos, y más tarde dos llamadas de 15k tokens
+lo movieron 0.00 puntos. El consumo no es lineal con los tokens, y por eso el reporte
+publica las dos lecturas en lugar de afirmar una capacidad.
+
+Los archivos viven junto al resto del estado del plugin en el directorio de
+configuración de OpenCode y son JSONL de solo agregado; se pueden rotar o truncar sin
+romper nada. Las peticiones se cuentan desde la ruta de streaming (`usageMetadata` en
+el stream SSE); una petición sin streaming no se registra.
+
 ---
 
 ## Configuraciones recomendadas
