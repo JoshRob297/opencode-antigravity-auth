@@ -16,6 +16,7 @@ import { authorizeAntigravity, exchangeAntigravity } from "../antigravity/oauth"
 import { resolveCachedAuth } from "../plugin/cache";
 import { executeSearch } from "../plugin/search";
 import { createLogger } from "../plugin/logger";
+import { writeRequestAudit } from "../plugin/debug";
 import { ANTIGRAVITY_PROVIDER_ID } from "../constants";
 import { prepareAntigravityRequest, transformAntigravityResponse, isGenerativeLanguageRequest, } from "../plugin/request";
 import { OPENCODE_MODEL_DEFINITIONS } from "../plugin/config/models";
@@ -438,6 +439,13 @@ export async function setupV2(context) {
                 accountIndex: activeIndex,
                 modelName: modelName || prepared.effectiveModel || prepared.requestedModel,
                 createdAt: Date.now(),
+            });
+            // Audit dump of the exact body the backend receives, for
+            // `antigravity-preflight --capture`. Header names only, never values.
+            writeRequestAudit(prepared.init?.body, {
+                url: String(prepared.request),
+                model: prepared.effectiveModel ?? prepared.requestedModel,
+                headerKeys: prepared.init?.headers ? Object.keys(prepared.init.headers) : [],
             });
             event.request = new Request(prepared.request, prepared.init);
         });

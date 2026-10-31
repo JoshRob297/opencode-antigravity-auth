@@ -204,6 +204,19 @@ Settings that control plugin behavior.
 
 Logs are written to `~/.config/opencode/antigravity-logs/` (or `log_dir` if set).
 
+With `debug` enabled, every outbound request also overwrites
+`antigravity-logs/last-request.json` with the exact body the backend receives: the
+model id, the URL, the header **names** (never the values, so the bearer token is not
+written) and the full request. That is the ground truth for auditing what reaches the
+model, including the `AGENTS.md` content and the tool schemas that OpenCode injects:
+
+```bash
+antigravity-preflight --capture ~/.config/opencode/antigravity-logs/last-request.json
+```
+
+The file is rewritten per request and only exists while `debug` is on; treat it as
+sensitive, since it contains your prompts.
+
 ---
 
 ## Recommended Configs

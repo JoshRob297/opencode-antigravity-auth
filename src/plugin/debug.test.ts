@@ -76,3 +76,62 @@ describe("debug sink policy", () => {
     expect(getLogFilePath()).toContain("antigravity-debug-")
   })
 })
+
+describe("request audit dump", () => {
+  let logDir: string
+
+  beforeEach(async () => {
+    const { mkdtempSync } = await import("node:fs")
+    const { tmpdir } = await import("node:os")
+    const { join } = await import("node:path")
+    logDir = mkdtempSync(join(tmpdir(), "antigravity-audit-"))
+  })
+
+  afterEach(async () => {
+    const { rmSync } = await import("node:fs")
+    rmSync(logDir, { recursive: true, force: true })
+  })
+
+  it("builds the audit document around the parsed body", async () => {
+    const { buildRequestAudit } = await import("./debug")
+
+    const audit = buildRequestAudit(
+      JSON.stringify({ model: "claude-sonnet-5-5-low", request: { contents: [] } }),
+      { url: "https://example.test/v1internal:streamGenerateContent", model: "claude-sonnet-5-5-low", headerKeys: ["Authorization", "User-Agent"] },
+    )
+
+    expect(audit["model"]).toBe("claude-sonnet-5-5-low")
+    expect(audit["headerKeys"]).toEqual(["Authorization", "User-Agent"])
+    expect((audit["body"] as any).request).toEqual({ contents: [] })
+    expect(typeof audit["createdAt"]).toBe("string")
+  })
+
+  it("writes last-request.json with the body and no header values", async () => {
+    const { writeRequestAudit } = await import("./debug")
+    const { initializeDebug } = await import("./debug")
+    const { readFileSync } = await import("node:fs")
+    const { join } = await import("node:path")
+
+    initializeDebug({ ...DEFAULT_CONFIG, debug: true, debug_tui: false, log_dir: logDir })
+
+    const target = writeRequestAudit(
+      JSON.stringify({ model: "gemini-3.8-flash-high", request: { contents: [{ role: "user", parts: [{ text: "2+2" }] }] } }),
+      { url: "https://example.test/v1internal:streamGenerateContent", model: "gemini-3.8-flash-high", headerKeys: ["Authorization"] },
+    )
+
+    expect(target).toBe(join(logDir, "last-request.json"))
+    const written = JSON.parse(readFileSync(target as string, "utf8"))
+    expect(written.body.request.contents[0].parts[0].text).toBe("2+2")
+    // Only names: the bearer token must never reach the file.
+    expect(written.headerKeys).toEqual(["Authorization"])
+    expect(JSON.stringify(written)).not.toContain("Bearer ")
+  })
+
+  it("does nothing when debug is disabled", async () => {
+    const { initializeDebug, writeRequestAudit } = await import("./debug")
+
+    initializeDebug({ ...DEFAULT_CONFIG, debug: false, debug_tui: false, log_dir: logDir })
+
+    expect(writeRequestAudit(JSON.stringify({ a: 1 }))).toBeUndefined()
+  })
+})

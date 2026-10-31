@@ -1,4 +1,4 @@
-import { createWriteStream, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import { createWriteStream, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { env } from "node:process";
 import { homedir } from "node:os";
@@ -114,6 +114,7 @@ export function initializeDebug(config) {
         debugEnabled,
         debugTuiEnabled,
         logFilePath,
+        logsDir: debugEnabled ? getLogsDir(config.log_dir) : undefined,
         logWriter,
     };
 }
@@ -137,6 +138,7 @@ function getDebugState() {
             debugEnabled,
             debugTuiEnabled,
             logFilePath,
+            logsDir: debugEnabled ? getLogsDir() : undefined,
             logWriter,
         };
     }
@@ -153,6 +155,51 @@ export function isDebugTuiEnabled() {
 }
 export function getLogFilePath() {
     return getDebugState().logFilePath;
+}
+export const REQUEST_AUDIT_FILENAME = "last-request.json";
+/**
+ * Builds the audit document for one outbound request. Exported so the shape can be
+ * asserted without touching the filesystem.
+ */
+export function buildRequestAudit(bodyText, meta = {}) {
+    let parsed;
+    try {
+        parsed = JSON.parse(bodyText);
+    }
+    catch {
+        parsed = bodyText;
+    }
+    return {
+        createdAt: new Date().toISOString(),
+        url: meta.url,
+        model: meta.model,
+        headerKeys: meta.headerKeys ?? [],
+        body: parsed,
+    };
+}
+/**
+ * Writes the exact body the backend will receive to `last-request.json` in the
+ * debug log directory, so the prompt that reaches the model can be audited with
+ * `antigravity-preflight --capture`. Header *names* are recorded, never values:
+ * the Authorization bearer token stays out of the file. Only runs while debug is
+ * enabled.
+ */
+export function writeRequestAudit(body, meta = {}) {
+    const state = getDebugState();
+    if (!state.debugEnabled || !state.logsDir) {
+        return undefined;
+    }
+    if (typeof body !== "string" || body.length === 0) {
+        return undefined;
+    }
+    const target = join(state.logsDir, REQUEST_AUDIT_FILENAME);
+    try {
+        writeFileSync(target, JSON.stringify(buildRequestAudit(body, meta), null, 2));
+        return target;
+    }
+    catch {
+        return undefined;
+    }
 }
 let requestCounter = 0;
 /**
