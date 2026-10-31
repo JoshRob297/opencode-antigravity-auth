@@ -51,7 +51,7 @@ This shows remaining quota percentages and reset times for each model family:
 - **Claude & GPT** - Claude Opus 4.6 / Sonnet 4.6 and GPT-OSS 120B quota
 - **Gemini** - Gemini Flash quota (on consumer plans `antigravity-gemini-3.8-flash` is the only registered Gemini model)
 
-> **Reading the report:** the 5h column shows what the backend grants that account, and it is **not** a plan marker: the official client shows both windows on Free / AI Plus too. Use the model set to tell plans apart (Argon and Claude 5.5 mean paid AI Pro, Ultra or Enterprise; see `docs/models` upstream). A missing 5h bucket means the account has no burst window at all, which is a good signal for pruning the pool.
+> **Reading the report:** the windows show what the backend grants that account, and they are **not** a plan marker: the official client shows both windows on Free / AI Plus too. The model set is the only reliable signal, and it is **per account**, not per plan name - measured 2026-10-31, a `free-tier` account held the Argon grant while others did not. Use the `Account capabilities` table to see exactly which models each account can reach, and `USABLE` to see whether it can serve that family right now (a 5h bar with quota left is unusable while the weekly bucket sits at 0%).
 
 ### Standalone Quota Script
 
@@ -193,5 +193,7 @@ Configure in `antigravity.json`:
 | `sticky` | Same account until rate-limited | Prompt cache preservation |
 | `round-robin` | Rotate to next account on every request | Maximum throughput |
 | `hybrid` | Deterministic selection based on health score + token bucket + LRU | Best overall distribution |
+
+All three strategies first drop any account whose measured catalog lacks the requested model, so a strategy can never send `gemini-4-argon` to an account that answers `404` for it.
 
 See [Configuration](CONFIGURATION.md#account-rotation) for more details.

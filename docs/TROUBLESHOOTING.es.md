@@ -69,10 +69,14 @@ opencode auth login
 ```
 
 ### "Model not found"
-Añade esto a la configuración de tu provider `google`:
-```json
-"npm": "@ai-sdk/google"
-```
+
+Un `404 NOT_FOUND` en un modelo nuevo casi siempre es un problema de **entitlement o de firma**, no de configuración. Diagnostica en este orden:
+
+1. **¿Alguna cuenta tiene el modelo?** Ejecuta `antigravity_quota` y mira `Account capabilities (measured)`. Si todas las cuentas dicen `no` para esa familia, el grant no está en este pool; la única solución es agregar cuentas. Una cuenta sin acceso recibe el placeholder (`gemini-4-argon-disabled`, sin `quotaInfo`) y responde `404` al id real.
+2. **¿Dice `not measured`?** Reinicia OpenCode una vez para que se midan los catálogos y vuelve a revisar.
+3. **¿Es un modelo 3.7/3.8 Flash o de la línea Argon?** Requieren el `User-Agent` oficial del CLI (`antigravity/cli/<version> (aidev_client; ...)`), que el plugin pone automáticamente. Una firma vieja es la causa histórica del mensaje engañoso "enable preview features"; actualiza el plugin.
+4. **¿Claude 4.6 respondió "no longer available"?** Es el aviso de retiro (anunciado para el 2026-11-02), no un error: la cuenta ya migró a Claude 5.5.
+5. **Solo entonces** revisa el cableado del provider (las instalaciones v1 todavía necesitan el provider `google` definido): agrega `"npm": "@ai-sdk/google"` a la configuración del provider `google`.
 
 ### Errores de sesión
 Escribe `continue` para disparar la auto-recuperación, o usa `/undo` para revertir.

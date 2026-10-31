@@ -38,14 +38,16 @@ src/
     ├── request-helpers.ts   # Schema cleaning, thinking filters
     ├── thinking-recovery.ts # Turn boundary detection, crash recovery
     ├── recovery.ts          # Session recovery (tool_result_missing)
-    ├── quota.ts             # Quota checking (API usage stats)
+    ├── quota.ts             # Quota fetching + per-account report
+    ├── model-entitlements.ts # Per-account usable-model catalog (rotation input)
     ├── cache.ts             # Auth & signature caching
     ├── cache/
     │   └── signature-cache.ts # Disk-based signature persistence
     ├── config/
     │   ├── schema.ts        # Zod config schema
-    │   └── loader.ts        # Config file loading
-    ├── accounts.ts          # Multi-account management
+    │   ├── loader.ts        # Config file loading
+    │   └── model-discovery.ts # Backend catalog → grouped OpenCode models
+    ├── accounts.ts          # Multi-account management + entitlement filter
     ├── server.ts            # OAuth callback server
     └── debug.ts             # Debug logging
 ```
@@ -64,7 +66,18 @@ fetch() intercepted → isGenerativeLanguageRequest() → prepareAntigravityRequ
 - Token refresh if expired
 - Endpoint fallback (daily → autopush → prod)
 
-### 2. Request Transformation (`request.ts`)
+### 2. Model Registry & Entitlements (`v2/adapter.ts`)
+
+1. **Discovery** - the union of every enabled account's `fetchAvailableModels`
+   catalog is reduced to the ids newer than the curated catalog. Tier-suffixed ids
+   collapse into one model with `low|medium|high` variants; limits come from the
+   backend (`maxTokens` / `maxOutputTokens`).
+2. **Entitlement measurement** - the same response feeds `modelCatalog` per account,
+   persisted so rotation can filter without an extra round trip.
+3. **Preflight** - when every measured account lacks the requested model the request
+   is rejected with an explicit message instead of a quota error.
+
+### 3. Request Transformation (`request.ts`)
 
 | Step | What Happens |
 |------|--------------|
@@ -76,7 +89,7 @@ fetch() intercepted → isGenerativeLanguageRequest() → prepareAntigravityRequ
 | ID assignment | Assign IDs to tool calls (FIFO matching) |
 | Wrap request | `{ project, model, request: {...} }` |
 
-### 3. Response Transformation (`request.ts`)
+### 4. Response Transformation (`request.ts`)
 
 | Step | What Happens |
 |------|--------------|
@@ -189,13 +202,23 @@ Claude rejects unsupported JSON Schema features. The plugin uses an **allowlist 
 1. **Sticky selection** - Same account until rate limited (preserves cache)
 2. **Per-model-family** - Claude/Gemini rate limits tracked separately
 3. **Dual-window tracking** - Official 5-hour and Weekly quota windows
-4. **Automatic failover** - On 429, switch to next available account
+4. **Entitlement filter** - Every `fetchAvailableModels` response is reduced to the
+   account's usable catalog (`buildAccountModelCatalog`, stored as `modelCatalog`).
+   An id counts as usable only when it carries a `quotaInfo` block and is not marked
+   `-disabled`. Selection skips any account whose fresh catalog proves it lacks the
+   requested model, so `gemini-4-argon-*` never lands on an account that would answer
+   `404`, while the same account keeps serving `gemini-3.8-flash`. An unmeasured or
+   stale catalog never blocks (fail-open).
+5. **Automatic failover** - On `429`, `403`, transport drops and `404` on a model
+   another account serves (one attempt per account, then it stops). A `404` also
+   invalidates that account's cached catalog instead of applying a quota cooldown.
 
 ### Account Storage
 
 Location: `~/.config/opencode/antigravity-accounts.json`
 
-Contains OAuth refresh tokens - treat as sensitive.
+Contains OAuth refresh tokens - treat as sensitive. It also carries the measured
+`modelCatalog` per account and the cached quota, both refreshed from the backend.
 
 ---
 

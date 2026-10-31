@@ -9,57 +9,35 @@
 > **Community Revival & Extended Edition**: This repository is an active, open-source continuation of the archived project by [NoeFabris](https://github.com/NoeFabris/opencode-antigravity-auth) (and earlier work by [@jenslys](https://github.com/jenslys) and [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)). It fixes critical upstream bugs and unlocks the newest Google Antigravity models.
 
 > [!IMPORTANT]
-> **Project Status (October 2026) - Gemini 4 ("Argon") Compatibility Enabled.**
-> - **Gemini 4 ("Argon") is supported for accounts with an entitled plan.** Google offers Argon in the Antigravity ecosystem for **Google AI Pro (paid, non-trial), Ultra and Enterprise**. The plugin automatically handles official CLI signature headers for `gemini-4` / `argon` and surfaces it via [`model_discovery`](#model-discovery).
-> - **Use Argon moderately:** Frontier models like Argon consume account quota and burst windows significantly faster than Flash models. We invite users entitled to Argon to utilize it for complex architectural and reasoning tasks, but recommend keeping **Gemini 3.8 Flash** as the default workhorse for everyday high-volume tasks.
-> - **Plan matrix (October 2026):** Argon and Claude Sonnet/Opus **5.5** require **paid** Google AI Pro, Ultra or Enterprise. **Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro are Enterprise-only.** Consumer tiers retain **Gemini 3.8 Flash**, **Claude Sonnet/Opus 4.6** and **GPT-OSS 120B** (with the latter two scheduled for sunset across all tiers on **2026-11-02**).
+> **Project Status (October 2026) - measured, not assumed.**
+> - **Gemini 4 ("Argon") works, and the grant is per account.** Measured 2026-10-31: an account that `loadCodeAssist` reports as `free-tier` received the full Argon grant (`modelVersion: gemini-4-argon-trial` plus its own `Gemini 4 Argon` weekly bucket), while two other accounts only received the `gemini-4-argon-disabled` placeholder and answer `404` for the real ids. Do not infer access from the plan name: enable [`model_discovery`](#model-discovery) and confirm with `antigravity_quota`.
+> - **Argon has its own quota bucket.** Two 32k-token Argon calls moved `gemini-argon-wtu-weekly` from 98.75% to 97.75% while `gemini-weekly` and `gemini-5h` did not move at all. Argon is not billed against Gemini Flash/Pro.
+> - **Rotation is entitlement-aware.** Each account's model catalog is measured and cached, and selection skips accounts that provably lack the requested model. Argon only goes to the account that has it; `gemini-3.8-flash` keeps using every account.
+> - **Claude quota is per family, not per generation.** Free accounts do have Claude quota, but it covers `claude-*-4-6` and GPT-OSS; Claude 5.5 answers `404` there. `antigravity_quota` reports both generations separately.
+> - **Claude 4.6 is being retired.** On the entitled account `claude-sonnet-4-6` already answers `200` with "Claude Sonnet 4.6 is no longer available. Please switch to Claude Sonnet 5.5."; Free accounts still serve it. Google's announced date is **2026-11-02**, and `model_discovery` surfaces the 5.5 successors without a plugin release.
+> - **Use Argon moderately.** Measure it: ~1% of its weekly bucket per 65k input tokens, versus a Flash bucket that is effectively free at the margin. Keep **Gemini 3.8 Flash** as the high-volume workhorse.
 
 ---
 
-### What's New & Changed in this Fork (v2.0.0)
+### What this fork changes
 
-> *Release notes for the v2.0.0 line.* Model availability described below reflects the state at that time. Since **2026-10-13**, **Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro are Ultra / Enterprise-only** and were pruned from the consumer catalog in **v2.0.4**; see [Models](#models) for the current catalog and the project status note above for the Argon decision.
-
-- **OpenCode v2 Native Engine & Variant Registration**: Fully updated for OpenCode v2 (`@opencode/cli` 2.0+). Registers all models with explicit `variants` (`low`, `medium`, `high`, `max`) and `status: active`, preventing `VariantUnavailableError`.
-- **New Real-Time Engine Stats (`/antigravity-stats` & `antigravity_stats`)**: Instant local diagnostic dashboard reporting per-account request distribution (OK / 429 / Errors), live health score, active rotation state, and thinking signature cache hit rate (without external network latency).
-- **Integrated Health Metric in `/antigravity-quota`**: Compact `HEALTH` column inside quota tables for immediate wellness inspection.
-- **Persistent Engine Stats (`antigravity-stats.json`)**: Preserves health scores and usage counters across daemon/service restarts in `~/.config/opencode/antigravity-stats.json` (auto-gitignored).
-- **OpenCode v2 Dual-Compatibility Architecture**: Fully compatible with both OpenCode v1 (`opencode-ai` 1.18.x) and OpenCode v2 (`@opencode/cli` 2.0+). Uses a polymorphic entrypoint that exports a standard v1 callable factory while exposing native v2 `.id` and lifecycle `.setup(context)` methods.
-- **Native v2 Tool & Command Registries**: Dispatches `antigravity_quota`, `antigravity_stats`, `google_search`, and `/antigravity-quota` slash command natively via OpenCode v2's domain transforms (`context.tool.transform` and `context.command.transform`).
-- **Strict Tool Schema Sanitization (Fix HTTP 400 `property is not defined`)**: Cloud Code API backed by Protobuf rejects tool calls when schema `required` arrays contain properties not declared in `properties`. The normalizer recursively cleans parameter schemas, prunes orphan required keys, and enforces validation on pre-packaged `functionDeclarations`.
-- **Model Addition: `antigravity-gpt-oss-120b-medium`**: Integrated Antigravity's native 120B open-source model into `OPENCODE_MODEL_DEFINITIONS` with 131k context window and multi-account routing support.
-- **Official Antigravity CLI Signature Parity**: Synchronized client signature headers and User-Agent to `antigravity/cli/<version> (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)`, matching the latest Google Antigravity binary release. The signature was pinned to `1.2.7` at the time; it is now resolved at startup from the CLI auto-updater endpoint (see [docs/ANTIGRAVITY_API_SPEC.md](docs/ANTIGRAVITY_API_SPEC.md#client-signature-cli-user-agent)).
-- **OPSEC Safety Shield & Telemetry (`safety_shield`)**: Intercepts Google Gemini's `safetyRatings` in real-time. Emits UI warnings on high-risk classifications and automatically executes **preventive account rotation** (`Account Shield`) after consecutive triggers to disperse suspicious telemetry across your account pool.
-- **Strip `x-goog-api-key` Header (Fix 400 `API_KEY_INVALID`)**: OpenCode automatically injects an AI Studio key into `x-goog-api-key` when intercepting `generativelanguage.googleapis.com` calls. Antigravity backend prioritized this header over `Bearer` auth, returning `400 API_KEY_INVALID`. The header is now stripped alongside `x-api-key`.
-- **Legacy `gemini-cli` Mode Removed (Definitive 403 `#3501` Fix)**: Completely stripped legacy VS Code headers and `-preview` model fallbacks. All requests route cleanly through official Antigravity CLI signatures (`aidev_client`), eliminating false license errors across all accounts.
-- **Configurable Safety Settings (`safety_level`)**: Uses Google's native moderation baseline by default (`medium` / `BLOCK_MEDIUM_AND_ABOVE`) to protect accounts, with configurable options for `high` and `none` (with explicit disclaimer).
-- **Fixed 403 `#3501` (`SUBSCRIPTION_REQUIRED`) on Flash**: Removed decommissioned sandbox `autopush` endpoint from fallbacks so all requests route cleanly to live `daily` and `prod` endpoints.
-- **Deprecated Gemini 3.5 Flash Removed**: Fully removed `antigravity-gemini-3.5-flash` following Google's backend sunset, keeping only active models (Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.1 Pro, and Claude 4.6).
-- **Clean Install Model Whitelisting**: Automatically injects a strict `provider.google.whitelist` in `opencode.json` on clean setup, hiding 18+ unauthenticated built-in Google AI Studio/Vertex models from the OpenCode model selector.
-- **In-Flight 403 `#3501` (`SUBSCRIPTION_REQUIRED`) Auto-Recovery**: Intercepts project resolution failures and immediately provisions/links the companion project via `onboardManagedProject` without crashing the active agent session.
-- **Auto-Update Commands**: Includes `/antigravity-update` slash command and CLI updater (`antigravity-update`) for one-click plugin updates.
-
-| Enhancement | What Was Broken Upstream | How This Fork Fixes It |
-|---|---|---|
-| **Automatic Slash Command Provisioning** | Slash commands like `/antigravity-quota` and `/antigravity-update` required manual file copying into `~/.config/opencode/command/`. | The plugin now automatically provisions `antigravity-quota.md` and `antigravity-update.md` on startup and configuration update. |
-| **Gemini 3.8 Flash Support** | Backend restricted the newest `gemini-3.8-flash` model to official CLI signatures. | Added `resolveAntigravityGemini38FlashBackendModel` (→ `gemini-3.8-flash-{low,medium,high}`) and extended the CLI User-Agent spoofing regex to `/gemini-3\.[78]-flash/i`, unlocking **Gemini 3.8 Flash (Low/Medium/High)**. |
-| **Dangling Model Turn Sanitization** | Interrupted tools or aborted sessions caused Gemini to reject requests with `400 "Requests ending with a model turn are not supported"`. | Added automatic `sanitizeEndingModelTurn` pipeline for Gemini payloads + force-drop retry recovery (`MODEL_TURN_RECOVERY_NEEDED`). |
-| **Request Normalization & Clean Feedback** | Default filters caused false-positive blocks on coding and technical prompts with verbose legal notices. | Standardized payload configurations for development tasks and added concise single-line notification handling. |
-| ⏱**Server-Data-Driven Quota Exits** | Quota exhaustion retried blindly with backoff counters even when the server specified hours of wait time. | Captures `metadata.quotaResetTimeStamp` / `quotaResetDelay` from Google RPC errors, stores exact future reset timestamps, and enforces `max_all_blocked_wait_seconds` (default 120s) with clear model-switch suggestions. |
-| **Native Dual-Window Quota Tool** | Quota required a separate external plugin or returned flat model lists. | Embedded the official `antigravity_quota` tool directly into the auth plugin with full **5h Window + Weekly Window** tracking and progress bars via `/v1internal:retrieveUserQuotaSummary`. |
-| **Gemini 3.7 Flash Support** | Backend returned `404 NOT_FOUND` (rewritten as *"enable preview access"* or `429`) when invoking `gemini-3.7-flash`. | Discovered that Google restricts 3.7 Flash strictly to official CLI signatures. The plugin now dynamically presents the official Antigravity CLI client signature (`antigravity/cli/...`), unlocking full native access to **Gemini 3.7 Flash (Low/Medium/High)**. |
-| **Fast Multi-Account Failover** | On quota exhaustion the plugin would spin waiting on the same account (60s+ backoffs). | Default scheduling mode changed to `balance` with immediate `QUOTA_EXHAUSTED` failover (500ms) to the next account with quota. |
-| **IAM 403 / #3501 Auto-Recovery** | Requests failed with `403 IAM_PERMISSION_DENIED` or `SUBSCRIPTION_REQUIRED` (#3501) on new/unprovisioned accounts. | Automatic companion discovery + instant in-flight `onboardManagedProject` auto-recovery. Corrected `metadata.platform` to `PLATFORM_UNSPECIFIED`. |
-| **Gemini 3.6 Flash & Sunset of 3.5** | Native multi-tier backend model resolution (`gemini-3.6-flash-{low,medium,high}`). Deprecated 3.5 Flash removed. | Multi-tier thinking resolution support built into `model-resolver.ts`; deprecated 3.5 cleanly retired. |
-| **Clean CI & Community Standards** | Upstream had broken npm publishing actions and no rulesets. | Replaced with clean, automated Node.js CI with **1,056 tests passing**, security policies, and Dependabot groups. |
+- **OpenCode v1 and v2 in one entrypoint.** A callable v1 factory plus native v2 `.setup()`, with models, variants, tools and slash commands registered through the v2 registries.
+- **Real Antigravity model catalog.** The curated core is Gemini 3.8 Flash, the Claude 4.6 pair and GPT-OSS 120B; anything newer that your account is granted (Gemini 4 Argon, Claude 5.5) is registered by `model_discovery` from the backend catalog, one selector entry per family with `low`/`medium`/`high` variants.
+- **Official CLI client signature.** Requests present `antigravity/cli/<version> (aidev_client; ...)`, resolved at startup from the CLI auto-updater. Without it the backend answers `404 NOT_FOUND` for the newer Gemini lines - which is also why a stale signature used to look like "preview access not enabled".
+- **Multi-account pool with entitlement-aware rotation.** Per-account quota, health and measured model catalog; failover on `429`, `403`, transport drops and `404` misses; account cooldowns and circuit breakers so a bad account cannot poison the pool.
+- **Dual-window quota reporting.** `antigravity_quota` and `/antigravity-quota` show 5h and weekly windows per model family (Gemini, Claude/GPT, Gemini 4 Argon), short reset countdowns, a truthful `USABLE` flag and the measured capabilities of each account.
+- **Thinking tiers and Claude signatures.** Tiered backend ids, thinking budgets for Claude, signature caching and recovery for interrupted tool loops.
+- **Safety controls.** Configurable `safety_level`, plus `safety_shield` to surface and rotate on Google safety telemetry.
+- **Session resilience.** Historical tool-response pruning, transport-drop circuit breaker and retry instrumentation.
+- **Request hygiene.** Strips `x-api-key`/`x-goog-api-key`/`x-goog-user-project`, normalizes protobuf-incompatible tool schemas, and sanitizes payloads that the Cloud Code API rejects.
 
 ---
 
-Enable OpenCode to authenticate against **Antigravity** (Google's IDE) via OAuth so you can use Antigravity rate limits and access models like `gemini-3.8-flash`, `claude-sonnet-4-6`, `claude-opus-4-6-thinking` and `gpt-oss-120b` with your Google credentials.
+Enable OpenCode to authenticate against **Antigravity** (Google's IDE) via OAuth so you can use Antigravity rate limits to run `gemini-3.8-flash`, the Claude line (`4.6` today, `5.5` on accounts that have it) and `gpt-oss-120b`, plus whatever newer model your account is granted - Gemini 4 Argon included - with your Google credentials.
 
 ## What You Get
 
-- **Gemini 3.8 Flash**, **Claude Opus 4.6 / Sonnet 4.6** and **GPT-OSS 120B** via Google OAuth - this is the complete consumer catalog; **Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro are Ultra / Enterprise-only** and no longer registered
+- **Gemini 3.8 Flash**, **Claude Opus/Sonnet 4.6**, **GPT-OSS 120B** via Google OAuth, plus **Gemini 4 Argon** and **Claude 5.5** for the accounts that are granted them (discovered per account, not hardcoded)
 - **Multi-account support** — add multiple Google accounts, auto-rotates when rate-limited
 - **Request Normalization & Clean Feedback** — optimized parameters prevent false-positives on development tasks; clean one-line message on filter notices
 - **Slash Commands** — `/antigravity-quota` to inspect dual-window limits, and `/antigravity-stats` for instant local metrics
@@ -182,9 +160,11 @@ Then in `~/.config/opencode/opencode.json`:
 | Model | Variants | Description |
 |---|---|---|
 | `antigravity-gemini-3.8-flash` | `low`, `medium`, `high` | **Gemini 3.8 Flash** with thinking tiers *(Default)* |
-| `antigravity-claude-sonnet-4-6` | `low`, `medium`, `high`, `max` | Claude Sonnet 4.6 |
-| `antigravity-claude-opus-4-6-thinking` | `low`, `medium`, `high`, `max` | Claude Opus 4.6 with extended thinking |
+| `antigravity-claude-sonnet-4-6` | `low`, `medium`, `high`, `max` | Claude Sonnet 4.6 *(retiring 2026-11-02)* |
+| `antigravity-claude-opus-4-6-thinking` | `low`, `medium`, `high`, `max` | Claude Opus 4.6 with extended thinking *(retiring 2026-11-02)* |
 | `antigravity-gpt-oss-120b-medium` | `low`, `medium`, `high` | GPT-OSS 120B open-source model |
+
+Newer families are **not** hardcoded. `model_discovery` registers them from the account's own catalog; measured 2026-10-31 on an entitled account: `antigravity-gemini-4-argon` (`low`/`medium`/`high`), `antigravity-claude-sonnet-5-5` and `antigravity-claude-opus-5-5`. Limits come from the backend (Claude 5.5: 1M context / 128k output).
 
 ---
 
@@ -701,6 +681,8 @@ Most users don't need to configure anything — defaults work well.
 | **5+ accounts** | `"account_selection_strategy": "round-robin"` |
 | **Parallel agents** | Add `"pid_offset_enabled": true` |
 
+Every strategy respects entitlements: an account whose measured catalog lacks the requested model is skipped for that model, regardless of how healthy or free it is.
+
 ### Quota Protection & Transport Resilience
 
 | Option | Default | What it does |
@@ -754,7 +736,7 @@ OPENCODE_ANTIGRAVITY_DEBUG_TUI=1 opencode     # Enable TUI log panel debug outpu
 See the full [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for solutions to common issues including:
 
 - Auth problems and token refresh
-- "Model not found" errors
+- "Model not found" / `404` on a model your account is not granted
 - Session recovery
 - IAM and Google Cloud project permission errors
 - Safari OAuth issues
