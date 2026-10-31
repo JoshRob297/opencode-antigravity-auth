@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.5.1] - 2026-10-31
+
+### Fixed
+
+- **Argon soft-quota checks read the Gemini Pro bucket.** `resolveQuotaGroup` mapped every non-flash Gemini id to `gemini-pro`, so a soft-quota check for `gemini-4-argon-*` consulted the Pro number: an exhausted Argon bucket blocked Argon requests for the wrong reason, and a real Pro exhaustion could hide behind Argon. Argon now resolves to its own group, and the three cached-quota builders store it separately instead of folding it into Pro/Flash.
+
 ## [2.5.0] - 2026-10-31
 
 ### Added

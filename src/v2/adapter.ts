@@ -172,6 +172,8 @@ async function refreshQuotaCacheForFamily(manager: AccountManager, family: Model
       let resetFlash: string | undefined;
       let minPro = Infinity;
       let resetPro: string | undefined;
+      let minArgon = Infinity;
+      let resetArgon: string | undefined;
 
       for (const [key, m] of Object.entries(r.models)) {
         const qi = m?.quotaInfo;
@@ -183,6 +185,8 @@ async function refreshQuotaCacheForFamily(manager: AccountManager, family: Model
           // If remainingFraction is numeric, use it. Otherwise, if resetTime is present, remainingFraction is exhausted (0).
           const claudeFrac = Number.isFinite(frac) ? frac : (qi.resetTime ? 0 : 1);
           if (claudeFrac < minClaude) { minClaude = claudeFrac; resetClaude = qi.resetTime; }
+        } else if (label.includes("argon")) {
+          if (Number.isFinite(frac) && frac < minArgon) { minArgon = frac; resetArgon = qi.resetTime; }
         } else if (label.includes("flash")) {
           if (Number.isFinite(frac) && frac < minFlash) { minFlash = frac; resetFlash = qi.resetTime; }
         } else if (label.includes("pro")) {
@@ -192,6 +196,7 @@ async function refreshQuotaCacheForFamily(manager: AccountManager, family: Model
 
       const quota: Partial<Record<QuotaGroup, QuotaGroupSummary>> = {};
       if (Number.isFinite(minClaude)) quota.claude = { remainingFraction: minClaude, resetTime: resetClaude };
+      if (Number.isFinite(minArgon)) quota.argon = { remainingFraction: minArgon, resetTime: resetArgon };
       if (Number.isFinite(minFlash)) quota["gemini-flash"] = { remainingFraction: minFlash, resetTime: resetFlash };
       if (Number.isFinite(minPro)) quota["gemini-pro"] = { remainingFraction: minPro, resetTime: resetPro };
       if (Object.keys(quota).length > 0) {

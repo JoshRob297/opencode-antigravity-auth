@@ -15,7 +15,7 @@ import { groupForQuotaLabel, recordQuotaSnapshot } from "./usage-ledger";
 
 const FETCH_TIMEOUT_MS = 10000;
 
-export type QuotaGroup = "claude" | "gemini-pro" | "gemini-flash";
+export type QuotaGroup = "claude" | "gemini-pro" | "gemini-flash" | "argon";
 
 export interface QuotaGroupSummary {
   remainingFraction?: number;
@@ -326,6 +326,14 @@ export async function fetchAccountQuotaDetails(
                 remainingFraction: bucket.remainingFraction,
                 resetTime: bucket.resetTime.toISOString(),
               };
+            } else if (groupName.includes("argon")) {
+              // Gemini 4 (Argon) bills its own weekly bucket; folding it into
+              // gemini-pro made an exhausted Argon bucket look like exhausted Pro
+              // and hid a real Pro exhaustion behind Argon's number.
+              cachedQuota.argon = {
+                remainingFraction: bucket.remainingFraction,
+                resetTime: bucket.resetTime.toISOString(),
+              };
             } else if (groupName.includes("gemini")) {
               cachedQuota["gemini-flash"] = {
                 remainingFraction: bucket.remainingFraction,
@@ -466,6 +474,11 @@ export async function fetchAccountQuotaDetails(
       const lower = m.label.toLowerCase();
       if (lower.includes("claude")) {
         cachedQuota.claude = {
+          remainingFraction: m.remainingFraction,
+          resetTime: m.resetTime.toISOString(),
+        };
+      } else if (lower.includes("argon")) {
+        cachedQuota.argon = {
           remainingFraction: m.remainingFraction,
           resetTime: m.resetTime.toISOString(),
         };

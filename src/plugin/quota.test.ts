@@ -236,6 +236,59 @@ describe("fetchAccountQuotaDetails", () => {
     expect(result.cachedQuota?.["gemini-pro"]?.remainingFraction).toBe(0.75);
   });
 
+  it("keeps Gemini 4 Argon out of the Gemini Pro cached quota", async () => {
+    const account: AccountMetadataV3 = { ...baseAccount };
+
+    vi.mocked(refreshAccessToken).mockResolvedValueOnce({
+      type: "oauth",
+      access: "new-access",
+      refresh: "new-token123|proj2|managed2",
+      expires: Date.now() + 3600000,
+    });
+
+    vi.mocked(ensureProjectContext).mockResolvedValueOnce({
+      auth: {
+        type: "oauth",
+        access: "new-access",
+        refresh: "new-token123|proj2|managed2",
+        expires: Date.now() + 3600000,
+      },
+      effectiveProjectId: "proj2",
+    });
+
+    global.fetch = vi.fn(async (url: string) => {
+      if (url.includes("retrieveUserQuotaSummary")) {
+        return new Response(
+          JSON.stringify({
+            groups: [
+              {
+                displayName: "Gemini Models",
+                buckets: [
+                  { window: "weekly", remainingFraction: 0.75, resetTime: new Date(Date.now() + 1800000).toISOString() },
+                ],
+              },
+              {
+                displayName: "Gemini 4 Argon",
+                buckets: [
+                  { window: "weekly", remainingFraction: 0.4, resetTime: new Date(Date.now() + 1800000).toISOString() },
+                ],
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const result = await fetchAccountQuotaDetails(account, 0, mockClient);
+
+    expect(result.status).toBe("ok");
+    // Argon has its own weekly bucket: it must not drag the Pro value down (or up).
+    expect(result.cachedQuota?.argon?.remainingFraction).toBe(0.4);
+    expect(result.cachedQuota?.["gemini-pro"]?.remainingFraction).toBe(0.75);
+  });
+
   it("handles empty refresh token in auth when updating account", async () => {
     vi.mocked(refreshAccessToken).mockResolvedValueOnce({
       type: "oauth",
