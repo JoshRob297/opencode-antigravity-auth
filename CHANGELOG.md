@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.4.2] - 2026-10-31
+
+### Fixed
+
+- **`debug: true` writes the outbound request again on the v2 path.** The v2 adapter never logged the request it sent, so the debug log stayed empty and the only way to see the final body was patching the plugin. Every request now overwrites `antigravity-logs/last-request.json` with the URL, the model id, the header names (values are never written) and the full body, which is exactly what `antigravity-preflight --capture` reads.
+
+### Docs
+
+- **How to audit what reaches the model.** Documents the audit dump and the preflight command, including why the harness-injected `AGENTS.md` can block a stricter model even when the user prompt is harmless.
+
 ## [2.4.1] - 2026-10-31
 
 ### Fixed

@@ -17,6 +17,7 @@ import { authorizeAntigravity, exchangeAntigravity, type AntigravityTokenExchang
 import { resolveCachedAuth } from "../plugin/cache";
 import { executeSearch } from "../plugin/search";
 import { createLogger } from "../plugin/logger";
+import { writeRequestAudit } from "../plugin/debug";
 import { ANTIGRAVITY_PROVIDER_ID } from "../constants";
 import type { OAuthAuthDetails } from "../plugin/types";
 import {
@@ -705,6 +706,14 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         accountIndex: activeIndex,
         modelName: modelName || prepared.effectiveModel || prepared.requestedModel,
         createdAt: Date.now(),
+      });
+
+      // Audit dump of the exact body the backend receives, for
+      // `antigravity-preflight --capture`. Header names only, never values.
+      writeRequestAudit(prepared.init?.body, {
+        url: String(prepared.request),
+        model: prepared.effectiveModel ?? prepared.requestedModel,
+        headerKeys: prepared.init?.headers ? Object.keys(prepared.init.headers as Record<string, string>) : [],
       });
 
       event.request = new Request(prepared.request, prepared.init);

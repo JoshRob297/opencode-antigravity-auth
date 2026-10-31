@@ -8,6 +8,25 @@ export declare function initializeDebug(config: AntigravityConfig): void;
 export declare function isDebugEnabled(): boolean;
 export declare function isDebugTuiEnabled(): boolean;
 export declare function getLogFilePath(): string | undefined;
+export declare const REQUEST_AUDIT_FILENAME = "last-request.json";
+export interface RequestAuditMeta {
+    url?: string;
+    model?: string;
+    headerKeys?: string[];
+}
+/**
+ * Builds the audit document for one outbound request. Exported so the shape can be
+ * asserted without touching the filesystem.
+ */
+export declare function buildRequestAudit(bodyText: string, meta?: RequestAuditMeta): Record<string, unknown>;
+/**
+ * Writes the exact body the backend will receive to `last-request.json` in the
+ * debug log directory, so the prompt that reaches the model can be audited with
+ * `antigravity-preflight --capture`. Header *names* are recorded, never values:
+ * the Authorization bearer token stays out of the file. Only runs while debug is
+ * enabled.
+ */
+export declare function writeRequestAudit(body: unknown, meta?: RequestAuditMeta): string | undefined;
 export interface AntigravityDebugContext {
     id: string;
     streaming: boolean;
