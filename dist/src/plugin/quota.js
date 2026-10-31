@@ -4,6 +4,7 @@ import { logQuotaFetch } from "./debug";
 import { ensureProjectContext } from "./project";
 import { refreshAccessToken } from "./token";
 import { EngineStatsManager } from "./stats";
+import { groupForQuotaLabel, recordQuotaSnapshot } from "./usage-ledger";
 const FETCH_TIMEOUT_MS = 10000;
 export function formatDuration(ms) {
     const absMs = Math.abs(ms);
@@ -364,7 +365,27 @@ export async function checkAccountsQuota(accounts, client, providerId = ANTIGRAV
     const results = [];
     logQuotaFetch("start", accounts.length);
     for (const [index, account] of accounts.entries()) {
-        results.push(await fetchAccountQuotaDetails(account, index, client, providerId));
+        const result = await fetchAccountQuotaDetails(account, index, client, providerId);
+        results.push(result);
+        // Snapshot for the capacity estimator: pairing these percentages with the
+        // token ledger yields tokens-per-point, the only measurable allowance.
+        if (result.status === "ok" && result.email && result.groups && result.groups.length > 0) {
+            const buckets = {};
+            for (const group of result.groups) {
+                const family = groupForQuotaLabel(group.displayName);
+                for (const bucket of [group.fiveHour, group.weekly]) {
+                    if (!bucket)
+                        continue;
+                    buckets[`${family}:${bucket.window}`] = {
+                        remainingPercentage: bucket.remainingFraction * 100,
+                        reset: bucket.resetTimeDisplay,
+                    };
+                }
+            }
+            if (Object.keys(buckets).length > 0) {
+                recordQuotaSnapshot({ ts: Date.now(), account: result.email, buckets });
+            }
+        }
     }
     return results;
 }

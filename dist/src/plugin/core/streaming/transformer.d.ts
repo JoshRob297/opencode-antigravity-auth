@@ -1,4 +1,4 @@
-import type { SignatureStore, StreamingCallbacks, StreamingOptions, ThoughtBuffer } from './types';
+import type { TokenUsage, SignatureStore, StreamingCallbacks, StreamingOptions, ThoughtBuffer } from './types';
 export declare const CLEAN_GUARDRAIL_MESSAGE = "[Solicitud bloqueada por filtros de seguridad de Gemini. Por favor, intenta reformular tu prompt o enfoque.]";
 export declare const CLEAN_CLAUDE_SAFETY_MESSAGE = "[Respuesta bloqueada por el monitor de seguridad de Claude en esta cuenta. safety_level no interviene en modelos Claude: quita o reformula el contenido marcado (suele venir del contexto del proyecto o de AGENTS.md) o usa otro modelo.]";
 export declare const CLEAN_MALFORMED_CALL_MESSAGE = "[Llamada de herramienta vac\u00EDa o malformada generada por el modelo. Reintentando o reformula tu solicitud.]";
@@ -25,6 +25,8 @@ export declare function transformStreamingPayload(payload: string, transformThin
 export declare function deduplicateThinkingText(response: unknown, sentBuffer: ThoughtBuffer, displayedThinkingHashes?: Set<string>): unknown;
 export declare function transformSseLine(line: string, signatureStore: SignatureStore, thoughtBuffer: ThoughtBuffer, sentThinkingBuffer: ThoughtBuffer, callbacks: StreamingCallbacks, options: StreamingOptions, debugState: {
     injected: boolean;
+}, usageState?: {
+    value?: TokenUsage;
 }): string;
 export declare function cacheThinkingSignaturesFromResponse(response: unknown, signatureSessionKey: string, signatureStore: SignatureStore, thoughtBuffer: ThoughtBuffer, onCacheSignature?: (sessionKey: string, text: string, signature: string) => void): void;
 export declare function createStreamingTransformer(signatureStore: SignatureStore, callbacks: StreamingCallbacks, options?: StreamingOptions): TransformStream<Uint8Array, Uint8Array>;

@@ -16,10 +16,20 @@ export interface SafetyRating {
   blocked?: boolean;
 }
 
+export interface TokenUsage {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  thoughtsTokenCount?: number;
+  cachedContentTokenCount?: number;
+  totalTokenCount?: number;
+}
+
 export interface StreamingCallbacks {
   onCacheSignature?: (sessionKey: string, text: string, signature: string) => void;
   onInjectDebug?: (response: unknown, debugText: string) => unknown;
   onSafetyRatings?: (ratings: SafetyRating[]) => void;
+  /** Final token usage for the response, reported once the stream flushes. */
+  onUsage?: (usage: TokenUsage) => void;
   // Note: onInjectSyntheticThinking removed - keep_thinking now unified with debug via debugText
   transformThinkingParts?: (parts: unknown) => unknown;
 }

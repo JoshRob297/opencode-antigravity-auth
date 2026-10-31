@@ -233,6 +233,32 @@ another process wrote it.
 
 The file is not a log: only counts and timestamps, no prompts.
 
+### Token usage and measured bucket capacity
+
+Google publishes no token allowance per quota bucket, so the plugin measures it:
+every response appends one line to `antigravity-usage.jsonl` (account, model,
+`usageMetadata` counts), and every quota check appends its percentages to
+`antigravity-quota-history.jsonl`. Pairing the two yields how many tokens (and how
+many calls) one bucket percentage point costs.
+
+`/antigravity-usage` and the `antigravity_usage` tool (optional `days`, default 7)
+report:
+
+- tokens per account, per model and per day, split into input, output, reasoning
+  and cache read;
+- `TOKENS/1%`, `CALLS/1%` and the `MOVED` ratio of windows where the bucket actually
+  dropped, plus a linear estimate labelled informational.
+
+`MOVED` matters more than the estimate. Measured 2026-10-31 on the Argon bucket: two
+calls of 32k tokens moved it 1.01 points, and later two calls of 15k tokens moved it
+0.00 points. Consumption does not track tokens linearly, which is why the report
+publishes both readings instead of asserting a capacity.
+
+Files live next to the other plugin state in the OpenCode config directory and are
+append-only JSONL; rotate or truncate them freely, nothing else reads them. Requests
+are counted from the streaming path (`usageMetadata` in the SSE stream); a
+non-streaming request is not recorded.
+
 ---
 
 ## Recommended Configs

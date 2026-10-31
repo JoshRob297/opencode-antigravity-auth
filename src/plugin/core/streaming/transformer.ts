@@ -1,5 +1,6 @@
 import type {
   SafetyRating,
+  TokenUsage,
   SignatureStore,
   StreamingCallbacks,
   StreamingOptions,
@@ -340,6 +341,7 @@ export function transformSseLine(
   callbacks: StreamingCallbacks,
   options: StreamingOptions,
   debugState: { injected: boolean },
+  usageState?: { value?: TokenUsage },
 ): string {
   if (!line.startsWith('data:')) {
     return line;
@@ -352,6 +354,13 @@ export function transformSseLine(
   try {
     const parsed = JSON.parse(json) as { response?: unknown };
     if (parsed.response !== undefined) {
+      const usageMetadata = (parsed.response as Record<string, unknown> | null)?.["usageMetadata"] as
+        | TokenUsage
+        | undefined;
+      if (usageMetadata && usageState) {
+        // Cumulative across chunks: keep the newest block and report once.
+        usageState.value = usageMetadata;
+      }
       if (options.cacheSignatures && options.signatureSessionKey) {
         cacheThinkingSignaturesFromResponse(
           parsed.response,
@@ -475,6 +484,7 @@ export function createStreamingTransformer(
   const thoughtBuffer = createThoughtBuffer();
   const sentThinkingBuffer = createThoughtBuffer();
   const debugState = { injected: false };
+  const usageState: { value?: TokenUsage } = {};
   let hasSeenUsageMetadata = false;
 
   return new TransformStream({
@@ -498,6 +508,7 @@ export function createStreamingTransformer(
           callbacks,
           options,
           debugState,
+          usageState,
         );
         controller.enqueue(encoder.encode(transformedLine + '\n'));
       }
@@ -517,8 +528,13 @@ export function createStreamingTransformer(
           callbacks,
           options,
           debugState,
+          usageState,
         );
         controller.enqueue(encoder.encode(transformedLine));
+      }
+
+      if (usageState.value) {
+        callbacks.onUsage?.(usageState.value);
       }
 
       // Inject synthetic usage metadata if missing (fixes "Context % used: 0%" issue)

@@ -18,6 +18,7 @@ import { resolveCachedAuth } from "../plugin/cache";
 import { executeSearch } from "../plugin/search";
 import { createLogger } from "../plugin/logger";
 import { writeRequestAudit } from "../plugin/debug";
+import { aggregateUsage, buildUsageEntry, estimateCapacity, formatUsageReport, readQuotaSnapshots, readUsage, recordUsage } from "../plugin/usage-ledger";
 import { ANTIGRAVITY_PROVIDER_ID } from "../constants";
 import type { OAuthAuthDetails } from "../plugin/types";
 import {
@@ -431,6 +432,27 @@ async function getQuotaReport(): Promise<string> {
   const mockClient: any = { tui: { showToast: async () => {} } };
   const quotaResults = await checkAccountsQuota(storage.accounts, mockClient, ANTIGRAVITY_PROVIDER_ID);
   return formatQuotaReportMarkdown(quotaResults);
+}
+
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Usage report: tokens consumed per account and model from the request ledger,
+ * plus the bucket capacity derived from quota snapshots. Default window is seven
+ * days for consumption and thirty for the estimate, since capacity needs at least
+ * two snapshots with traffic in between.
+ */
+async function getUsageReport(days = 7): Promise<string> {
+  const now = Date.now();
+  const usage = readUsage(now - days * DAY_MS);
+  const capacityUsage = readUsage(now - 30 * DAY_MS);
+  const snapshots = readQuotaSnapshots(now - 30 * DAY_MS);
+  const summary = aggregateUsage(usage);
+  return formatUsageReport(summary, {
+    windowLabel: `last ${days} days`,
+    capacity: estimateCapacity(capacityUsage, snapshots),
+  });
 }
 
 async function performSearch(
@@ -868,6 +890,17 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
               }
             }
           },
+          (usage) => {
+            // One ledger row per response: the backend publishes no token
+            // allowance, so this is the only way to measure what a bucket holds.
+            recordUsage(
+              buildUsageEntry(usage, {
+                account: lastAttemptBySession.get(sessionKey)?.email,
+                model: prepared.effectiveModel,
+                session: sessionKey,
+              }),
+            );
+          },
         );
         event.response = transformed;
         // If Google returned 429/403 or quota exceeded, inject x-should-retry: true into transformed response
@@ -1256,6 +1289,26 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         },
       });
 
+      // antigravity_usage tool
+      editor.add({
+        name: "antigravity_usage",
+        description: "Token consumption per account and model from the request ledger, plus the measured capacity of each quota bucket (tokens per 1% and estimated full bucket)",
+        input: {
+          type: "object",
+          properties: {
+            days: { type: "number", description: "Window in days (default 7, max 90)" },
+          },
+        },
+        execute: async (args?: { days?: number }) => {
+          try {
+            const days = Math.min(Math.max(Math.round(args?.days ?? 7), 1), 90);
+            return { content: await getUsageReport(days) };
+          } catch (error) {
+            return { content: `Error retrieving Antigravity usage: ${error instanceof Error ? error.message : String(error)}` };
+          }
+        },
+      });
+
       // antigravity_stats tool
       editor.add({
         name: "antigravity_stats",
@@ -1306,6 +1359,18 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         execute: async ({ sessionID, delivery }) => {
           try {
             await deliver(sessionID, await getQuotaReport(), delivery);
+          } catch (error) {
+            await deliver(sessionID, `Error: ${error instanceof Error ? error.message : String(error)}`, delivery);
+          }
+        },
+      });
+
+      editor.add({
+        name: "antigravity-usage",
+        description: "Token consumption per account and measured bucket capacity",
+        execute: async ({ sessionID, delivery }) => {
+          try {
+            await deliver(sessionID, await getUsageReport(), delivery);
           } catch (error) {
             await deliver(sessionID, `Error: ${error instanceof Error ? error.message : String(error)}`, delivery);
           }

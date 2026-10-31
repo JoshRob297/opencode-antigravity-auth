@@ -13,10 +13,19 @@ export interface SafetyRating {
     probability: "NEGLIGIBLE" | "LOW" | "MEDIUM" | "HIGH" | string;
     blocked?: boolean;
 }
+export interface TokenUsage {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    thoughtsTokenCount?: number;
+    cachedContentTokenCount?: number;
+    totalTokenCount?: number;
+}
 export interface StreamingCallbacks {
     onCacheSignature?: (sessionKey: string, text: string, signature: string) => void;
     onInjectDebug?: (response: unknown, debugText: string) => unknown;
     onSafetyRatings?: (ratings: SafetyRating[]) => void;
+    /** Final token usage for the response, reported once the stream flushes. */
+    onUsage?: (usage: TokenUsage) => void;
     transformThinkingParts?: (parts: unknown) => unknown;
 }
 export interface StreamingOptions {

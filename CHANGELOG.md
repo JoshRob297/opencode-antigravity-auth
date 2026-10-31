@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.0] - 2026-10-31
+
+### Added
+
+- **Per-request token ledger.** Every streaming response appends one JSONL row with the account, model, variant and the backend `usageMetadata` counts (input, output, reasoning, cache read). `antigravity-usage.jsonl` lives next to the other plugin state and is append-only.
+- **Measured bucket capacity.** Each quota check records its percentages; pairing them with the ledger yields `TOKENS/1%`, `CALLS/1%` and the share of windows where the bucket actually moved. Measured on Argon: two 32k-token calls dropped the bucket 1.01 points, two 15k-token calls dropped it 0.00 points, so the report publishes both readings and labels the linear estimate as informational instead of asserting an allowance Google never publishes.
+- **`antigravity_usage` tool and `/antigravity-usage` command.** Consumption per account, per model and per day, plus the capacity table.
+
 ## [2.4.3] - 2026-10-31
 
 ### Fixed
