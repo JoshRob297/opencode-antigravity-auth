@@ -8,6 +8,7 @@ import type {
 import { processImageData } from '../../image-saver';
 
 export const CLEAN_GUARDRAIL_MESSAGE = "[Solicitud bloqueada por filtros de seguridad de Gemini. Por favor, intenta reformular tu prompt o enfoque.]";
+export const CLEAN_CLAUDE_SAFETY_MESSAGE = "[Respuesta bloqueada por el monitor de seguridad de Claude en esta cuenta. safety_level no interviene en modelos Claude: quita o reformula el contenido marcado (suele venir del contexto del proyecto o de AGENTS.md) o usa otro modelo.]";
 export const CLEAN_MALFORMED_CALL_MESSAGE = "[Llamada de herramienta vacía o malformada generada por el modelo. Reintentando o reformula tu solicitud.]";
 export const LOOP_DETECTED_MALFORMED_MESSAGE = "[Bucle de llamadas malformadas consecutivas detectado. La solicitud ha sido detenida para evitar bucle infinito. Por favor reformula tu prompt.]";
 
@@ -48,13 +49,23 @@ export function sanitizeGuardrailText(text: string): string {
 }
 
 /**
+ * True when the backend model id belongs to the Claude line. Claude responses are
+ * filtered by the provider's own monitor on the account, not by Gemini
+ * `safetySettings`, so the two cases need different advice.
+ */
+export function isClaudeModelName(modelName?: string): boolean {
+  return typeof modelName === "string" && modelName.toLowerCase().includes("claude");
+}
+
+/**
  * Replaces verbose Google safety filter messages in response candidates
  * with a concise rephrasing invitation. Also handles MALFORMED_FUNCTION_CALL
  * finishReason by rewriting to STOP with explanatory content to avoid hard session crash.
  */
-export function sanitizeGuardrailMessage(response: unknown, sessionKey?: string): unknown {
+export function sanitizeGuardrailMessage(response: unknown, sessionKey?: string, modelName?: string): unknown {
   if (!response || typeof response !== "object") return response;
   const resp = response as Record<string, unknown>;
+  const safetyMessage = isClaudeModelName(modelName) ? CLEAN_CLAUDE_SAFETY_MESSAGE : CLEAN_GUARDRAIL_MESSAGE;
 
   if (Array.isArray(resp.candidates)) {
     for (const candidate of resp.candidates) {
@@ -75,10 +86,12 @@ export function sanitizeGuardrailMessage(response: unknown, sessionKey?: string)
         // the model answers `finishReason: SAFETY` with an *empty* text part, so
         // the UI showed a bare "Provider blocked the response". Replace the empty
         // payload with an actionable message, keeping any non-text parts
-        // (thoughtSignature) intact so signature continuity survives.
+        // (thoughtSignature) intact so signature continuity survives. The wording
+        // depends on the family: Claude is blocked by the provider's monitor, not
+        // by the Gemini `safetySettings` the plugin controls.
         if (!hasText) {
           if (!cand.content || typeof cand.content !== "object") {
-            cand.content = { parts: [{ text: CLEAN_GUARDRAIL_MESSAGE }], role: "model" };
+            cand.content = { parts: [{ text: safetyMessage }], role: "model" };
           } else {
             const content = cand.content as Record<string, unknown>;
             const parts = Array.isArray(content.parts) ? (content.parts as unknown[]) : [];
@@ -86,7 +99,7 @@ export function sanitizeGuardrailMessage(response: unknown, sessionKey?: string)
               const p = part as Record<string, unknown> | null;
               return Boolean(p && typeof p === "object" && typeof p.text !== "string");
             });
-            content.parts = [...keptParts, { text: CLEAN_GUARDRAIL_MESSAGE }];
+            content.parts = [...keptParts, { text: safetyMessage }];
           }
         }
       }
@@ -361,7 +374,7 @@ export function transformSseLine(
       }
 
       // Clean guardrail / safety filter message
-      response = sanitizeGuardrailMessage(response, options.signatureSessionKey);
+      response = sanitizeGuardrailMessage(response, options.signatureSessionKey, options.modelName);
 
       // Extract and notify safety ratings if present
       if (callbacks.onSafetyRatings && parsed.response && typeof parsed.response === "object") {

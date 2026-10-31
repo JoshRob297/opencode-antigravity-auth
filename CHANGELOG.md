@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.4.1] - 2026-10-31
+
+### Fixed
+
+- **The safety block message no longer blames the wrong filter.** A `finishReason: SAFETY` with empty content is now worded per family: Claude says the block comes from the provider's monitor on the account and that `safety_level` does not apply, while Gemini keeps the rephrase message. Measured 2026-10-31, the classifier reacts to a handful of words in the system prompt: `frida-server` or "exploit generation" blocked `claude-sonnet-5-5` and `claude-opus-5-5`, while `claude-sonnet-4-6` and Gemini answered the same request.
+
+### Docs
+
+- **`safety_level` scope documented.** It is a Gemini control and is never sent on Claude requests; documents the per-account Claude monitor, the measured trigger matrix, and the four steps to diagnose a block in README and TROUBLESHOOTING, both languages.
+
 ## [2.4.0] - 2026-10-31
 
 ### Added

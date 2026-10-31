@@ -8,6 +8,7 @@ import {
   sanitizeGuardrailText,
   sanitizeGuardrailMessage,
   CLEAN_GUARDRAIL_MESSAGE,
+  CLEAN_CLAUDE_SAFETY_MESSAGE,
 } from "../core/streaming";
 
 // ─── createSignatureStore ─────────────────────────────────────────────────────
@@ -220,6 +221,47 @@ describe("Guardrail / Safety Filter Sanitization", () => {
     expect(parts).toHaveLength(2);
     expect(parts[0]).toEqual({ thoughtSignature: "sig-safety" });
     expect(parts[1].text).toBe(CLEAN_GUARDRAIL_MESSAGE);
+  });
+
+  it("uses the Claude wording when the blocked model is a Claude id", () => {
+    // Measured 2026-10-31: on Claude 5.5 the block comes from the provider's own
+    // monitor on the account. `safety_level` never applies to Claude, so telling
+    // the user to rephrase "for Gemini's filters" is wrong and sends them to the
+    // wrong setting.
+    const rawResponse = {
+      candidates: [
+        {
+          finishReason: "SAFETY",
+          content: { role: "model", parts: [{ text: "" }, { thoughtSignature: "sig-claude" }] },
+        },
+      ],
+    };
+
+    const sanitized = sanitizeGuardrailMessage(rawResponse, undefined, "claude-sonnet-5-5-low") as any;
+    const parts = sanitized.candidates[0].content.parts;
+    expect(parts[0]).toEqual({ thoughtSignature: "sig-claude" });
+    expect(parts[1].text).toBe(CLEAN_CLAUDE_SAFETY_MESSAGE);
+    expect(parts[1].text).not.toBe(CLEAN_GUARDRAIL_MESSAGE);
+  });
+
+  it("keeps the Gemini wording for Gemini ids and for an unknown model", () => {
+    const blocked = {
+      candidates: [{ finishReason: "SAFETY", content: { role: "model", parts: [{ text: "" }] } }],
+    };
+
+    const gemini = sanitizeGuardrailMessage(
+      JSON.parse(JSON.stringify(blocked)),
+      undefined,
+      "gemini-3.8-flash-high",
+    ) as any;
+    expect(gemini.candidates[0].content.parts[0].text).toBe(CLEAN_GUARDRAIL_MESSAGE);
+
+    const unknown = sanitizeGuardrailMessage(
+      JSON.parse(JSON.stringify(blocked)),
+      undefined,
+      undefined,
+    ) as any;
+    expect(unknown.candidates[0].content.parts[0].text).toBe(CLEAN_GUARDRAIL_MESSAGE);
   });
 
   it("handles finishReason: MALFORMED_FUNCTION_CALL by converting to STOP and inserting clean message", () => {

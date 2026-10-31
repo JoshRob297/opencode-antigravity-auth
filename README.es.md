@@ -306,6 +306,8 @@ Niveles disponibles:
 - `"high"` — Bloquea solo el daño de alta probabilidad (`BLOCK_ONLY_HIGH`). Recomendado para desarrollo intensivo, análisis de vulnerabilidades y depuración.
 - `"none"` — Desactiva los clasificadores externos de seguridad (`BLOCK_NONE`) y salta los filtros de inyección de prompt (`HARM_CATEGORY_JAILBREAK`).
 
+> **Alcance:** `safety_level` es un control de Gemini. Nunca se envía en peticiones a Claude, porque el backend de Antigravity ignora `safetySettings` en la línea Claude. Claude 5.5 se filtra con el monitor propio del proveedor en la cuenta: puede responder `finishReason: SAFETY` con contenido vacío incluso con `safety_level: "none"` configurado, y el bloqueo se decide del lado de la cuenta, no en este plugin. Medido el 2026-10-31: la misma petición que menciona `frida-server` o "exploit generation" en el prompt de sistema queda bloqueada en `claude-sonnet-5-5` y `claude-opus-5-5`, mientras `claude-sonnet-4-6` y Gemini responden normal. Quita o reformula el contexto marcado (normalmente `AGENTS.md` o las instrucciones del proyecto) o usa otro modelo; el plugin muestra el bloqueo con un mensaje explícito en vez del "Provider blocked the response" pelado.
+
 > **AVISO:** Poner `safety_level` en `"none"` es estrictamente para investigación de seguridad autorizada y flujos avanzados. Usar `"none"` queda bajo tu exclusiva discreción y riesgo. No aceptamos responsabilidad alguna por revisiones, suspensiones o baneos de cuenta ejecutados por Google.
 
 ### Escudo de seguridad OPSEC (`safety_shield`)

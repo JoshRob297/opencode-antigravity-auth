@@ -29,6 +29,8 @@ export interface StreamingOptions {
   debugText?: string;
   cacheSignatures?: boolean;
   displayedThinkingHashes?: Set<string>;
+  /** Backend model id, used to pick the right safety-block wording (Claude vs Gemini). */
+  modelName?: string;
   // Note: injectSyntheticThinking removed - keep_thinking now unified with debug via debugText
 }
 

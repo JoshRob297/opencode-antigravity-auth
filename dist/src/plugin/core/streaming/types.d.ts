@@ -24,6 +24,8 @@ export interface StreamingOptions {
     debugText?: string;
     cacheSignatures?: boolean;
     displayedThinkingHashes?: Set<string>;
+    /** Backend model id, used to pick the right safety-block wording (Claude vs Gemini). */
+    modelName?: string;
 }
 export interface ThoughtBuffer {
     get(index: number): string | undefined;
