@@ -217,6 +217,42 @@ export function resolveAntigravityGemini38FlashBackendModel(
 }
 
 /**
+ * Families the backend exposes as one model id per thinking tier
+ * (`gemini-4-argon-low`, `claude-sonnet-5-5-high`).
+ *
+ * Discovery groups those ids into a single selector entry with `low|medium|high`
+ * variants, so the chosen variant has to become the id suffix here. Measured
+ * 2026-10-31 on an account with the Argon grant: all three Argon tiers answer 200
+ * when the suffix matches the id and the request carries the CLI User-Agent.
+ */
+const TIERED_FAMILY_REGEX = /^(gemini-4-argon|claude-(?:sonnet|opus)-5-5)(?:-(low|medium|high|max))?$/i;
+
+export function resolveAntigravityTieredFamilyBackendModel(
+  model: string,
+  thinkingLevel?: string,
+): string | undefined {
+  const modelWithoutQuota = model.replace(QUOTA_PREFIX_REGEX, "").toLowerCase();
+  const match = modelWithoutQuota.match(TIERED_FAMILY_REGEX);
+  if (!match) {
+    return undefined;
+  }
+  const base = match[1]!.toLowerCase();
+  const isClaude = base.startsWith("claude-");
+  const validLevels = isClaude ? ["low", "medium", "high", "max"] : ["low", "medium", "high"];
+  const requested = (thinkingLevel ?? match[2] ?? "low").toLowerCase();
+  const level = validLevels.includes(requested) ? requested : "low";
+  return `${base}-${level}`;
+}
+
+/**
+ * True when the model belongs to a family whose backend id carries the thinking
+ * tier as a suffix, so a variant can select it.
+ */
+export function isAntigravityTieredFamilyModel(model: string): boolean {
+  return TIERED_FAMILY_REGEX.test(model.replace(QUOTA_PREFIX_REGEX, "").toLowerCase());
+}
+
+/**
  * Resolves a model name with optional tier suffix and quota prefix to its actual API model name
  * and corresponding thinking configuration.
  *

@@ -84,6 +84,7 @@ export const DISCOVERY_DENYLIST = [
     /^chat_\d+/i, // internal ids, HTTP 400
     /^tab_/i, // internal tab preview models
     /-image/i, // image output needs capabilities this catalog does not declare
+    /-disabled$/i, // entitlement placeholder: listed for accounts that cannot use the model (404 NOT_FOUND)
     /^gemini-3\.6-flash/i, // 404 NOT_FOUND
     /^gemini-3\.1-pro/i, // 404 NOT_FOUND
     /^gemini-pro-agent$/i, // 404 NOT_FOUND
@@ -100,6 +101,28 @@ export const DISCOVERY_DENYLIST = [
  */
 const TIERED_SUFFIX = /-tiered$/i;
 /**
+ * Thinking tiers the backend encodes as an id suffix
+ * (`gemini-4-argon-medium`, `claude-sonnet-5-5-high`).
+ *
+ * Discovery groups them into **one** selector entry with a variant per tier:
+ * three "Claude Sonnet 5.5" rows in the model picker for what is one model with
+ * a thinking dial is noise, and the curated catalog already models 3.8 Flash that
+ * way (`antigravity-gemini-3.8-flash` + `low|medium|high` variants).
+ */
+const TIER_SUFFIX = /-(low|medium|high|max)$/i;
+const TIER_ORDER = ["low", "medium", "high", "max"];
+function tierOf(id) {
+    const match = TIER_SUFFIX.exec(id);
+    return match ? match[1].toLowerCase() : undefined;
+}
+/**
+ * Canonical family id used to group tier variants. `-tiered` and an explicit
+ * tier both collapse onto the plain family id.
+ */
+function familyIdOf(id) {
+    return id.replace(TIERED_SUFFIX, "").replace(TIER_SUFFIX, "").toLowerCase();
+}
+/**
  * True when the curated catalog already registers this model (with or without
  * the `-tiered` suffix), so discovery must not add a duplicate entry.
  *
@@ -109,7 +132,7 @@ const TIERED_SUFFIX = /-tiered$/i;
  */
 export function isCoveredByCuratedCatalog(id) {
     const curated = new Set(OPENCODE_WHITELIST_MODELS);
-    const candidates = [id, id.replace(TIERED_SUFFIX, "")];
+    const candidates = [id, id.replace(TIERED_SUFFIX, ""), familyIdOf(id)];
     return candidates.some((candidate) => curated.has(`antigravity-${candidate}`));
 }
 const CLAUDE_LIMIT = { context: 200000, output: 64000 };
@@ -180,41 +203,88 @@ export function displayNameForModelId(id) {
 }
 /**
  * Builds an OpenCode model definition for a discovered backend id.
- * Limits and variants are conservative: unknown families get Gemini-sized limits.
+ * Limits come from the backend when it declares them, and fall back to
+ * conservative family defaults otherwise.
  */
-export function buildDiscoveredModelDefinition(id) {
+export function buildDiscoveredModelDefinition(id, metadata, tiers) {
     const lower = id.toLowerCase();
     const isClaude = lower.startsWith("claude-");
     const isGptOss = lower.startsWith("gpt-oss-");
+    const context = Number.isFinite(metadata?.maxTokens) && metadata.maxTokens > 0
+        ? metadata.maxTokens
+        : undefined;
+    const output = Number.isFinite(metadata?.maxOutputTokens) && metadata.maxOutputTokens > 0
+        ? metadata.maxOutputTokens
+        : undefined;
     const definition = {
         name: displayNameForModelId(id),
-        limit: isClaude ? CLAUDE_LIMIT : isGptOss ? GPT_OSS_LIMIT : GEMINI_LIMIT,
+        limit: {
+            context: context ?? (isClaude ? CLAUDE_LIMIT.context : isGptOss ? GPT_OSS_LIMIT.context : GEMINI_LIMIT.context),
+            output: output ?? (isClaude ? CLAUDE_LIMIT.output : isGptOss ? GPT_OSS_LIMIT.output : GEMINI_LIMIT.output),
+        },
         modalities: { input: [...MODALITIES.input], output: [...MODALITIES.output] },
     };
+    const observed = tiers && tiers.length > 0 ? tiers : undefined;
     if (isClaude) {
-        // Mirrors the curated `antigravity-claude-sonnet-4-6`: the budgets are inert
-        // for ids without "thinking" (see models.ts) and active for the thinking ones,
-        // so defining them here is safe either way.
-        definition.variants = { ...CLAUDE_THINKING_VARIANTS };
+        // The backend encodes the thinking tier in the id (`claude-sonnet-5-5-low`),
+        // so each variant only needs to name it; the request resolver appends the
+        // suffix. `max` has no `thinkingLevel` in OpenCode's type, so it keeps the
+        // budget form and the resolver maps it back to the `-max` suffix.
+        definition.variants = observed
+            ? Object.fromEntries(observed.map((tier) => [
+                tier,
+                tier === "max"
+                    ? { thinkingConfig: { thinkingBudget: CLAUDE_THINKING_VARIANTS.max.thinkingConfig.thinkingBudget } }
+                    : { thinkingLevel: tier },
+            ]))
+            : { ...CLAUDE_THINKING_VARIANTS };
     }
     else if (!isGptOss) {
-        definition.variants = { ...GEMINI_THINKING_VARIANTS };
+        definition.variants = observed
+            ? Object.fromEntries(observed.map((tier) => [tier, { thinkingLevel: tier }]))
+            : { ...GEMINI_THINKING_VARIANTS };
     }
     return definition;
 }
 /**
- * Filters a backend catalog down to the ids worth surfacing and keys them by
- * their OpenCode model id (`antigravity-<backend id>`, matching the curated
- * catalog so the existing request resolution path applies unchanged).
+ * Filters a backend catalog down to the ids worth surfacing and groups thinking
+ * tiers into a single selector entry with variants.
+ *
+ * `gemini-4-argon-low|medium|high` becomes one `antigravity-gemini-4-argon` with
+ * a `low|medium|high` variant picker, and the same for
+ * `claude-sonnet-5-5-*` / `claude-opus-5-5-*`.
  */
-export function buildDiscoveredModels(backendIds) {
-    const discovered = {};
-    for (const id of backendIds) {
+export function buildDiscoveredModels(backendIds, metadata = {}) {
+    const groups = new Map();
+    for (const rawId of backendIds) {
+        const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
         if (!isDiscoverableModelId(id))
             continue;
         if (isCoveredByCuratedCatalog(id))
             continue;
-        discovered[`antigravity-${id}`] = buildDiscoveredModelDefinition(id);
+        const family = familyIdOf(id);
+        const tier = tierOf(id);
+        const group = groups.get(family) ?? { tiers: new Set(), ids: new Set(), sawTierless: false };
+        if (tier) {
+            group.tiers.add(tier);
+        }
+        else {
+            group.sawTierless = true;
+        }
+        group.ids.add(id);
+        groups.set(family, group);
+    }
+    const discovered = {};
+    for (const [family, group] of groups) {
+        const observedTiers = TIER_ORDER.filter((tier) => group.tiers.has(tier));
+        // Limits are declared per concrete id, so take them from whichever id in the
+        // group actually carries them (they are identical across tiers).
+        const groupMetadata = metadata[family] ??
+            [...group.ids]
+                .map((id) => metadata[id])
+                .find((entry) => Boolean(entry && (entry.maxTokens || entry.maxOutputTokens)));
+        const definition = buildDiscoveredModelDefinition(family, groupMetadata, observedTiers);
+        discovered[`antigravity-${family}`] = definition;
     }
     return discovered;
 }
@@ -228,8 +298,17 @@ export async function collectDiscoveredModels(accessToken, projectId) {
         return {};
     try {
         const response = await fetchAvailableModels(accessToken, projectId);
-        const ids = Object.keys(response?.models ?? {});
-        const discovered = buildDiscoveredModels(ids);
+        const models = (response?.models ?? {});
+        const metadata = {};
+        for (const [id, entry] of Object.entries(models)) {
+            if (!entry)
+                continue;
+            metadata[id.trim().toLowerCase()] = {
+                maxTokens: entry.maxTokens,
+                maxOutputTokens: entry.maxOutputTokens,
+            };
+        }
+        const discovered = buildDiscoveredModels(Object.keys(models), metadata);
         const count = Object.keys(discovered).length;
         if (count > 0) {
             log.info(`Discovered ${count} extra model(s) for this account: ${Object.keys(discovered).join(", ")}`);
@@ -240,5 +319,44 @@ export async function collectDiscoveredModels(accessToken, projectId) {
         log.warn(`Model discovery skipped: ${error instanceof Error ? error.message : String(error)}`);
         return {};
     }
+}
+/**
+ * Union of the catalogs of every account in the pool.
+ *
+ * Discovery used to ask the *active* account only, so a pool whose cursor sat on
+ * a non-entitled account hid Argon/Claude 5.5 from the picker even when another
+ * account had them. The union keeps the selector honest: a model is offered when
+ * at least one account can serve it, and rotation (see `modelCatalog`) makes sure
+ * the request lands on that account.
+ */
+export async function collectDiscoveredModelsFromPool(accounts) {
+    const mergedIds = new Set();
+    const mergedMetadata = {};
+    for (const account of accounts) {
+        if (!account.accessToken)
+            continue;
+        try {
+            const response = await fetchAvailableModels(account.accessToken, account.projectId);
+            const models = (response?.models ?? {});
+            for (const [rawId, entry] of Object.entries(models)) {
+                const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
+                if (!id)
+                    continue;
+                mergedIds.add(id);
+                if (entry && !mergedMetadata[id]) {
+                    mergedMetadata[id] = { maxTokens: entry.maxTokens, maxOutputTokens: entry.maxOutputTokens };
+                }
+            }
+        }
+        catch (error) {
+            log.warn(`Model discovery skipped for one account: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    const discovered = buildDiscoveredModels(mergedIds, mergedMetadata);
+    const count = Object.keys(discovered).length;
+    if (count > 0) {
+        log.info(`Discovered ${count} extra model(s) across the pool: ${Object.keys(discovered).join(", ")}`);
+    }
+    return discovered;
 }
 //# sourceMappingURL=model-discovery.js.map

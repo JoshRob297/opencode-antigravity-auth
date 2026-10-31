@@ -2088,3 +2088,111 @@ describe("resolveQuotaGroup", () => {
     expect(resolveQuotaGroup("gemini", "gemini-3-pro")).toBe("gemini-pro");
   });
 });
+
+describe("AccountManager model entitlements", () => {
+  const now = Date.now();
+
+  const freCatalog = {
+    updatedAt: now,
+    models: {
+      "gemini-3.8-flash-high": { maxTokens: 1048576, maxOutputTokens: 65536 },
+      "claude-sonnet-4-6": { maxTokens: 250000, maxOutputTokens: 64000 },
+    },
+  };
+
+  const entitledCatalog = {
+    updatedAt: now,
+    models: {
+      "gemini-3.8-flash-high": { maxTokens: 1048576, maxOutputTokens: 65536 },
+      "claude-sonnet-4-6": { maxTokens: 250000, maxOutputTokens: 64000 },
+      "gemini-4-argon-low": { maxTokens: 1048576, maxOutputTokens: 65536 },
+      "gemini-4-argon-medium": { maxTokens: 1048576, maxOutputTokens: 65536 },
+      "gemini-4-argon-high": { maxTokens: 1048576, maxOutputTokens: 65536 },
+      "claude-sonnet-5-5-medium": { maxTokens: 1000000, maxOutputTokens: 128000 },
+    },
+  };
+
+  function buildPool(includeEntitled: boolean): AccountStorageV4 {
+    const accounts: AccountStorageV4["accounts"] = [
+      {
+        email: "free@example.com",
+        refreshToken: "r-free",
+        projectId: "p1",
+        addedAt: now,
+        lastUsed: 0,
+        modelCatalog: freCatalog,
+      },
+    ];
+    if (includeEntitled) {
+      accounts.push({
+        email: "paid@example.com",
+        refreshToken: "r-paid",
+        projectId: "p1",
+        addedAt: now,
+        lastUsed: 0,
+        modelCatalog: entitledCatalog,
+      });
+    }
+    return { version: 4, accounts, activeIndex: 0, activeIndexByFamily: { claude: 0, gemini: 0 } };
+  }
+
+  it("never routes an Argon request to the account that lacks it", () => {
+    const manager = new AccountManager(undefined, buildPool(true));
+
+    for (let i = 0; i < 10; i += 1) {
+      const selected = manager.getCurrentOrNextForFamily("gemini", "antigravity-gemini-4-argon-medium", "hybrid");
+      expect(selected?.email).toBe("paid@example.com");
+    }
+  });
+
+  it("still routes Flash to the non-entitled account", () => {
+    const manager = new AccountManager(undefined, buildPool(true));
+    const seen = new Set<string | undefined>();
+    for (let i = 0; i < 10; i += 1) {
+      const selected = manager.getCurrentOrNextForFamily("gemini", "antigravity-gemini-3.8-flash", "round-robin");
+      seen.add(selected?.email);
+    }
+    expect(seen.has("free@example.com")).toBe(true);
+  });
+
+  it("returns null when nobody in the pool has the model", () => {
+    const manager = new AccountManager(undefined, buildPool(false));
+    expect(manager.getCurrentOrNextForFamily("gemini", "antigravity-gemini-4-argon-medium", "hybrid")).toBeNull();
+    expect(manager.getModelAvailability("antigravity-gemini-4-argon-medium")).toEqual({
+      entitled: 0,
+      missing: 1,
+      unknown: 0,
+    });
+  });
+
+  it("counts entitled, missing and unmeasured accounts separately", () => {
+    const stored = buildPool(true);
+    stored.accounts[1] = { ...stored.accounts[1]!, modelCatalog: undefined };
+    const manager = new AccountManager(undefined, stored);
+
+    expect(manager.getModelAvailability("gemini-4-argon-medium")).toEqual({
+      entitled: 0,
+      missing: 1,
+      unknown: 1,
+    });
+    // An unmeasured account is still eligible: the filter must not block blindly.
+    const selected = manager.getCurrentOrNextForFamily("gemini", "antigravity-gemini-4-argon-medium", "hybrid");
+    expect(selected?.email).toBe("paid@example.com");
+  });
+
+  it("ignores a stale catalog", () => {
+    const stored = buildPool(false);
+    stored.accounts[0] = {
+      ...stored.accounts[0]!,
+      modelCatalog: { ...freCatalog, updatedAt: now - 60 * 60 * 1000 },
+    };
+    const manager = new AccountManager(undefined, stored);
+
+    expect(manager.getModelAvailability("gemini-4-argon-medium")).toEqual({
+      entitled: 0,
+      missing: 0,
+      unknown: 1,
+    });
+    expect(manager.getCurrentOrNextForFamily("gemini", "antigravity-gemini-4-argon-medium", "hybrid")).not.toBeNull();
+  });
+});

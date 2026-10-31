@@ -53,6 +53,13 @@ export declare const DISCOVERY_CLAUDE_FLOOR: {
  * Ids (or id families) that must never be surfaced, with the measured reason.
  */
 export declare const DISCOVERY_DENYLIST: RegExp[];
+declare const TIER_ORDER: readonly ["low", "medium", "high", "max"];
+type TierName = (typeof TIER_ORDER)[number];
+/** Backend limits measured from `fetchAvailableModels`, keyed by backend id. */
+export interface DiscoveredModelMetadata {
+    maxTokens?: number;
+    maxOutputTokens?: number;
+}
 /**
  * True when the curated catalog already registers this model (with or without
  * the `-tiered` suffix), so discovery must not add a duplicate entry.
@@ -72,19 +79,37 @@ export declare function isDiscoverableModelId(id: string): boolean;
 export declare function displayNameForModelId(id: string): string;
 /**
  * Builds an OpenCode model definition for a discovered backend id.
- * Limits and variants are conservative: unknown families get Gemini-sized limits.
+ * Limits come from the backend when it declares them, and fall back to
+ * conservative family defaults otherwise.
  */
-export declare function buildDiscoveredModelDefinition(id: string): OpencodeModelDefinition;
+export declare function buildDiscoveredModelDefinition(id: string, metadata?: DiscoveredModelMetadata, tiers?: readonly TierName[]): OpencodeModelDefinition;
 /**
- * Filters a backend catalog down to the ids worth surfacing and keys them by
- * their OpenCode model id (`antigravity-<backend id>`, matching the curated
- * catalog so the existing request resolution path applies unchanged).
+ * Filters a backend catalog down to the ids worth surfacing and groups thinking
+ * tiers into a single selector entry with variants.
+ *
+ * `gemini-4-argon-low|medium|high` becomes one `antigravity-gemini-4-argon` with
+ * a `low|medium|high` variant picker, and the same for
+ * `claude-sonnet-5-5-*` / `claude-opus-5-5-*`.
  */
-export declare function buildDiscoveredModels(backendIds: Iterable<string>): OpencodeModelDefinitions;
+export declare function buildDiscoveredModels(backendIds: Iterable<string>, metadata?: Record<string, DiscoveredModelMetadata>): OpencodeModelDefinitions;
 /**
  * Best-effort catalog lookup for a single account. Never throws: discovery is an
  * enhancement, so any failure (network, auth, backend change) degrades to the
  * curated catalog.
  */
 export declare function collectDiscoveredModels(accessToken: string, projectId?: string): Promise<OpencodeModelDefinitions>;
+/**
+ * Union of the catalogs of every account in the pool.
+ *
+ * Discovery used to ask the *active* account only, so a pool whose cursor sat on
+ * a non-entitled account hid Argon/Claude 5.5 from the picker even when another
+ * account had them. The union keeps the selector honest: a model is offered when
+ * at least one account can serve it, and rotation (see `modelCatalog`) makes sure
+ * the request lands on that account.
+ */
+export declare function collectDiscoveredModelsFromPool(accounts: Array<{
+    accessToken: string;
+    projectId?: string;
+}>): Promise<OpencodeModelDefinitions>;
+export {};
 //# sourceMappingURL=model-discovery.d.ts.map

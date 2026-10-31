@@ -1,11 +1,12 @@
 import { formatRefreshParts, parseRefreshParts } from "./auth";
-import { loadAccounts, saveAccounts, type AccountStorageV4, type AccountMetadataV3, type RateLimitStateV3, type ModelFamily, type HeaderStyle, type CooldownReason } from "./storage";
+import { loadAccounts, saveAccounts, type AccountStorageV4, type AccountMetadataV3, type RateLimitStateV3, type ModelFamily, type HeaderStyle, type CooldownReason, type AccountModelCatalog } from "./storage";
 import type { OAuthAuthDetails, RefreshParts } from "./types";
 import type { AccountSelectionStrategy } from "./config/schema";
 import { getHealthTracker, getTokenTracker, selectHybridAccount, type AccountWithMetrics } from "./rotation";
 import { generateFingerprint, updateFingerprintVersion, type Fingerprint, type FingerprintVersion, MAX_FINGERPRINT_HISTORY } from "./fingerprint";
 import type { QuotaGroup, QuotaGroupSummary } from "./quota";
 import { getModelFamily } from "./transform/model-resolver";
+import { catalogAllowsModel } from "./model-entitlements";
 import { debugLogToFile } from "./debug";
 import { formatAccountLabel } from "./logging-utils";
 
@@ -164,6 +165,8 @@ export interface ManagedAccount {
   /** Cached quota data from last checkAccountsQuota() call */
   cachedQuota?: Partial<Record<QuotaGroup, QuotaGroupSummary>>;
   cachedQuotaUpdatedAt?: number;
+  /** Models this account can reach; `undefined` means "not measured yet". */
+  modelCatalog?: AccountModelCatalog;
   verificationRequired?: boolean;
   verificationRequiredAt?: number;
   verificationRequiredReason?: string;
@@ -192,6 +195,24 @@ function getQuotaKey(family: ModelFamily, headerStyle: HeaderStyle = "antigravit
     return `${base}:${model}`;
   }
   return base;
+}
+
+/**
+ * True when the account's measured catalog proves it cannot serve this model.
+ *
+ * Unmeasured or stale catalogs return `false` (do not block), so a pool that
+ * never refreshed its catalog keeps the previous behaviour. This is what stops
+ * rotation from handing a Gemini 4 "Argon" request to a Free/AI Plus account
+ * that answers 404 NOT_FOUND, while still letting that same account serve
+ * `gemini-3.8-flash`, which every plan has.
+ */
+function accountLacksModel(
+  account: ManagedAccount,
+  model: string | null | undefined,
+  ttlMs: number,
+): boolean {
+  if (!model) return false;
+  return catalogAllowsModel(account.modelCatalog, model, ttlMs) === false;
 }
 
 function getFreshRemainingFraction(
@@ -422,6 +443,7 @@ export class AccountManager {
             fingerprintHistory: acc.fingerprintHistory ?? [],
             cachedQuota: acc.cachedQuota as Partial<Record<QuotaGroup, QuotaGroupSummary>> | undefined,
             cachedQuotaUpdatedAt: acc.cachedQuotaUpdatedAt,
+            modelCatalog: acc.modelCatalog,
             verificationRequired: acc.verificationRequired,
             verificationRequiredAt: acc.verificationRequiredAt,
             verificationRequiredReason: acc.verificationRequiredReason,
@@ -588,6 +610,7 @@ export class AccountManager {
       
       const accountsWithMetrics: AccountWithMetrics[] = this.accounts
         .filter(acc => acc.enabled !== false)
+        .filter(acc => !accountLacksModel(acc, model, softQuotaCacheTtlMs))
         .map(acc => {
           clearExpiredRateLimits(acc);
           return {
@@ -634,7 +657,8 @@ export class AccountManager {
       clearExpiredRateLimits(current);
       const isLimitedForRequestedStyle = isRateLimitedForHeaderStyle(current, family, headerStyle, model, softQuotaCacheTtlMs);
       const isOverThreshold = isOverSoftQuotaThreshold(current, family, softQuotaThresholdPercent, softQuotaCacheTtlMs, model);
-      if (!isLimitedForRequestedStyle && !isOverThreshold && !this.isAccountCoolingDown(current)) {
+      if (!isLimitedForRequestedStyle && !isOverThreshold && !this.isAccountCoolingDown(current)
+        && !accountLacksModel(current, model, softQuotaCacheTtlMs)) {
         this.markTouchedForQuota(current, quotaKey);
         return current;
       }
@@ -654,7 +678,8 @@ export class AccountManager {
       return a.enabled !== false && 
              !isRateLimitedForHeaderStyle(a, family, headerStyle, model, softQuotaCacheTtlMs) && 
              !isOverSoftQuotaThreshold(a, family, softQuotaThresholdPercent, softQuotaCacheTtlMs, model) &&
-             !this.isAccountCoolingDown(a);
+             !this.isAccountCoolingDown(a) &&
+             !accountLacksModel(a, model, softQuotaCacheTtlMs);
     });
 
     if (available.length === 0) {
@@ -1200,6 +1225,7 @@ export class AccountManager {
         fingerprintHistory: a.fingerprintHistory?.length ? a.fingerprintHistory : undefined,
         cachedQuota: a.cachedQuota && Object.keys(a.cachedQuota).length > 0 ? a.cachedQuota : undefined,
         cachedQuotaUpdatedAt: a.cachedQuotaUpdatedAt,
+        modelCatalog: a.modelCatalog,
         verificationRequired: a.verificationRequired,
         verificationRequiredAt: a.verificationRequiredAt,
         verificationRequiredReason: a.verificationRequiredReason,
@@ -1351,6 +1377,35 @@ export class AccountManager {
       account.cachedQuota = quotaGroups;
       account.cachedQuotaUpdatedAt = nowMs();
     }
+  }
+
+  /** Stores the measured per-account model catalog used to steer rotation. */
+  updateModelCatalog(accountIndex: number, catalog: AccountModelCatalog | undefined): void {
+    const account = this.accounts[accountIndex];
+    if (account && catalog) {
+      account.modelCatalog = catalog;
+    }
+  }
+
+  /**
+   * How the pool stands for a given model: how many accounts are measured to
+   * have it, how many are measured to lack it, and how many are still unknown.
+   */
+  getModelAvailability(model?: string | null, ttlMs: number = 10 * 60 * 1000): { entitled: number; missing: number; unknown: number } {
+    const enabled = this.accounts.filter((a) => a.enabled !== false);
+    if (!model) {
+      return { entitled: enabled.length, missing: 0, unknown: 0 };
+    }
+    let entitled = 0;
+    let missing = 0;
+    let unknown = 0;
+    for (const account of enabled) {
+      const verdict = catalogAllowsModel(account.modelCatalog, model, ttlMs);
+      if (verdict === "unknown") unknown += 1;
+      else if (verdict) entitled += 1;
+      else missing += 1;
+    }
+    return { entitled, missing, unknown };
   }
 
   isAccountOverSoftQuota(account: ManagedAccount, family: ModelFamily, thresholdPercent: number, cacheTtlMs: number, model?: string | null): boolean {

@@ -1261,3 +1261,53 @@ describe("CLI client signature User-Agent", () => {
     expect(headers.get("User-Agent")).not.toContain("aidev_client");
   });
 });
+
+describe("tiered families from discovery (Gemini 4 Argon / Claude 5.5)", () => {
+  const token = "test-token";
+  const project = "test-project";
+
+  function prepare(model: string, variantLevel?: string) {
+    const wrapped: Record<string, unknown> = {
+      project,
+      request: {
+        contents: [{ role: "user", parts: [{ text: "hi" }] }],
+        generationConfig: {},
+      },
+    };
+    if (variantLevel) {
+      wrapped.providerOptions = { google: { thinkingLevel: variantLevel } };
+    }
+    return prepareAntigravityRequest(
+      `https://generativelanguage.googleapis.com/v1beta/models/antigravity-${model}:streamGenerateContent`,
+      { method: "POST", body: JSON.stringify(wrapped) },
+      token,
+      project,
+    );
+  }
+
+  it("routes the selected variant to the Argon backend id", () => {
+    expect(prepare("gemini-4-argon", "medium").effectiveModel).toBe("gemini-4-argon-medium");
+    expect(prepare("gemini-4-argon", "high").effectiveModel).toBe("gemini-4-argon-high");
+    // Defaults to the cheapest tier when the variant has no level.
+    expect(prepare("gemini-4-argon").effectiveModel).toBe("gemini-4-argon-low");
+  });
+
+  it("routes the selected variant to the Claude 5.5 backend id", () => {
+    expect(prepare("claude-sonnet-5-5", "high").effectiveModel).toBe("claude-sonnet-5-5-high");
+    expect(prepare("claude-opus-5-5", "low").effectiveModel).toBe("claude-opus-5-5-low");
+  });
+
+  it("keeps the Gemini thinkingLevel block off Claude 5.5 requests", () => {
+    const result = prepare("claude-sonnet-5-5", "high");
+    const body = JSON.parse(result.init.body as string);
+    // Claude 5.5 selects thinking through the id suffix, so no Gemini-style
+    // thinkingLevel must leak into generationConfig.
+    expect(body.request?.generationConfig?.thinkingConfig?.thinkingLevel).toBeUndefined();
+  });
+
+  it("sends the CLI user-agent for the new families", () => {
+    const result = prepare("gemini-4-argon", "medium");
+    const headers = new Headers(result.init.headers as HeadersInit);
+    expect(headers.get("User-Agent")).toMatch(/^antigravity\/cli\//);
+  });
+});
