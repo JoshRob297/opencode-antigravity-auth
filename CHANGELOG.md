@@ -12,6 +12,7 @@
 ### Fixed
 
 - **`-disabled` placeholder no longer surfaced.** Non-entitled accounts receive `gemini-4-argon-disabled` (no `quotaInfo` block). It was being registered as a selectable model that always answered `404`; it is now denylisted and excluded from the catalog.
+- **Empty `SAFETY` payload explained.** A `finishReason: SAFETY` with an empty text part (measured on Claude 5.5 with a long agent prompt) now carries an explicit "blocked by the model's filters" message instead of surfacing as an opaque provider error, while keeping any `thoughtSignature` part intact.
 - **Clear message when nobody can serve a model.** When every measured account lacks the model, the plugin says so instead of reporting an exhausted quota.
 - **CLI signature fallback bumped to 1.4.12** (upstream stable, 100% rollout).
 
