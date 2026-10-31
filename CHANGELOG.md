@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.3] - 2026-10-31
+
+### Fixed
+
+- **`antigravity_stats` and `/antigravity-stats` reported "Sin actividad registrada aun" forever.** The v2 path never wrote to `EngineStatsManager`: it updated the account manager only, so the report was empty no matter how much traffic went through. Responses are now counted where they happen (success on the serving account, `429`/`403` as a rate limit, other failures as errors; a `404` entitlement miss is not charged as an error).
+- **Counters were lost by the 1.5 s save debounce.** A one-shot `opencode run` exits before the timer fires, so those sessions left no trace. Writes are immediate.
+- **A long-lived server showed its startup snapshot.** The report reloads `antigravity-stats.json` when another process has written it, and keeps unsaved increments when it is the writer.
+
+### Docs
+
+- **Engine statistics documented** (EN/ES): what is counted, why a `404` is not an error, and what the file contains.
+
 ## [2.4.2] - 2026-10-31
 
 ### Fixed

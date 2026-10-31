@@ -217,6 +217,22 @@ antigravity-preflight --capture ~/.config/opencode/antigravity-logs/last-request
 The file is rewritten per request and only exists while `debug` is on; treat it as
 sensitive, since it contains your prompts.
 
+### Engine statistics
+
+`/antigravity-stats` and the `antigravity_stats` tool read
+`antigravity-stats.json` from the OpenCode config directory and show, per account,
+requests served (`OK`), rate limits (`429`) and other errors, plus the thinking
+signature cache counters.
+
+Every response is counted where it happens: a success on the account that served the
+request, a rate limit on the account that returned `429`/`403`, and an error only
+when the failure is not an entitlement miss (a `404` for a model that account lacks
+is a capability mismatch, not bad health). Counters are written immediately, so a
+one-shot `opencode run` shows up too, and a long-lived server reloads the file when
+another process wrote it.
+
+The file is not a log: only counts and timestamps, no prompts.
+
 ---
 
 ## Recommended Configs

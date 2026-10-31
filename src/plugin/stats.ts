@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { env } from "node:process";
 import { getOpencodeConfigDir } from "./config/updater";
 import { createLogger } from "./logger";
 import { shortEmail } from "./quota";
@@ -41,10 +42,11 @@ export class EngineStatsManager {
   private data: EngineStatsData;
   private dirty = false;
   private saveTimer?: NodeJS.Timeout;
+  private loadedMtimeMs = 0;
 
   private constructor() {
-    const configDir = getOpencodeConfigDir();
-    this.filePath = join(configDir, STATS_FILE_NAME);
+    const override = env.ANTIGRAVITY_STATS_PATH?.trim();
+    this.filePath = override || join(getOpencodeConfigDir(), STATS_FILE_NAME);
     this.data = this.load();
   }
 
@@ -71,8 +73,10 @@ export class EngineStatsManager {
   }
 
   private load(): EngineStatsData {
+    this.loadedMtimeMs = 0;
     try {
       if (existsSync(this.filePath)) {
+        this.loadedMtimeMs = statSync(this.filePath).mtimeMs;
         const content = readFileSync(this.filePath, "utf-8");
         const parsed = JSON.parse(content);
         if (parsed && typeof parsed === "object" && parsed.accounts) {
@@ -92,12 +96,38 @@ export class EngineStatsManager {
     return this.defaultData();
   }
 
+  /**
+   * Picks up counters written by another process (a `opencode run --standalone`
+   * session, the CLI wrapper) so a long-lived server does not keep reporting the
+   * snapshot it loaded at startup.
+   */
+  private refreshFromDisk(): void {
+    // Unsaved local increments win over the file: reloading here would drop them.
+    if (this.dirty) {
+      return;
+    }
+    try {
+      if (!existsSync(this.filePath)) {
+        return;
+      }
+      const mtimeMs = statSync(this.filePath).mtimeMs;
+      if (mtimeMs <= this.loadedMtimeMs) {
+        return;
+      }
+      this.data = this.load();
+    } catch {
+      // A missing or unreadable file keeps the in-memory snapshot.
+    }
+  }
+
+  /**
+   * Writes immediately. The previous 1.5 s debounce lost the counters of short
+   * lived processes (`opencode run` exits before the timer fires), which is why
+   * one-shot sessions never appeared in the report.
+   */
   private scheduleSave(): void {
     this.dirty = true;
-    if (this.saveTimer) return;
-    this.saveTimer = setTimeout(() => {
-      this.saveNow();
-    }, 1500);
+    this.saveNow();
   }
 
   public saveNow(): void {
@@ -181,10 +211,12 @@ export class EngineStatsManager {
   }
 
   public getData(): EngineStatsData {
+    this.refreshFromDisk();
     return this.data;
   }
 
   public formatStatsReport(activeEmail?: string): string {
+    this.refreshFromDisk();
     const data = this.data;
     const lines: string[] = [];
 
