@@ -525,6 +525,10 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
   }
   const pendingBySession = new Map<string, PendingEntry[]>();
   const lastFailedMetaBySession = new Map<string, { family: ModelFamily; accountIndex: number; modelName?: string }>();
+  // Last attempt per session, used for engine stats. The pending queue cannot be
+  // used for this: the retry hook also dequeues, so a successful attempt after
+  // failures finds the queue empty and its success is never counted.
+  const lastAttemptBySession = new Map<string, { email?: string; accountIndex: number }>();
   const transportFailureCountBySession = new Map<string, number>();
   const entitlementFailureCountBySession = new Map<string, number>();
   const MAX_CONSECUTIVE_TRANSPORT_FAILURES = 3;
@@ -707,6 +711,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         modelName: modelName || prepared.effectiveModel || prepared.requestedModel,
         createdAt: Date.now(),
       });
+      lastAttemptBySession.set(event.sessionID ?? "default", { email: account?.email, accountIndex: activeIndex });
 
       // Audit dump of the exact body the backend receives, for
       // `antigravity-preflight --capture`. Header names only, never values.
@@ -723,6 +728,26 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
     await context.session.hook("http.response", async (event: any) => {
       const sessionKey = event.sessionID ?? "default";
       const entry = dequeuePending(sessionKey);
+      // Recorded before the `!entry` early return: after a 429 rotation the queue
+      // is empty for the attempt that finally succeeds, and that success is
+      // exactly the one worth counting.
+      if (!(entry?.prepared as { blockedEarly?: boolean } | undefined)?.blockedEarly) {
+        const attempt = lastAttemptBySession.get(sessionKey);
+        if (attempt?.email) {
+          const stats = EngineStatsManager.getInstance();
+          const status = event.response?.status;
+          if (event.response?.ok) {
+            stats.recordSuccess(attempt.email);
+          } else if (status === 429 || status === 403) {
+            stats.recordRateLimit(attempt.email);
+          } else if (status !== 404) {
+            // A 404 entitlement miss is a capability mismatch, not account
+            // health: charging it as an error would penalise a healthy account.
+            stats.recordError(attempt.email);
+          }
+        }
+      }
+
       if (!entry || !entry.prepared) {
         return;
       }
@@ -920,6 +945,12 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
       }
 
       const storage = await loadAccounts();
+      // A transport drop that never produced a response is the only case the
+      // response hook cannot see; HTTP 429/403 are already counted there.
+      const failedEmail = status === undefined ? lastAttemptBySession.get(sessionKey)?.email : undefined;
+      if (isTransportFailure && failedEmail) {
+        EngineStatsManager.getInstance().recordError(failedEmail);
+      }
       if (!storage || storage.accounts.length <= 1) {
         if (isTransportFailure) {
           event.decision = { retry: true, delay: 500 };
@@ -1324,6 +1355,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
   return () => {
     pendingBySession.clear();
     lastFailedMetaBySession.clear();
+    lastAttemptBySession.clear();
     log.info("Cleaning up opencode-antigravity-auth v2 adapter");
   };
 }

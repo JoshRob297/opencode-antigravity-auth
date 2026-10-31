@@ -28,10 +28,22 @@ export declare class EngineStatsManager {
     private data;
     private dirty;
     private saveTimer?;
+    private loadedMtimeMs;
     private constructor();
     static getInstance(): EngineStatsManager;
     private defaultData;
     private load;
+    /**
+     * Picks up counters written by another process (a `opencode run --standalone`
+     * session, the CLI wrapper) so a long-lived server does not keep reporting the
+     * snapshot it loaded at startup.
+     */
+    private refreshFromDisk;
+    /**
+     * Writes immediately. The previous 1.5 s debounce lost the counters of short
+     * lived processes (`opencode run` exits before the timer fires), which is why
+     * one-shot sessions never appeared in the report.
+     */
     private scheduleSave;
     saveNow(): void;
     private getOrCreateAccount;
