@@ -851,7 +851,7 @@ export async function setupV2(context) {
             // antigravity_quota tool
             editor.add({
                 name: "antigravity_quota",
-                description: "Check Antigravity quota (5h and weekly windows) across all configured Google accounts",
+                description: "Check Antigravity quota per account: 5h and weekly windows for Gemini Flash/Pro, Claude/GPT and the Gemini 4 Argon bucket, with absolute reset timestamps, plus which models each account can reach",
                 input: {
                     type: "object",
                     properties: {},

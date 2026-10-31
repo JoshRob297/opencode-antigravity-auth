@@ -16,6 +16,10 @@
 - **Clear message when nobody can serve a model.** When every measured account lacks the model, the plugin says so instead of reporting an exhausted quota.
 - **CLI signature fallback bumped to 1.4.12** (upstream stable, 100% rollout).
 
+### Changed
+
+- **Quota report rebuilt around the per-account shape the backend returns now.** `antigravity_quota` and `/antigravity-quota` render one table per model family, with `Gemini 4 Argon` kept separate from `Gemini Models` instead of being folded into it by a substring match; only the windows a family actually has (Argon is weekly-only); the **absolute UTC reset** the backend declares next to the countdown (`2026-11-07 01:37Z (6d 23h)`); and a measured **account capabilities** table (models reachable, Argon remaining and reset, Claude 5.5, 3.8 Flash). Accounts that were never measured say `not measured` instead of guessing.
+
 ## [2.3.0] - 2026-10-27
 
 ### Added

@@ -501,6 +501,7 @@ describe("formatQuotaReportMarkdown", () => {
               remainingPercentage: 85,
               remainingFraction: 0.85,
               resetTime: new Date(Date.now() + 3600000),
+              resetTimeDisplay: "2026-01-01 00:00Z",
               timeUntilReset: 3600000,
               timeUntilResetFormatted: "1h 0m",
             },
@@ -510,6 +511,7 @@ describe("formatQuotaReportMarkdown", () => {
               remainingPercentage: 60,
               remainingFraction: 0.6,
               resetTime: new Date(Date.now() + 86400000 * 3),
+              resetTimeDisplay: "2026-01-01 00:00Z",
               timeUntilReset: 86400000 * 3,
               timeUntilResetFormatted: "3d 0h",
             },
@@ -531,6 +533,7 @@ describe("formatQuotaReportMarkdown", () => {
               remainingPercentage: 90,
               remainingFraction: 0.9,
               resetTime: new Date(Date.now() + 86400000),
+              resetTimeDisplay: "2026-01-01 00:00Z",
               timeUntilReset: 86400000,
               timeUntilResetFormatted: "1d 0h",
             },
@@ -550,6 +553,7 @@ describe("formatQuotaReportMarkdown", () => {
               remainingPercentage: 20,
               remainingFraction: 0.2,
               resetTime: new Date(Date.now() + 1800000),
+              resetTimeDisplay: "2026-01-01 00:00Z",
               timeUntilReset: 1800000,
               timeUntilResetFormatted: "30m",
             },
@@ -569,8 +573,8 @@ describe("formatQuotaReportMarkdown", () => {
     expect(report).toContain("# Antigravity Quota Status");
     expect(report).toContain("Gemini Models (Flash / Pro)");
     expect(report).toContain("Claude & GPT Models (Opus / Sonnet / GPT-OSS)");
-    expect(report).toContain("### Custom Provider");
-    expect(report).toContain("Errors: err: 403 Forbidden");
+    expect(report).toContain("## Other models");
+    expect(report).toContain("**Errors:** err: 403 Forbidden");
     expect(report).toContain("alpha");
     expect(report).toContain("beta (disabled)");
     expect(report).toContain("account-3");
@@ -619,9 +623,97 @@ describe("formatQuotaReportMarkdown", () => {
     const report = formatQuotaReportMarkdown(results);
     expect(report).toContain("# Antigravity Quota Status");
     expect(report).toContain("Gemini Models (Flash / Pro)");
-    expect(report).toContain("Claude Models (Opus / Sonnet)");
-    expect(report).toContain("Errors: Account 2: Network timeout");
-    expect(report).toContain("QUOTA               RESET IN    ACCOUNT");
+    expect(report).toContain("## Claude & GPT Models (Opus / Sonnet / GPT-OSS)");
+    expect(report).toContain("**Errors:** Account 2: Network timeout");
+    expect(report).toContain("RESET");
     expect(report).toContain("user1 (disabled)");
+  });
+
+  it("reports the standalone Argon bucket with absolute reset stamps and per-account capabilities", () => {
+    const reset = new Date(Date.now() + 6 * 86400000);
+    const bucket = (percentage: number) => ({
+      window: "weekly",
+      displayName: "Weekly",
+      remainingPercentage: percentage,
+      remainingFraction: percentage / 100,
+      resetTime: reset,
+      resetTimeDisplay: "2026-11-07 01:37Z",
+      timeUntilReset: reset.getTime() - Date.now(),
+      timeUntilResetFormatted: "6d 0h",
+    });
+
+    const results: AccountQuotaResult[] = [
+      {
+        index: 0,
+        email: "free@gmail.com",
+        status: "ok",
+        groups: [{ displayName: "Gemini Models", fiveHour: bucket(90), weekly: bucket(40) }],
+        modelCatalog: {
+          updatedAt: Date.now(),
+          models: {
+            "gemini-3.8-flash-high": { remainingFraction: 0.4, resetTime: "2026-10-31T06:40:03Z" },
+          },
+        },
+      },
+      {
+        index: 1,
+        email: "paid@gmail.com",
+        status: "ok",
+        groups: [
+          { displayName: "Gemini Models", fiveHour: bucket(99), weekly: bucket(99) },
+          { displayName: "Gemini 4 Argon", weekly: bucket(98) },
+        ],
+        modelCatalog: {
+          updatedAt: Date.now(),
+          models: {
+            "gemini-4-argon-medium": { remainingFraction: 0.98, resetTime: "2026-11-07T01:37:26Z" },
+            "claude-sonnet-5-5-medium": { remainingFraction: 0.99, resetTime: "2026-10-31T06:38:02Z" },
+            "gemini-3.8-flash-high": { remainingFraction: 0.99, resetTime: "2026-10-31T06:40:03Z" },
+          },
+        },
+      },
+    ];
+
+    const report = formatQuotaReportMarkdown(results);
+
+    // Argon is its own group, not folded into the Gemini Flash/Pro table.
+    expect(report).toContain("## Gemini 4 Argon (own weekly bucket)");
+    expect(report).toContain("## Gemini Models (Flash / Pro)");
+    // Absolute reset from the backend, not just a countdown.
+    expect(report).toContain("2026-11-07 01:37Z");
+    expect(report).toContain("(6d 0h)");
+
+    expect(report).toContain("## Account capabilities (measured)");
+    const capabilityLines = report.split("\n").filter((line) => line.startsWith("paid") || line.startsWith("free"));
+    expect(capabilityLines.some((line) => line.includes("yes 98%"))).toBe(true);
+    expect(capabilityLines.some((line) => line.includes("no                          ") || line.split(/\s{2,}/).includes("no"))).toBe(true);
+  });
+
+  it("marks capabilities as unmeasured when the account has no catalog", () => {
+    const reset = new Date(Date.now() + 3600000);
+    const report = formatQuotaReportMarkdown([
+      {
+        index: 0,
+        email: "unknown@gmail.com",
+        status: "ok",
+        groups: [
+          {
+            displayName: "Gemini Models",
+            fiveHour: {
+              window: "5h",
+              displayName: "5h",
+              remainingPercentage: 100,
+              remainingFraction: 1,
+              resetTime: reset,
+              resetTimeDisplay: "2026-10-31 06:40Z",
+              timeUntilReset: 3600000,
+              timeUntilResetFormatted: "1h 0m",
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(report).toContain("not measured");
   });
 });

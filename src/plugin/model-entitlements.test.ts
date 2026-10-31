@@ -83,6 +83,7 @@ describe("buildAccountModelCatalog", () => {
       displayName: "Claude Sonnet 5.5 (Medium)",
       maxTokens: 1000000,
       maxOutputTokens: 128000,
+      remainingFraction: 0.99,
       resetTime: "2026-10-31T06:38:02Z",
     });
     // No quotaInfo (the `-tiered` alias in the measured payload) is not usable.

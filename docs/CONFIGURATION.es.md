@@ -115,11 +115,11 @@ Ajustes para gestionar varias cuentas de Google.
 
 ## Descubrimiento de modelos
 
-El backend de Antigravity reporta qué modelos puede usar cada cuenta (`fetchAvailableModels`, la misma llamada que usa la tool de cuota). Con `model_discovery` activado, el plugin registra encima de los 4 modelos curados los que son **más nuevos que el catálogo curado**.
+El backend de Antigravity reporta qué modelos puede usar cada cuenta (`fetchAvailableModels`, la misma llamada que usa la tool de cuota). Con `model_discovery` activado, el plugin registra encima de los 4 modelos curados los que son **más nuevos que el catálogo curado**, tomando la **unión de todas las cuentas habilitadas** del pool.
 
 | Opción | Por defecto | Descripción |
 |--------|---------|-------------|
-| `model_discovery` | `false` | Registra los modelos del backend más nuevos que el catálogo curado para la cuenta activa |
+| `model_discovery` | `false` | Registra los modelos del backend más nuevos que el catálogo curado, unión de todas las cuentas habilitadas |
 
 ```json
 // ~/.config/opencode/antigravity.json
@@ -133,27 +133,50 @@ El backend de Antigravity reporta qué modelos puede usar cada cuenta (`fetchAva
 | Id del backend | Catálogo curado | Resultado |
 |---|---|---|
 | `gemini-3.8-flash-tiered` | tiene `antigravity-gemini-3.8-flash` | omitido (ya está curado) |
-| `gemini-4-argon`, `gemini-4-argon-low/medium/high` | ninguno | **registrado** como `antigravity-gemini-4-argon`, `...-low`, `...-medium`, `...-high` |
+| `gemini-4-argon`, `gemini-4-argon-low/medium/high` | ninguno | **registrado** como un solo `antigravity-gemini-4-argon` con variantes `low`/`medium`/`high` |
 | `gemini-3.9-flash`, `gemini-5-flash` | ninguno | registrado (estrictamente más nuevo que el piso 3.8) |
-| `claude-sonnet-5-5`, `claude-opus-5-5-max` | ninguno | registrado (estrictamente más nuevo que el piso curado 4.6) |
+| `claude-sonnet-5-5-*`, `claude-opus-5-5-*` | ninguno | registrados como `antigravity-claude-sonnet-5-5` / `antigravity-claude-opus-5-5` con variantes por tier |
 | `claude-opus-4-6-thinking`, `claude-sonnet-4-6` | los tiene | omitido (ya está curado) |
 | `claude-opus-4-5`, `gemini-3-flash`, `gemini-3.5-flash-lite`, `gemini-2.5-*` | ninguno | omitidos (más viejos que el piso) |
 | `gemini-3.6-flash-*`, `gemini-3.1-pro-*`, `gemini-3.5-flash-low`, `gemini-3-flash-agent` | ninguno | omitidos (medidos: `404` o retirados) |
-| `chat_*`, `tab_*`, `*-image` | ninguno | omitidos (ids internos y salida de imagen) |
+| `chat_*`, `tab_*`, `*-image`, `*-disabled` | ninguno | omitidos (ids internos, salida de imagen, placeholder de entitlement) |
 
 Así que la afirmación práctica es: **actívalo y aparecerá todo lo que tu plan conceda.** Una cuenta con Argon obtiene Argon; una cuenta que solo tiene Gemini 3.8 Flash no obtiene nada extra, que es el estado actual de las cuentas Free / AI Plus.
 
-Los modelos descubiertos se registran con variantes de thinking low/medium/high (los modelos Claude con thinking reciben variantes de presupuesto) y límites del tamaño de Gemini, y se resuelven por la misma ruta de petición que el catálogo curado.
+Los modelos descubiertos se agrupan por familia: una sola entrada en el selector por modelo con variantes `low`/`medium`/`high` en lugar de una fila por tier, y la variante se resuelve al sufijo del id del backend (`gemini-4-argon-medium`, `claude-sonnet-5-5-high`). Los límites salen del backend cuando los declara (medido: Claude 5.5 reporta 1.000.000 de contexto y 128.000 de salida). Se resuelven por la misma ruta de petición que el catálogo curado.
 
 ### Salvedades
 
 - **Desactivado por defecto.** Activarlo cambia la lista visible de modelos.
 - **El catálogo no es una lista de modelos usables.** Medido en una cuenta de consumidor real: 12 de 25 ids respondieron `200` **y** ejecutaron llamadas a tools pese a tratarse de generaciones más viejas que el cliente oficial de Antigravity no ofrece, y uno (`gemini-3.5-flash`) responde `200` estando decomisionado. Por eso el descubrimiento es solo hacia adelante más una denylist, y por eso un `200` nunca se toma como prueba.
 - **Las entradas curadas tienen prioridad** y nunca se duplican: un id descubierto que el catálogo curado ya registra se omite.
-- **Lo restringe el plan de Google, no el plugin.** Argon y Claude 5.5 requieren Google AI Pro de pago, Ultra o Enterprise; el descubrimiento no puede crear un entitlement, solo reflejarlo.
+- **El entitlement es por cuenta, no por nombre de plan.** Medido el 2026-10-31: una cuenta que `loadCodeAssist` reporta como `free-tier` recibió el grant completo de Argon (`modelVersion: gemini-4-argon-trial` y su propio bucket semanal `Gemini 4 Argon`), mientras otras dos solo recibieron el placeholder `gemini-4-argon-disabled`. El descubrimiento no crea entitlements, solo los refleja.
+- **La rotación respeta el entitlement.** El catálogo de cada cuenta se guarda en `antigravity-accounts.json` (`modelCatalog`) y la selección de cuenta descarta las que demuestran no tener el modelo pedido. Argon solo va a la cuenta que lo tiene; `gemini-3.8-flash` sigue usando todas. Un `404` que ocurra igualmente rota a la siguiente cuenta (un intento por cuenta) en vez de mostrar "request preview access".
 - **Aplica al registro de modelos de OpenCode v2.** La v1 registra los modelos desde `opencode.json` y se mantiene curada.
-- El catálogo se lee para la cuenta **activa** al arranque; cambiar de cuenta requiere reiniciar para volver a descubrir.
+- El catálogo se lee como unión de todas las cuentas al arranque; agregar o habilitar una cuenta requiere reiniciar para volver a descubrir.
 - **Claude 4.6 y GPT-OSS 120B se eliminan el 2026-11-02** en todos los planes. El descubrimiento es solo hacia adelante para Gemini **y** Claude, así que una cuenta con entitlement a los sucesores de Claude (Sonnet/Opus 5.5, en AI Pro / Ultra / Enterprise de pago) los obtiene registrados automáticamente. Quedan dos cosas que un mantenedor debe atender: las entradas muertas `claude-*-4-6` deben podarse del catálogo curado, y GPT-OSS no tiene sucesor que descubrir.
+
+---
+
+## Reporte de cuota
+
+`antigravity_quota` (y el comando `/antigravity-quota`) reportan la forma por cuenta que el backend devuelve ahora:
+
+- **Una tabla por familia de modelos**: `Gemini Models (Flash / Pro)`, `Claude & GPT Models (Opus / Sonnet / GPT-OSS)` y `Gemini 4 Argon`, que tiene su propio bucket semanal (`gemini-argon-wtu-weekly`) y no se mezcla con la tabla de Gemini.
+- **Ambas ventanas** (5h y semanal) con su barra, y solo las ventanas que esa familia realmente tiene; Argon imprime únicamente la columna semanal.
+- **Fecha de reset absoluta en UTC** tal como la declara el backend, con la cuenta regresiva entre paréntesis, por ejemplo `2026-11-07 01:37Z (6d 23h)`. Un reset semanal a días de distancia no se puede planear solo con una duración relativa.
+- **Capacidades por cuenta (medidas)**: cuántos modelos alcanza cada cuenta, si tiene Gemini 4 Argon (con su porcentaje restante y su reset) y Claude 5.5, y si `gemini-3.8-flash` está disponible. Las cuentas que nunca se midieron dicen `not measured` en lugar de adivinar.
+
+```
+## Gemini 4 Argon (own weekly bucket)
+QUOTA (weekly)    RESET (weekly)                HEALTH  ACCOUNT
+[██████████] 99%  2026-11-07 01:37Z (6d 23h)    100%    joshuaadair.hr
+
+## Account capabilities (measured)
+ACCOUNT               MODELS  GEMINI 4 ARGON                CLAUDE 5.5  GEMINI 3.8 FLASH
+hrjoces22             19      no                            no          yes
+joshuaadair.hr        26      yes 99% · 2026-11-07 01:37Z    yes         yes
+```
 
 ---
 

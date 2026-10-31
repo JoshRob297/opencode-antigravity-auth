@@ -51,10 +51,16 @@ export function buildAccountModelCatalog(response: unknown): AccountModelCatalog
       if (DISABLED_ID.test(id)) continue;
       if (!entry || !entry.quotaInfo) continue;
       const resetTime = typeof entry.quotaInfo.resetTime === "string" ? entry.quotaInfo.resetTime : undefined;
+      const remainingFraction =
+        typeof entry.quotaInfo.remainingFraction === "number"
+          && Number.isFinite(entry.quotaInfo.remainingFraction)
+          ? Math.max(0, Math.min(1, entry.quotaInfo.remainingFraction as number))
+          : undefined;
       models[id] = {
         displayName: typeof entry.displayName === "string" ? entry.displayName : undefined,
         maxTokens: positiveInt(entry.maxTokens),
         maxOutputTokens: positiveInt(entry.maxOutputTokens),
+        remainingFraction,
         resetTime,
       };
     }

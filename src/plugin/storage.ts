@@ -185,6 +185,8 @@ export interface AccountModelCatalogEntry {
   displayName?: string;
   maxTokens?: number;
   maxOutputTokens?: number;
+  /** Remaining fraction of the bucket this model draws from, when the backend reports it. */
+  remainingFraction?: number;
   /** Known reset for the bucket this model draws from, verbatim from the backend. */
   resetTime?: string;
 }
