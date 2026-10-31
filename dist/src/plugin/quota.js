@@ -419,7 +419,13 @@ function formatUsabilityCells(group) {
 }
 function summarizeCatalog(catalog) {
     const ids = catalog?.models ? Object.keys(catalog.models) : [];
-    const summary = { measured: ids.length > 0, modelCount: ids.length, claude55: false, flash38: false };
+    const summary = {
+        measured: ids.length > 0,
+        modelCount: ids.length,
+        claude46: false,
+        claude55: false,
+        flash38: false,
+    };
     if (ids.length === 0)
         return summary;
     let bestArgon;
@@ -432,6 +438,8 @@ function summarizeCatalog(catalog) {
         }
         if (/^claude-(sonnet|opus)-5-5/.test(id))
             summary.claude55 = true;
+        if (/^claude-(sonnet|opus)-4-6/.test(id))
+            summary.claude46 = true;
         if (/^gemini-3\.8-flash/.test(id))
             summary.flash38 = true;
     }
@@ -580,15 +588,16 @@ export function formatQuotaReportMarkdown(results) {
     if (withCatalog.length > 0) {
         output += "\n## Account capabilities (measured)\n";
         output += "```text\n";
-        output += `${"ACCOUNT".padEnd(28, " ")}${"MODELS".padEnd(8, " ")}${"GEMINI 4 ARGON".padEnd(34, " ")}${"CLAUDE 5.5".padEnd(12, " ")}GEMINI 3.8 FLASH\n`;
+        output += `${"ACCOUNT".padEnd(28, " ")}${"MODELS".padEnd(8, " ")}${"GEMINI 4 ARGON".padEnd(34, " ")}${"CLAUDE 4.6".padEnd(12, " ")}${"CLAUDE 5.5".padEnd(12, " ")}GEMINI 3.8 FLASH\n`;
         for (const result of withCatalog) {
             const summary = summarizeCatalog(result.modelCatalog);
             const name = (result.email ? shortEmail(result.email) : `account-${result.index + 1}`).padEnd(28, " ");
             const models = String(summary.modelCount).padEnd(8, " ");
             const argon = formatArgonCell(summary).padEnd(34, " ");
-            const claude = (summary.measured ? (summary.claude55 ? "yes" : "no") : "not measured").padEnd(12, " ");
+            const claude46 = (summary.measured ? (summary.claude46 ? "yes" : "no") : "not measured").padEnd(12, " ");
+            const claude55 = (summary.measured ? (summary.claude55 ? "yes" : "no") : "not measured").padEnd(12, " ");
             const flash = summary.measured ? (summary.flash38 ? "yes" : "no") : "not measured";
-            output += `${name}${models}${argon}${claude}${flash}\n`;
+            output += `${name}${models}${argon}${claude46}${claude55}${flash}\n`;
         }
         output += "```\n";
         output += "\nUSABLE turns to `no` while any window of that family is at 0%, with the countdown to its reset: a 5h bar with quota left does not help while the weekly bucket is empty.\n";
