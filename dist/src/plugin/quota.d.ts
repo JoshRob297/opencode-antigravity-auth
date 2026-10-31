@@ -1,6 +1,6 @@
 import type { PluginClient } from "./types";
 import type { AccountMetadataV3, AccountModelCatalog } from "./storage";
-export type QuotaGroup = "claude" | "gemini-pro" | "gemini-flash";
+export type QuotaGroup = "claude" | "gemini-pro" | "gemini-flash" | "argon";
 export interface QuotaGroupSummary {
     remainingFraction?: number;
     resetTime?: string;

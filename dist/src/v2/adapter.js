@@ -145,6 +145,8 @@ async function refreshQuotaCacheForFamily(manager, family) {
             let resetFlash;
             let minPro = Infinity;
             let resetPro;
+            let minArgon = Infinity;
+            let resetArgon;
             for (const [key, m] of Object.entries(r.models)) {
                 const qi = m?.quotaInfo;
                 if (!qi)
@@ -158,6 +160,12 @@ async function refreshQuotaCacheForFamily(manager, family) {
                     if (claudeFrac < minClaude) {
                         minClaude = claudeFrac;
                         resetClaude = qi.resetTime;
+                    }
+                }
+                else if (label.includes("argon")) {
+                    if (Number.isFinite(frac) && frac < minArgon) {
+                        minArgon = frac;
+                        resetArgon = qi.resetTime;
                     }
                 }
                 else if (label.includes("flash")) {
@@ -176,6 +184,8 @@ async function refreshQuotaCacheForFamily(manager, family) {
             const quota = {};
             if (Number.isFinite(minClaude))
                 quota.claude = { remainingFraction: minClaude, resetTime: resetClaude };
+            if (Number.isFinite(minArgon))
+                quota.argon = { remainingFraction: minArgon, resetTime: resetArgon };
             if (Number.isFinite(minFlash))
                 quota["gemini-flash"] = { remainingFraction: minFlash, resetTime: resetFlash };
             if (Number.isFinite(minPro))

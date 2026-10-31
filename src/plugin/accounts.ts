@@ -318,6 +318,11 @@ function clearExpiredRateLimits(account: ManagedAccount): void {
  */
 export function resolveQuotaGroup(family: ModelFamily, model?: string | null): QuotaGroup {
   if (model) {
+    // Gemini 4 (Argon) has its own weekly bucket, so soft-quota checks must read
+    // it instead of the Gemini Pro bucket that `getModelFamily` reports.
+    if (model.toLowerCase().includes("argon")) {
+      return "argon";
+    }
     return getModelFamily(model);
   }
   return family === "claude" ? "claude" : "gemini-pro";

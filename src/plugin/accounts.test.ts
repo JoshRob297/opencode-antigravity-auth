@@ -2070,6 +2070,9 @@ describe("resolveQuotaGroup", () => {
     expect(resolveQuotaGroup("claude", "claude-opus-4-6-thinking")).toBe("claude");
     expect(resolveQuotaGroup("gemini", "gemini-2.5-pro")).toBe("gemini-pro");
     expect(resolveQuotaGroup("gemini", "gemini-2.5-flash")).toBe("gemini-flash");
+    // Argon bills its own weekly bucket; soft-quota checks must read that one.
+    expect(resolveQuotaGroup("gemini", "gemini-4-argon-high")).toBe("argon");
+    expect(resolveQuotaGroup("gemini", "gemini-4-argon-low")).toBe("argon");
   });
 
   it("falls back to claude for claude family when no model", () => {
