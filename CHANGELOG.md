@@ -16,6 +16,10 @@
 - **Clear message when nobody can serve a model.** When every measured account lacks the model, the plugin says so instead of reporting an exhausted quota.
 - **CLI signature fallback bumped to 1.4.12** (upstream stable, 100% rollout).
 
+### Docs
+
+- **Full pass over README and every guide (EN/ES), removing what no longer holds.** Dropped the v2.0.0 narrative (stale test counts, the old `HEALTH` column, the 3.6/3.7/3.1-Pro claims) in favour of a current-state summary; replaced the "Argon needs a paid plan" and "plan matrix" statements with the measured per-account grant; documented the separate Argon bucket, the Claude 4.6 retirement, the entitlement-aware rotation in every strategy, the grouped tier variants and the new quota report. `docs/ANTIGRAVITY_API_SPEC.md` gained the `fetchAvailableModels`/`retrieveUserQuotaSummary` actions and a measured quota-bucket table.
+
 ### Changed
 
 - **Quota report rebuilt around the per-account shape the backend returns now.** `antigravity_quota` and `/antigravity-quota` render one table per model family, with `Gemini 4 Argon` kept separate from `Gemini Models` instead of being folded into it by a substring match; only the windows a family actually has (Argon is weekly-only); the short reset countdown per window, and a **`USABLE`** column that turns to `no` (with the countdown to its reset) while any window of that family is at `0%` - a 5h bar with quota left is meaningless once the weekly bucket is empty, which is exactly what a static `HEALTH 100%` used to hide; and a measured **account capabilities** table (models reachable, Argon remaining and reset, Claude 4.6 and 5.5 reported separately, 3.8 Flash) - Claude quota is shared by the family, so a Free account can show Claude quota and still lack 5.5. Accounts that were never measured say `not measured` instead of guessing.

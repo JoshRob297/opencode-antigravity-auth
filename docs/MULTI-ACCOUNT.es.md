@@ -54,7 +54,7 @@ Esto muestra los porcentajes de cuota restante y los tiempos de reset de cada fa
 - **Claude & GPT** - Cuota de Claude Opus 4.6 / Sonnet 4.6 y GPT-OSS 120B
 - **Gemini** - Cuota de Gemini Flash (en planes de consumidor `antigravity-gemini-3.8-flash` es el único modelo Gemini registrado)
 
-> **Cómo leer el reporte:** la columna de 5h muestra lo que el backend le concede a esa cuenta, y **no** es un marcador de plan: el cliente oficial muestra ambas ventanas también en Free / AI Plus. Usa el conjunto de modelos para distinguir los planes (Argon y Claude 5.5 significan AI Pro de pago, Ultra o Enterprise; consulta `docs/models` upstream). Un bucket de 5h ausente significa que la cuenta no tiene ninguna ventana de ráfaga, lo que es una buena señal para podar el pool.
+> **Cómo leer el reporte:** las ventanas muestran lo que el backend le concede a esa cuenta, y **no** son un marcador de plan: el cliente oficial muestra ambas ventanas también en Free / AI Plus. El conjunto de modelos es la única señal confiable, y es **por cuenta**, no por nombre de plan: medido el 2026-10-31, una cuenta `free-tier` tenía el grant de Argon y otras no. Usa la tabla `Account capabilities` para ver exactamente qué modelos alcanza cada cuenta, y `USABLE` para ver si puede servir esa familia en este momento (una barra de 5h con cuota no sirve mientras el bucket semanal está en 0%).
 
 ### Script independiente de cuota
 
@@ -196,5 +196,7 @@ Configúralo en `antigravity.json`:
 | `sticky` | La misma cuenta hasta que queda limitada | Preservación de la caché del prompt |
 | `round-robin` | Rota a la siguiente cuenta en cada petición | Máximo throughput |
 | `hybrid` | Selección determinista según health score + token bucket + LRU | La mejor distribución general |
+
+Las tres estrategias primero descartan cualquier cuenta cuyo catálogo medido no tenga el modelo pedido, así que ninguna estrategia puede mandar `gemini-4-argon` a una cuenta que responde `404`.
 
 Consulta [Configuración](CONFIGURATION.es.md#rotación-de-cuentas) para más detalles.

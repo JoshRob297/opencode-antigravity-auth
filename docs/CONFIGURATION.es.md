@@ -154,7 +154,7 @@ Los modelos descubiertos se agrupan por familia: una sola entrada en el selector
 - **La rotación respeta el entitlement.** El catálogo de cada cuenta se guarda en `antigravity-accounts.json` (`modelCatalog`) y la selección de cuenta descarta las que demuestran no tener el modelo pedido. Argon solo va a la cuenta que lo tiene; `gemini-3.8-flash` sigue usando todas. Un `404` que ocurra igualmente rota a la siguiente cuenta (un intento por cuenta) en vez de mostrar "request preview access".
 - **Aplica al registro de modelos de OpenCode v2.** La v1 registra los modelos desde `opencode.json` y se mantiene curada.
 - El catálogo se lee como unión de todas las cuentas al arranque; agregar o habilitar una cuenta requiere reiniciar para volver a descubrir.
-- **Claude 4.6 y GPT-OSS 120B se eliminan el 2026-11-02** en todos los planes. El descubrimiento es solo hacia adelante para Gemini **y** Claude, así que una cuenta con entitlement a los sucesores de Claude (Sonnet/Opus 5.5, en AI Pro / Ultra / Enterprise de pago) los obtiene registrados automáticamente. Quedan dos cosas que un mantenedor debe atender: las entradas muertas `claude-*-4-6` deben podarse del catálogo curado, y GPT-OSS no tiene sucesor que descubrir.
+- **Claude 4.6 y GPT-OSS 120B se eliminan el 2026-11-02.** En la cuenta con el grant nuevo, `claude-sonnet-4-6` ya responde `200` con un aviso de retiro en vez de contenido, mientras las cuentas Free todavía lo sirven. El descubrimiento es solo hacia adelante para Gemini **y** Claude, así que los sucesores 5.5 se registran automáticamente en las cuentas que los tienen. Un mantenedor todavía debe podar las entradas muertas `claude-*-4-6` cuando pase la fecha; GPT-OSS no tiene sucesor que descubrir.
 
 ---
 

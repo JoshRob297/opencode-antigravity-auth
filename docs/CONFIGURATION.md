@@ -178,7 +178,7 @@ Discovered models are grouped by family: one selector entry per model with a `lo
 - **Rotation is entitlement-aware.** Each account's catalog is stored in `antigravity-accounts.json` (`modelCatalog`), and account selection skips accounts that provably lack the requested model. Argon only goes to an account that has it; `gemini-3.8-flash` keeps using every account. A `404` still rotates (one attempt per account) instead of surfacing "request preview access".
 - **Applies to the OpenCode v2 model registry.** v1 registers models from `opencode.json` and stays curated.
 - The catalog is read for the **active** account at startup; switching accounts requires a restart to re-discover.
-- **Claude 4.6 and GPT-OSS 120B are removed on 2026-11-02** for every plan. Discovery is forward-only for Gemini **and** Claude, so an account entitled to the Claude successors (Sonnet/Opus 5.5, on paid AI Pro / Ultra / Enterprise) gets them registered automatically. Two things still need attention from a maintainer: the dead `claude-*-4-6` entries must be pruned from the curated catalog, and GPT-OSS has no successor to discover.
+- **Claude 4.6 and GPT-OSS 120B are removed on 2026-11-02.** On the account with the newer grant, `claude-sonnet-4-6` already answers `200` with a retirement notice instead of content, while Free accounts still serve it. Discovery is forward-only for Gemini **and** Claude, so the 5.5 successors are registered automatically for the accounts that have them. A maintainer still has to prune the dead `claude-*-4-6` entries once the date passes; GPT-OSS has no successor to discover.
 
 ---
 

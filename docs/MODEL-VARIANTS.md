@@ -78,7 +78,7 @@ Gemini 3 models use string-based thinking levels. Available levels differ by mod
 
 > **Note (2026-10-13):** Gemini 3.7 Flash, Gemini 3.6 Flash and Gemini 3.1 Pro moved to **Google AI Ultra / Enterprise-only** and are no longer registered by this plugin for consumer plans. Gemini 3.8 Flash is the only Gemini model available on consumer plans.
 >
-> **Gemini 4 ("Argon") is available on paid plans and needs no plugin release.** On **2026-10-13** Google rolled it out for **Google AI Pro (paid, non-trial), Ultra and Enterprise** in the Antigravity App, the Antigravity CLI and the IDE extensions - not in the standalone IDE, and not on Free / AI Plus. Its ids are `gemini-4-argon` and `gemini-4-argon-{low,medium,high}`. It is deliberately not in the curated catalog: enable [`model_discovery`](CONFIGURATION.md#model-discovery) and it is registered automatically for the accounts the backend lists it for; see the project status note in the [README](../README.md).
+> **Gemini 4 ("Argon") needs no plugin release.** Its ids are `gemini-4-argon-{low,medium,high}` and the grant is **per account** (measured 2026-10-31: a `free-tier` account had it, other accounts only received the `gemini-4-argon-disabled` placeholder). It is deliberately not in the curated catalog: enable [`model_discovery`](CONFIGURATION.md#model-discovery) and one `antigravity-gemini-4-argon` entry with `low`/`medium`/`high` variants is registered for the accounts that have it. Requests must carry the CLI User-Agent, which the plugin sets automatically.
 
 ---
 
