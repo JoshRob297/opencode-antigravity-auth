@@ -65,6 +65,27 @@ Remove-Item "$env:USERPROFILE\.bun\install\cache\opencode-antigravity-auth*" -Re
 opencode auth login
 ```
 
+### Claude answers with a safety block even with `safety_level: "none"`
+
+`safety_level` is a Gemini control and is never sent on Claude requests. The Antigravity backend ignores `safetySettings` for the Claude line, so Claude is filtered by the provider's own monitor on the account, and that decision cannot be configured from the plugin.
+
+Measured 2026-10-31 on an account with the Claude 5.5 grant:
+
+| System prompt content | `claude-sonnet-5-5` | `claude-opus-5-5` | `claude-sonnet-4-6` | Gemini |
+|---|---|---|---|---|
+| benign | answers | answers | retirement notice | answers |
+| mentions `frida-server` | blocked | blocked | retirement notice | answers |
+| mentions "exploit generation" | blocked | blocked | retirement notice | answers |
+
+What to do:
+
+1. **Find the flagged context.** It is usually `AGENTS.md`, a project instruction file or a long system prompt, not the user message. Bisect by removing those files temporarily.
+2. **Remove or rephrase it.** The classifier reacts to a handful of words, not to the intent: a sentence such as "frida-server is installed on the node" is enough.
+3. **Use another model.** `claude-sonnet-4-6` and the Gemini line are not affected by that monitor.
+4. **Do not look for a bypass.** The block happens before generation, on the account side; changing `safety_level`, headers or request fields does not lift it.
+
+The plugin reports this case with an explicit message (`Respuesta bloqueada por el monitor de seguridad de Claude en esta cuenta...`) instead of the bare `Provider blocked the response`, and keeps any `thoughtSignature` so the session can continue.
+
 ### "Model not found"
 
 A `404 NOT_FOUND` on a newer model is almost always an **entitlement or signature** problem, not a config problem. Diagnose in this order:

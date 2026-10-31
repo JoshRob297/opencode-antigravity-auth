@@ -1491,6 +1491,7 @@ export async function transformAntigravityResponse(response, streaming, debugCon
             transformThinkingParts,
         }, {
             signatureSessionKey: sessionId,
+            modelName: effectiveModel,
             debugText,
             cacheSignatures,
             displayedThinkingHashes: effectiveModel && isGemini3Model(effectiveModel) ? sessionDisplayedThinkingHashes : undefined,
