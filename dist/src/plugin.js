@@ -1168,7 +1168,7 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
     });
     // Create antigravity_quota tool with dual-window quota report
     const antigravityQuotaTool = tool({
-        description: "Get antigravity quota for all accounts",
+        description: "Get Antigravity quota per account: 5h/weekly windows per model family (Gemini Flash/Pro, Claude/GPT, Gemini 4 Argon), absolute reset timestamps and the models each account can reach",
         args: {},
         async execute(_args, _ctx) {
             log.debug("Antigravity Quota tool called");

@@ -83,28 +83,75 @@ describe("model discovery is forward-only", () => {
     expect(isDiscoverableModelId("claude-opus-4-8")).toBe(true);
 
     const discovered = buildDiscoveredModels(["claude-sonnet-5-5", "claude-opus-5-5-max"]);
+    // The tier is a variant, not a separate selector entry.
     expect(Object.keys(discovered).sort()).toEqual([
-      "antigravity-claude-opus-5-5-max",
+      "antigravity-claude-opus-5-5",
       "antigravity-claude-sonnet-5-5",
     ]);
-    expect(discovered["antigravity-claude-opus-5-5-max"]!.name).toBe("Claude Opus 5.5 Max (Antigravity)");
-    expect(discovered["antigravity-claude-opus-5-5-max"]!.limit).toEqual({ context: 200000, output: 64000 });
-    expect(discovered["antigravity-claude-opus-5-5-max"]!.variants?.max).toEqual({
-      thinkingConfig: { thinkingBudget: 32768 },
+    expect(discovered["antigravity-claude-opus-5-5"]!.name).toBe("Claude Opus 5.5 (Antigravity)");
+    expect(discovered["antigravity-claude-opus-5-5"]!.limit).toEqual({ context: 200000, output: 64000 });
+    expect(discovered["antigravity-claude-opus-5-5"]!.variants).toEqual({
+      max: { thinkingConfig: { thinkingBudget: 32768 } },
     });
+  });
+
+  it("groups thinking tiers into one model with variants", () => {
+    // Measured catalog of the account that holds the Argon grant: one id per tier.
+    const discovered = buildDiscoveredModels([
+      "gemini-4-argon-low",
+      "gemini-4-argon-medium",
+      "gemini-4-argon-high",
+      "claude-sonnet-5-5-low",
+      "claude-sonnet-5-5-medium",
+      "claude-sonnet-5-5-high",
+    ]);
+
+    expect(Object.keys(discovered).sort()).toEqual([
+      "antigravity-claude-sonnet-5-5",
+      "antigravity-gemini-4-argon",
+    ]);
+    expect(discovered["antigravity-gemini-4-argon"]!.variants).toEqual({
+      low: { thinkingLevel: "low" },
+      medium: { thinkingLevel: "medium" },
+      high: { thinkingLevel: "high" },
+    });
+    expect(discovered["antigravity-claude-sonnet-5-5"]!.variants).toEqual({
+      low: { thinkingLevel: "low" },
+      medium: { thinkingLevel: "medium" },
+      high: { thinkingLevel: "high" },
+    });
+  });
+
+  it("takes limits from the backend when it declares them", () => {
+    // Measured on the Argon account: Claude 5.5 reports 1M context / 128k output,
+    // not the conservative 200k/64k guess.
+    const discovered = buildDiscoveredModels(["claude-sonnet-5-5-medium"], {
+      "claude-sonnet-5-5": { maxTokens: 1000000, maxOutputTokens: 128000 },
+    });
+    expect(discovered["antigravity-claude-sonnet-5-5"]!.limit).toEqual({
+      context: 1000000,
+      output: 128000,
+    });
+  });
+
+  it("never surfaces the -disabled entitlement placeholder", () => {
+    // Free/AI Plus accounts receive `gemini-4-argon-disabled` (no quotaInfo) and
+    // the real id answers 404 for them; surfacing the placeholder only produces a
+    // model that always fails.
+    expect(isDiscoverableModelId("gemini-4-argon-disabled")).toBe(false);
+    expect(buildDiscoveredModels(["gemini-4-argon-disabled"])).toEqual({});
   });
 
   it("surfaces the tiered form of a model the curated catalog does not have", () => {
     // This is the shape the catalog uses for a tiered model. For a curated family
-    // it must be skipped; for a new one it is the only id the account reports, so
-    // skipping it would hide the model and defeat the point of discovery.
+    // it must be skipped; for a new one it groups into the plain family id.
     expect(isCoveredByCuratedCatalog("gemini-3.8-flash-tiered")).toBe(true);
     expect(isCoveredByCuratedCatalog("gemini-4-argon-tiered")).toBe(false);
 
     const discovered = buildDiscoveredModels(["gemini-3.8-flash-tiered", "gemini-4-argon-tiered"]);
-    expect(Object.keys(discovered)).toEqual(["antigravity-gemini-4-argon-tiered"]);
-    expect(discovered["antigravity-gemini-4-argon-tiered"]!.name).toBe("Gemini 4 Argon (Antigravity)");
-    expect(discovered["antigravity-gemini-4-argon-tiered"]!.variants?.high).toEqual({ thinkingLevel: "high" });
+    expect(Object.keys(discovered)).toEqual(["antigravity-gemini-4-argon"]);
+    expect(discovered["antigravity-gemini-4-argon"]!.name).toBe("Gemini 4 Argon (Antigravity)");
+    expect(discovered["antigravity-gemini-4-argon"]!.variants?.high).toEqual({ thinkingLevel: "high" });
   });
 
   it("surfaces Gemini Flash generations newer than the curated floor", () => {

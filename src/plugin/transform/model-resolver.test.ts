@@ -7,6 +7,8 @@ import {
   resolveAntigravityGemini36FlashBackendModel,
   resolveAntigravityGemini37FlashBackendModel,
   resolveAntigravityGemini38FlashBackendModel,
+  resolveAntigravityTieredFamilyBackendModel,
+  isAntigravityTieredFamilyModel,
 } from "./model-resolver";
 
 describe("resolveModelWithTier", () => {
@@ -361,5 +363,32 @@ describe("resolveAntigravityGemini36FlashBackendModel", () => {
 
   it("returns undefined for non-matching model", () => {
     expect(resolveAntigravityGemini36FlashBackendModel("gemini-3.5-flash-low")).toBeUndefined();
+  });
+});
+
+describe("resolveAntigravityTieredFamilyBackendModel", () => {
+  it("appends the selected tier to the Gemini 4 Argon family", () => {
+    expect(resolveAntigravityTieredFamilyBackendModel("antigravity-gemini-4-argon", "medium")).toBe("gemini-4-argon-medium");
+    expect(resolveAntigravityTieredFamilyBackendModel("gemini-4-argon", "high")).toBe("gemini-4-argon-high");
+    // No tier selected falls back to the cheapest one.
+    expect(resolveAntigravityTieredFamilyBackendModel("gemini-4-argon")).toBe("gemini-4-argon-low");
+  });
+
+  it("appends the selected tier to the Claude 5.5 families", () => {
+    expect(resolveAntigravityTieredFamilyBackendModel("antigravity-claude-sonnet-5-5", "high")).toBe("claude-sonnet-5-5-high");
+    expect(resolveAntigravityTieredFamilyBackendModel("antigravity-claude-opus-5-5", "max")).toBe("claude-opus-5-5-max");
+    expect(resolveAntigravityTieredFamilyBackendModel("claude-sonnet-5-5-medium")).toBe("claude-sonnet-5-5-medium");
+  });
+
+  it("ignores everything else", () => {
+    expect(resolveAntigravityTieredFamilyBackendModel("antigravity-gemini-3.8-flash", "high")).toBeUndefined();
+    expect(resolveAntigravityTieredFamilyBackendModel("claude-sonnet-4-6", "high")).toBeUndefined();
+    expect(resolveAntigravityTieredFamilyBackendModel("gemini-2.5-pro", "high")).toBeUndefined();
+  });
+
+  it("detects the tiered families", () => {
+    expect(isAntigravityTieredFamilyModel("antigravity-gemini-4-argon")).toBe(true);
+    expect(isAntigravityTieredFamilyModel("claude-opus-5-5")).toBe(true);
+    expect(isAntigravityTieredFamilyModel("gemini-3.8-flash")).toBe(false);
   });
 });

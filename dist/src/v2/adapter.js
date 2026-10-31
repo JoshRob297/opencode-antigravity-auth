@@ -19,7 +19,8 @@ import { createLogger } from "../plugin/logger";
 import { ANTIGRAVITY_PROVIDER_ID } from "../constants";
 import { prepareAntigravityRequest, transformAntigravityResponse, isGenerativeLanguageRequest, } from "../plugin/request";
 import { OPENCODE_MODEL_DEFINITIONS } from "../plugin/config/models";
-import { collectDiscoveredModels } from "../plugin/config/model-discovery";
+import { collectDiscoveredModelsFromPool } from "../plugin/config/model-discovery";
+import { buildAccountModelCatalog } from "../plugin/model-entitlements";
 import { updateOpencodeConfig } from "../plugin/config/updater";
 const log = createLogger("v2-adapter");
 const MOCK_CLIENT = { tui: { showToast: async () => { } } };
@@ -105,7 +106,10 @@ async function refreshQuotaCacheForFamily(manager, family) {
     const ttlMs = computeSoftQuotaCacheTtlMs("auto", 15);
     const snapshot = manager.getAccountsSnapshot();
     const now = Date.now();
-    const stale = snapshot.some((a) => a.enabled !== false && (a.cachedQuotaUpdatedAt == null || now - a.cachedQuotaUpdatedAt > ttlMs));
+    const stale = snapshot.some((a) => a.enabled !== false && (a.cachedQuotaUpdatedAt == null ||
+        now - a.cachedQuotaUpdatedAt > ttlMs ||
+        // Older builds persisted quota without a model catalog; measure it once.
+        !a.modelCatalog));
     const quotaGroup = resolveQuotaGroup(family);
     const allDepleted = snapshot.every((a) => a.enabled === false || (a.cachedQuota && (a.cachedQuota[quotaGroup]?.remainingFraction ?? 1) <= 0.1));
     if (!stale && !allDepleted)
@@ -119,7 +123,11 @@ async function refreshQuotaCacheForFamily(manager, family) {
                     return null;
                 const projectId = acc.parts.managedProjectId || acc.parts.projectId || "default-cli-project";
                 const resp = await fetchAvailableModels(accessToken, projectId);
-                return { index: acc.index, models: (resp.models || {}) };
+                return {
+                    index: acc.index,
+                    models: (resp.models || {}),
+                    catalog: buildAccountModelCatalog(resp),
+                };
             }
             catch (e) {
                 log.warn(`[quota refresh] failed for ${acc.email}: ${e instanceof Error ? e.message : String(e)}`);
@@ -173,6 +181,11 @@ async function refreshQuotaCacheForFamily(manager, family) {
             if (Object.keys(quota).length > 0) {
                 manager.updateQuotaCache(r.index, quota);
             }
+            // Same response, second purpose: remember which models this account can
+            // actually reach so rotation never hands it a model it is not entitled to.
+            if (r.catalog && Object.keys(r.catalog.models).length > 0) {
+                manager.updateModelCatalog(r.index, r.catalog);
+            }
         }
         // Persist the refreshed cache to disk surgically so future restarts benefit.
         try {
@@ -188,6 +201,7 @@ async function refreshQuotaCacheForFamily(manager, family) {
                 if (stored && snap) {
                     stored.cachedQuota = snap.cachedQuota;
                     stored.cachedQuotaUpdatedAt = snap.cachedQuotaUpdatedAt;
+                    stored.modelCatalog = snap.modelCatalog;
                 }
             }
             if (!process.env.VITEST) {
@@ -280,6 +294,7 @@ export async function setupV2(context) {
     const pendingBySession = new Map();
     const lastFailedMetaBySession = new Map();
     const transportFailureCountBySession = new Map();
+    const entitlementFailureCountBySession = new Map();
     const MAX_CONSECUTIVE_TRANSPORT_FAILURES = 3;
     const MAX_PENDING_PER_SESSION = 32;
     const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
@@ -341,11 +356,31 @@ export async function setupV2(context) {
                 const strategy = config.account_selection_strategy || "hybrid";
                 selectedAccount = accountManager.getCurrentOrNextForFamily(family, modelName, strategy, "antigravity", config.pid_offset_enabled, config.soft_quota_threshold_percent);
                 if (!selectedAccount) {
+                    const availability = accountManager.getModelAvailability(modelName);
+                    // The whole pool was measured and nobody has this model: that is an
+                    // entitlement problem, not a quota problem, and telling the user to
+                    // "wait for the reset" would be a lie.
+                    if (modelName && availability.entitled === 0 && availability.unknown === 0 && availability.missing > 0) {
+                        const userMessage = `[Antigravity] Ninguna de tus cuentas (${availability.missing}) tiene acceso a ${modelName}.\n\n` +
+                            `El backend no sirve ese modelo a ninguna cuenta del pool, asi que rotar no ayuda.\n\n` +
+                            `Sugerencias:\n` +
+                            `1. Usa un modelo que todas las cuentas tienen (google/antigravity-gemini-3.8-flash).\n` +
+                            `2. Agrega o activa una cuenta con acceso real a ${modelName} y vuelve a intentarlo.`;
+                        log.warn(`[v2 routing] No account in the pool is entitled to ${modelName}. Early terminating.`);
+                        enqueuePending(event.sessionID ?? "default", {
+                            prepared: { blockedEarly: true, userMessage },
+                            createdAt: Date.now(),
+                        });
+                        return;
+                    }
                     const blockedReasons = accountManager.getAllBlockedReasons(family, modelName, "antigravity");
                     const reasonsFormatted = blockedReasons.map((r) => `• ${r.email}: ${r.reason}`).join("\n");
                     const minWaitMs = accountManager.getMinWaitTimeForFamily(family, modelName, "antigravity");
                     const waitTimeFormatted = minWaitMs > 0 ? `${Math.ceil(minWaitMs / 60000)}m` : "desconocido";
                     const userMessage = `[Antigravity] Todas tus cuentas (${accountManager.getAccountCount()}) tienen la cuota agotada o bloqueada para ${family}.\n\n` +
+                        (modelName && (availability.entitled > 0 || availability.unknown > 0)
+                            ? `Cuentas con acceso a ${modelName}: ${availability.entitled}${availability.unknown > 0 ? ` (+${availability.unknown} sin medir)` : ""}.\n\n`
+                            : "") +
                         `Detalle por cuenta:\n${reasonsFormatted}\n\n` +
                         `Sugerencias:\n` +
                         `1. Cambia temporalmente a otro modelo disponible (ej: google/antigravity-gemini-3.8-flash).\n` +
@@ -401,6 +436,7 @@ export async function setupV2(context) {
                 prepared,
                 family,
                 accountIndex: activeIndex,
+                modelName: modelName || prepared.effectiveModel || prepared.requestedModel,
                 createdAt: Date.now(),
             });
             event.request = new Request(prepared.request, prepared.init);
@@ -432,15 +468,30 @@ export async function setupV2(context) {
             }
             // Mark account as used or rate-limited on response arrival
             const meta = entry.family !== undefined && entry.accountIndex !== undefined
-                ? { family: entry.family, accountIndex: entry.accountIndex }
+                ? { family: entry.family, accountIndex: entry.accountIndex, modelName: entry.modelName }
                 : undefined;
             const isRateLimitedOrQuota = event.response && (event.response.status === 429 || event.response.status === 403);
+            // A 404 on a model the pool *does* serve elsewhere is an entitlement miss,
+            // not a quota event: rotate the account without putting it on cooldown.
+            const isEntitlementMiss = event.response?.status === 404 && Boolean(meta?.modelName);
             if (meta !== undefined) {
                 try {
                     const mgr = await getSharedAccountManager();
                     if (event.response?.ok) {
                         mgr.markAccountUsed(meta.accountIndex);
                         transportFailureCountBySession.delete(sessionKey);
+                        entitlementFailureCountBySession.delete(sessionKey);
+                    }
+                    else if (isEntitlementMiss) {
+                        const availability = mgr.getModelAvailability(meta.modelName);
+                        if (availability.entitled > 0) {
+                            // Someone else in the pool can serve it; invalidate this account's
+                            // catalog so the next refresh re-measures it.
+                            const snap = mgr.getAccounts()[meta.accountIndex];
+                            if (snap) {
+                                snap.modelCatalog = undefined;
+                            }
+                        }
                     }
                     else if (isRateLimitedOrQuota) {
                         // Immediately mark failed account as limited in shared AccountManager & disk cache
@@ -521,8 +572,12 @@ export async function setupV2(context) {
         await context.session.hook("retry", async (event) => {
             const status = event.error?.status;
             const message = (event.error?.message || "").toLowerCase();
+            const isNotFound = status === 404 ||
+                message.includes("requested entity was not found") ||
+                message.includes("not_found");
             const isRotatable = status === 429 ||
                 status === 403 ||
+                isNotFound ||
                 message.includes("decode") ||
                 message.includes("stream") ||
                 message.includes("eof") ||
@@ -535,7 +590,7 @@ export async function setupV2(context) {
             if (!meta) {
                 const pending = dequeuePending(sessionKey);
                 if (pending?.family !== undefined && pending?.accountIndex !== undefined) {
-                    meta = { family: pending.family, accountIndex: pending.accountIndex };
+                    meta = { family: pending.family, accountIndex: pending.accountIndex, modelName: pending.modelName };
                 }
             }
             if (!isRotatable)
@@ -562,6 +617,18 @@ export async function setupV2(context) {
                 }
                 return;
             }
+            if (isNotFound) {
+                // Bound the hunt: one attempt per account, then stop instead of cycling
+                // forever over a model nobody in the pool can serve.
+                const attempts = (entitlementFailureCountBySession.get(sessionKey) ?? 0) + 1;
+                entitlementFailureCountBySession.set(sessionKey, attempts);
+                if (attempts > storage.accounts.length) {
+                    log.warn(`[v2 routing] Giving up on ${meta?.modelName ?? "the requested model"} after ${attempts - 1} account(s) answered 404.`);
+                    entitlementFailureCountBySession.delete(sessionKey);
+                    event.decision = { retry: false };
+                    return;
+                }
+            }
             const family = meta?.family ?? "claude";
             const prevIndex = meta?.accountIndex ?? storage.activeIndex ?? 0;
             const nextIndex = (prevIndex + 1) % storage.accounts.length;
@@ -575,12 +642,21 @@ export async function setupV2(context) {
                     // Put the failed account on a temporary cooldown for this family
                     mgr.markRateLimitedByIndex(prevIndex, 60_000, family, "antigravity");
                 }
-                mgr.getCurrentOrNextForFamily(family, null, "round-robin", "antigravity", false, 100);
+                if (isNotFound) {
+                    // A 404 is proof that the measured catalog was stale for this model;
+                    // forget it so the account is re-measured instead of trusted blindly.
+                    mgr.updateModelCatalog(prevIndex, undefined);
+                    const snap = mgr.getAccounts()[prevIndex];
+                    if (snap) {
+                        snap.modelCatalog = undefined;
+                    }
+                }
+                mgr.getCurrentOrNextForFamily(family, meta?.modelName ?? null, "round-robin", "antigravity", false, 100);
             }
             catch {
                 // Manager resync failure is non-fatal; storage.activeIndex already moved
             }
-            log.info(`[v2 routing] Failover rotate idx ${prevIndex} -> ${nextIndex} for family=${family} (status=${status ?? "transport"})`);
+            log.info(`[v2 routing] Failover rotate idx ${prevIndex} -> ${nextIndex} for family=${family} model=${meta?.modelName ?? "default"} (status=${status ?? "transport"}, 404=${isNotFound})`);
             event.decision = { retry: true, delay: 500 };
         });
     }
@@ -690,21 +766,33 @@ export async function setupV2(context) {
         });
     }
     // 1.6 Optional dynamic model discovery (config: `model_discovery`).
-    // Asks the backend which models the active account actually has, so models this
+    // Asks the backend which models each account actually has, so models this
     // plugin has not curated (for example the Gemini 4 "Argon" line) are registered
-    // for the accounts that own them. Best-effort: any failure keeps the curated
-    // catalog, and a failed startup must never break the provider.
+    // for the accounts that own them. The union of the whole pool is used: a pool
+    // that mixes Free/AI Plus with an entitled account must still offer Argon, and
+    // rotation (per-account model catalog) keeps the request on the account that
+    // can serve it. Best-effort: any failure keeps the curated catalog, and a
+    // failed startup must never break the provider.
     let discoveredModels = {};
     if (config.model_discovery) {
         try {
             const storage = await loadAccounts();
-            const account = storage?.accounts?.[storage.activeIndex ?? 0] ?? storage?.accounts?.[0];
-            if (account?.refreshToken) {
-                const accessToken = await getAccessToken(account);
-                if (accessToken) {
-                    discoveredModels = await collectDiscoveredModels(accessToken, account.managedProjectId || account.projectId);
+            const pool = (storage?.accounts ?? []).filter((account) => account?.refreshToken && account.enabled !== false);
+            const resolved = await Promise.all(pool.map(async (account) => {
+                try {
+                    const accessToken = await getAccessToken(account);
+                    if (!accessToken)
+                        return null;
+                    return {
+                        accessToken,
+                        projectId: account.managedProjectId || account.projectId,
+                    };
                 }
-            }
+                catch {
+                    return null;
+                }
+            }));
+            discoveredModels = await collectDiscoveredModelsFromPool(resolved.filter((entry) => entry !== null));
         }
         catch (error) {
             log.warn(`[v2] Model discovery failed, keeping the curated catalog: ${error instanceof Error ? error.message : String(error)}`);
@@ -763,7 +851,7 @@ export async function setupV2(context) {
             // antigravity_quota tool
             editor.add({
                 name: "antigravity_quota",
-                description: "Check Antigravity quota (5h and weekly windows) across all configured Google accounts",
+                description: "Check Antigravity quota per account: 5h and weekly windows for Gemini Flash/Pro, Claude/GPT and the Gemini 4 Argon bucket, with absolute reset timestamps, plus which models each account can reach",
                 input: {
                     type: "object",
                     properties: {},

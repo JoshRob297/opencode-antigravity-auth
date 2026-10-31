@@ -202,6 +202,26 @@ describe("Guardrail / Safety Filter Sanitization", () => {
     expect(sanitized.candidates[0].content.parts[0].text).toBe(CLEAN_GUARDRAIL_MESSAGE);
   });
 
+  it("replaces an empty SAFETY payload with an actionable message", () => {
+    // Measured 2026-10-31 on a Claude 5.5 account: the model's safety monitor
+    // answers `finishReason: SAFETY` with an empty text part, which the UI showed
+    // as a bare "Provider blocked the response".
+    const rawResponse = {
+      candidates: [
+        {
+          finishReason: "SAFETY",
+          content: { role: "model", parts: [{ text: "" }, { thoughtSignature: "sig-safety" }] },
+        },
+      ],
+    };
+
+    const sanitized = sanitizeGuardrailMessage(rawResponse) as any;
+    const parts = sanitized.candidates[0].content.parts;
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toEqual({ thoughtSignature: "sig-safety" });
+    expect(parts[1].text).toBe(CLEAN_GUARDRAIL_MESSAGE);
+  });
+
   it("handles finishReason: MALFORMED_FUNCTION_CALL by converting to STOP and inserting clean message", () => {
     const rawResponse = {
       candidates: [

@@ -1,4 +1,4 @@
-import { type AccountStorageV4, type AccountMetadataV3, type RateLimitStateV3, type ModelFamily, type HeaderStyle, type CooldownReason } from "./storage";
+import { type AccountStorageV4, type AccountMetadataV3, type RateLimitStateV3, type ModelFamily, type HeaderStyle, type CooldownReason, type AccountModelCatalog } from "./storage";
 import type { OAuthAuthDetails, RefreshParts } from "./types";
 import type { AccountSelectionStrategy } from "./config/schema";
 import { type Fingerprint, type FingerprintVersion } from "./fingerprint";
@@ -39,6 +39,8 @@ export interface ManagedAccount {
     /** Cached quota data from last checkAccountsQuota() call */
     cachedQuota?: Partial<Record<QuotaGroup, QuotaGroupSummary>>;
     cachedQuotaUpdatedAt?: number;
+    /** Models this account can reach; `undefined` means "not measured yet". */
+    modelCatalog?: AccountModelCatalog;
     verificationRequired?: boolean;
     verificationRequiredAt?: number;
     verificationRequiredReason?: string;
@@ -166,6 +168,17 @@ export declare class AccountManager {
      */
     getAccountFingerprintHistory(accountIndex: number): FingerprintVersion[];
     updateQuotaCache(accountIndex: number, quotaGroups: Partial<Record<QuotaGroup, QuotaGroupSummary>>): void;
+    /** Stores the measured per-account model catalog used to steer rotation. */
+    updateModelCatalog(accountIndex: number, catalog: AccountModelCatalog | undefined): void;
+    /**
+     * How the pool stands for a given model: how many accounts are measured to
+     * have it, how many are measured to lack it, and how many are still unknown.
+     */
+    getModelAvailability(model?: string | null, ttlMs?: number): {
+        entitled: number;
+        missing: number;
+        unknown: number;
+    };
     isAccountOverSoftQuota(account: ManagedAccount, family: ModelFamily, thresholdPercent: number, cacheTtlMs: number, model?: string | null): boolean;
     getAccountsForQuotaCheck(): AccountMetadataV3[];
     getOldestQuotaCacheAge(): number | null;

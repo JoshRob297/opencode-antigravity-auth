@@ -71,6 +71,12 @@ export declare function resolveAntigravityGemini37FlashBackendModel(model: strin
  * request carries the official Antigravity CLI User-Agent (see request.ts).
  */
 export declare function resolveAntigravityGemini38FlashBackendModel(model: string, thinkingLevel?: string): string | undefined;
+export declare function resolveAntigravityTieredFamilyBackendModel(model: string, thinkingLevel?: string): string | undefined;
+/**
+ * True when the model belongs to a family whose backend id carries the thinking
+ * tier as a suffix, so a variant can select it.
+ */
+export declare function isAntigravityTieredFamilyModel(model: string): boolean;
 /**
  * Resolves a model name with optional tier suffix and quota prefix to its actual API model name
  * and corresponding thinking configuration.

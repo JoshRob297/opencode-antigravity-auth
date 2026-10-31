@@ -26,6 +26,8 @@ export {
   resolveAntigravityGemini36FlashBackendModel,
   resolveAntigravityGemini37FlashBackendModel,
   resolveAntigravityGemini38FlashBackendModel,
+  resolveAntigravityTieredFamilyBackendModel,
+  isAntigravityTieredFamilyModel,
   getModelFamily,
   MODEL_ALIASES,
   THINKING_TIER_BUDGETS,

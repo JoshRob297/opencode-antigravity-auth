@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.4.0] - 2026-10-31
+
+### Added
+
+- **Entitlement-aware rotation.** Each account's usable model catalog is now measured from `fetchAvailableModels` and persisted (`modelCatalog` in `antigravity-accounts.json`); account selection skips any account that provably lacks the requested model. A pool that mixes Free/AI Plus accounts with one that holds the Gemini 4 "Argon" grant now routes Argon requests to the entitled account and still uses every account for `gemini-3.8-flash`, instead of handing Argon to a Free account that answers `404 NOT_FOUND`.
+- **Bounded 404 failover.** A `404 NOT_FOUND` on a model another account in the pool serves rotates to the next account (one attempt per account, then it stops) and invalidates that account's cached catalog. It no longer surfaces the misleading "request preview access" message for a pool that already has access. `404` never puts an account on quota cooldown.
+- **Pool-wide discovery.** `model_discovery` now unions the catalogs of every enabled account instead of asking the active one only, so Argon/Claude 5.5 stay selectable when the active account is not the entitled one.
+- **Thinking tiers grouped into variants.** The backend exposes one id per tier (`gemini-4-argon-low|medium|high`, `claude-sonnet-5-5-*`); discovery registers a single selector entry (`antigravity-gemini-4-argon`, `antigravity-claude-sonnet-5-5`, `antigravity-claude-opus-5-5`) with `low|medium|high` variants and resolves the variant to the id suffix. Limits come from the backend when declared (Claude 5.5: 1M context / 128k output).
+
+### Fixed
+
+- **`-disabled` placeholder no longer surfaced.** Non-entitled accounts receive `gemini-4-argon-disabled` (no `quotaInfo` block). It was being registered as a selectable model that always answered `404`; it is now denylisted and excluded from the catalog.
+- **Empty `SAFETY` payload explained.** A `finishReason: SAFETY` with an empty text part (measured on Claude 5.5 with a long agent prompt) now carries an explicit "blocked by the model's filters" message instead of surfacing as an opaque provider error, while keeping any `thoughtSignature` part intact.
+- **Clear message when nobody can serve a model.** When every measured account lacks the model, the plugin says so instead of reporting an exhausted quota.
+- **CLI signature fallback bumped to 1.4.12** (upstream stable, 100% rollout).
+
+### Changed
+
+- **Quota report rebuilt around the per-account shape the backend returns now.** `antigravity_quota` and `/antigravity-quota` render one table per model family, with `Gemini 4 Argon` kept separate from `Gemini Models` instead of being folded into it by a substring match; only the windows a family actually has (Argon is weekly-only); the short reset countdown per window, and a **`USABLE`** column that turns to `no` (with the countdown to its reset) while any window of that family is at `0%` - a 5h bar with quota left is meaningless once the weekly bucket is empty, which is exactly what a static `HEALTH 100%` used to hide; and a measured **account capabilities** table (models reachable, Argon remaining and reset, Claude 4.6 and 5.5 reported separately, 3.8 Flash) - Claude quota is shared by the family, so a Free account can show Claude quota and still lack 5.5. Accounts that were never measured say `not measured` instead of guessing.
+
 ## [2.3.0] - 2026-10-27
 
 ### Added

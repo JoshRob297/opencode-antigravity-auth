@@ -11,7 +11,7 @@ import { CLAUDE_TOOL_SYSTEM_INSTRUCTION, CLAUDE_DESCRIPTION_PROMPT, ANTIGRAVITY_
 import { analyzeConversationState, closeToolLoopForThinking, needsThinkingRecovery, } from "./thinking-recovery";
 import { sanitizeCrossModelPayloadInPlace } from "./transform/cross-model-sanitizer";
 import { isGemini3Model, isImageGenerationModel, buildImageGenerationConfig, applyGeminiTransforms } from "./transform";
-import { resolveModelWithTier, resolveModelWithVariant, resolveModelForHeaderStyle, resolveAntigravityGemini35FlashBackendModel, resolveAntigravityGemini36FlashBackendModel, resolveAntigravityGemini37FlashBackendModel, resolveAntigravityGemini38FlashBackendModel, isClaudeModel, isClaudeThinkingModel, CLAUDE_THINKING_MAX_OUTPUT_TOKENS, } from "./transform";
+import { resolveModelWithTier, resolveModelWithVariant, resolveModelForHeaderStyle, resolveAntigravityGemini35FlashBackendModel, resolveAntigravityGemini36FlashBackendModel, resolveAntigravityGemini37FlashBackendModel, resolveAntigravityGemini38FlashBackendModel, resolveAntigravityTieredFamilyBackendModel, isAntigravityTieredFamilyModel, isClaudeModel, isClaudeThinkingModel, CLAUDE_THINKING_MAX_OUTPUT_TOKENS, } from "./transform";
 import { detectErrorType } from "./recovery";
 import { getSessionFingerprint, buildFingerprintHeaders } from "./fingerprint";
 const log = createLogger("request");
@@ -704,6 +704,11 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
     // Tier-based thinking configuration from model resolver (can be overridden by variant config)
     let tierThinkingBudget = resolved.thinkingBudget;
     let tierThinkingLevel = resolved.thinkingLevel;
+    // Level used to pick the backend id suffix (`gemini-4-argon-medium`,
+    // `claude-sonnet-5-5-high`). It follows `tierThinkingLevel` for Gemini 3 but is
+    // kept separate so Claude 5.5 never receives a Gemini-style `thinkingLevel`
+    // block in `generationConfig`: its tier is the id suffix, not a request field.
+    let tierSuffixLevel = tierThinkingLevel;
     let signatureSessionKey = buildSignatureSessionKey(PLUGIN_SESSION_ID, effectiveModel, undefined, resolveProjectKey(projectId));
     let body = baseInit.body;
     if (typeof baseInit.body === "string" && baseInit.body) {
@@ -721,20 +726,34 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
             const variantGenerationConfig = (requestRootForVariant?.generationConfig ?? parsedBody.generationConfig);
             const earlyVariantConfig = extractVariantThinkingConfig(variantProviderOptions, variantGenerationConfig);
             const isGemini3Model = effectiveModel.toLowerCase().includes("gemini-3");
-            if (earlyVariantConfig?.thinkingLevel && isGemini3Model) {
-                tierThinkingLevel = earlyVariantConfig.thinkingLevel;
-                tierThinkingBudget = undefined;
+            const isTieredFamilyModel = isAntigravityTieredFamilyModel(effectiveModel);
+            if (earlyVariantConfig?.thinkingLevel && (isGemini3Model || isTieredFamilyModel)) {
+                if (isGemini3Model) {
+                    tierThinkingLevel = earlyVariantConfig.thinkingLevel;
+                    tierThinkingBudget = undefined;
+                }
+                tierSuffixLevel = earlyVariantConfig.thinkingLevel;
             }
             else if (earlyVariantConfig?.thinkingBudget) {
                 if (isGemini3Model) {
                     log.warn("[Deprecated] Using thinkingBudget for Gemini 3 model. Use thinkingLevel instead.");
                     tierThinkingLevel = earlyVariantConfig.thinkingBudget <= 8192 ? "low"
                         : earlyVariantConfig.thinkingBudget <= 16384 ? "medium" : "high";
+                    tierSuffixLevel = tierThinkingLevel;
+                    tierThinkingBudget = undefined;
+                }
+                else if (isTieredFamilyModel) {
+                    // Budgets are only a fallback for callers that still send them; the
+                    // tier they encode is the only thing this family understands.
+                    tierSuffixLevel = earlyVariantConfig.thinkingBudget <= 8192 ? "low"
+                        : earlyVariantConfig.thinkingBudget <= 16384 ? "medium"
+                            : earlyVariantConfig.thinkingBudget <= 24576 ? "high" : "max";
                     tierThinkingBudget = undefined;
                 }
                 else {
                     tierThinkingBudget = earlyVariantConfig.thinkingBudget;
                     tierThinkingLevel = undefined;
+                    tierSuffixLevel = undefined;
                 }
             }
             if (isWrapped) {
@@ -743,24 +762,13 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                     model: effectiveModel,
                 };
                 if (headerStyle === "antigravity") {
-                    const gemini38FlashBackendModel = resolveAntigravityGemini38FlashBackendModel(rawModel, tierThinkingLevel);
-                    if (gemini38FlashBackendModel) {
-                        effectiveModel = gemini38FlashBackendModel;
-                        wrappedBody.model = gemini38FlashBackendModel;
-                    }
-                    else {
-                        const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
-                        if (gemini37FlashBackendModel) {
-                            effectiveModel = gemini37FlashBackendModel;
-                            wrappedBody.model = gemini37FlashBackendModel;
-                        }
-                        else {
-                            const gemini36FlashBackendModel = resolveAntigravityGemini36FlashBackendModel(rawModel, tierThinkingLevel);
-                            if (gemini36FlashBackendModel) {
-                                effectiveModel = gemini36FlashBackendModel;
-                                wrappedBody.model = gemini36FlashBackendModel;
-                            }
-                        }
+                    const tieredBackendModel = resolveAntigravityGemini38FlashBackendModel(rawModel, tierSuffixLevel) ??
+                        resolveAntigravityGemini37FlashBackendModel(rawModel, tierSuffixLevel) ??
+                        resolveAntigravityGemini36FlashBackendModel(rawModel, tierSuffixLevel) ??
+                        resolveAntigravityTieredFamilyBackendModel(rawModel, tierSuffixLevel);
+                    if (tieredBackendModel) {
+                        effectiveModel = tieredBackendModel;
+                        wrappedBody.model = tieredBackendModel;
                     }
                 }
                 // Some callers may already send an Antigravity-wrapped body.
@@ -842,21 +850,12 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
                     requestPayload.messages = pruneHistoricalClaudeToolResponses(requestPayload.messages);
                 }
                 if (headerStyle === "antigravity") {
-                    const gemini38FlashBackendModel = resolveAntigravityGemini38FlashBackendModel(rawModel, tierThinkingLevel);
-                    if (gemini38FlashBackendModel) {
-                        effectiveModel = gemini38FlashBackendModel;
-                    }
-                    else {
-                        const gemini37FlashBackendModel = resolveAntigravityGemini37FlashBackendModel(rawModel, tierThinkingLevel);
-                        if (gemini37FlashBackendModel) {
-                            effectiveModel = gemini37FlashBackendModel;
-                        }
-                        else {
-                            const gemini36FlashBackendModel = resolveAntigravityGemini36FlashBackendModel(rawModel, tierThinkingLevel);
-                            if (gemini36FlashBackendModel) {
-                                effectiveModel = gemini36FlashBackendModel;
-                            }
-                        }
+                    const tieredBackendModel = resolveAntigravityGemini38FlashBackendModel(rawModel, tierSuffixLevel) ??
+                        resolveAntigravityGemini37FlashBackendModel(rawModel, tierSuffixLevel) ??
+                        resolveAntigravityGemini36FlashBackendModel(rawModel, tierSuffixLevel) ??
+                        resolveAntigravityTieredFamilyBackendModel(rawModel, tierSuffixLevel);
+                    if (tieredBackendModel) {
+                        effectiveModel = tieredBackendModel;
                     }
                 }
                 if (isClaude) {

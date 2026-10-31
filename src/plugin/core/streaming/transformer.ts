@@ -62,8 +62,32 @@ export function sanitizeGuardrailMessage(response: unknown, sessionKey?: string)
       if (!cand) continue;
 
       if (cand.finishReason === "SAFETY") {
-        if (!cand.content || typeof cand.content !== "object") {
-          cand.content = { parts: [{ text: CLEAN_GUARDRAIL_MESSAGE }], role: "model" };
+        const hasText = (() => {
+          if (!cand.content || typeof cand.content !== "object") return false;
+          const parts = (cand.content as Record<string, unknown>).parts;
+          if (!Array.isArray(parts)) return false;
+          return parts.some((part) => {
+            const p = part as Record<string, unknown> | null;
+            return Boolean(p && typeof p.text === "string" && p.text.trim().length > 0);
+          });
+        })();
+        // Measured 2026-10-31 on a Claude 5.5 account: the safety monitor behind
+        // the model answers `finishReason: SAFETY` with an *empty* text part, so
+        // the UI showed a bare "Provider blocked the response". Replace the empty
+        // payload with an actionable message, keeping any non-text parts
+        // (thoughtSignature) intact so signature continuity survives.
+        if (!hasText) {
+          if (!cand.content || typeof cand.content !== "object") {
+            cand.content = { parts: [{ text: CLEAN_GUARDRAIL_MESSAGE }], role: "model" };
+          } else {
+            const content = cand.content as Record<string, unknown>;
+            const parts = Array.isArray(content.parts) ? (content.parts as unknown[]) : [];
+            const keptParts = parts.filter((part) => {
+              const p = part as Record<string, unknown> | null;
+              return Boolean(p && typeof p === "object" && typeof p.text !== "string");
+            });
+            content.parts = [...keptParts, { text: CLEAN_GUARDRAIL_MESSAGE }];
+          }
         }
       }
 

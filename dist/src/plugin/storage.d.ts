@@ -58,6 +58,25 @@ export interface AccountStorage {
     activeIndex: number;
 }
 export type CooldownReason = "auth-failure" | "network-error" | "project-error" | "validation-required";
+/** One usable model as reported by `fetchAvailableModels` for a single account. */
+export interface AccountModelCatalogEntry {
+    displayName?: string;
+    maxTokens?: number;
+    maxOutputTokens?: number;
+    /** Remaining fraction of the bucket this model draws from, when the backend reports it. */
+    remainingFraction?: number;
+    /** Known reset for the bucket this model draws from, verbatim from the backend. */
+    resetTime?: string;
+}
+/**
+ * Per-account snapshot of the models the backend actually serves to that account.
+ * Built from `fetchAvailableModels`; ids the account is not entitled to are
+ * excluded (they come back as `<id>-disabled` without a `quotaInfo` block).
+ */
+export interface AccountModelCatalog {
+    updatedAt: number;
+    models: Record<string, AccountModelCatalogEntry>;
+}
 export interface AccountMetadataV3 {
     email?: string;
     refreshToken: string;
@@ -85,6 +104,8 @@ export interface AccountMetadataV3 {
         modelCount?: number;
     }>>;
     cachedQuotaUpdatedAt?: number;
+    /** Models this account can actually reach, so rotation never picks a blind account. */
+    modelCatalog?: AccountModelCatalog;
 }
 export interface AccountStorageV3 {
     version: 3;

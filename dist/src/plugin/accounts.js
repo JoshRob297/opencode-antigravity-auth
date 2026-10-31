@@ -3,6 +3,7 @@ import { loadAccounts, saveAccounts } from "./storage";
 import { getHealthTracker, getTokenTracker, selectHybridAccount } from "./rotation";
 import { generateFingerprint, updateFingerprintVersion, MAX_FINGERPRINT_HISTORY } from "./fingerprint";
 import { getModelFamily } from "./transform/model-resolver";
+import { catalogAllowsModel } from "./model-entitlements";
 import { debugLogToFile } from "./debug";
 import { formatAccountLabel } from "./logging-utils";
 const QUOTA_EXHAUSTED_BACKOFFS = [60_000, 300_000, 1_800_000, 7_200_000];
@@ -114,6 +115,20 @@ function getQuotaKey(family, headerStyle = "antigravity", model) {
         return `${base}:${model}`;
     }
     return base;
+}
+/**
+ * True when the account's measured catalog proves it cannot serve this model.
+ *
+ * Unmeasured or stale catalogs return `false` (do not block), so a pool that
+ * never refreshed its catalog keeps the previous behaviour. This is what stops
+ * rotation from handing a Gemini 4 "Argon" request to a Free/AI Plus account
+ * that answers 404 NOT_FOUND, while still letting that same account serve
+ * `gemini-3.8-flash`, which every plan has.
+ */
+function accountLacksModel(account, model, ttlMs) {
+    if (!model)
+        return false;
+    return catalogAllowsModel(account.modelCatalog, model, ttlMs) === false;
 }
 function getFreshRemainingFraction(account, family, cacheTtlMs, model) {
     if (!account.cachedQuota)
@@ -294,6 +309,7 @@ export class AccountManager {
                     fingerprintHistory: acc.fingerprintHistory ?? [],
                     cachedQuota: acc.cachedQuota,
                     cachedQuotaUpdatedAt: acc.cachedQuotaUpdatedAt,
+                    modelCatalog: acc.modelCatalog,
                     verificationRequired: acc.verificationRequired,
                     verificationRequiredAt: acc.verificationRequiredAt,
                     verificationRequiredReason: acc.verificationRequiredReason,
@@ -428,6 +444,7 @@ export class AccountManager {
             const tokenTracker = getTokenTracker();
             const accountsWithMetrics = this.accounts
                 .filter(acc => acc.enabled !== false)
+                .filter(acc => !accountLacksModel(acc, model, softQuotaCacheTtlMs))
                 .map(acc => {
                 clearExpiredRateLimits(acc);
                 return {
@@ -468,7 +485,8 @@ export class AccountManager {
             clearExpiredRateLimits(current);
             const isLimitedForRequestedStyle = isRateLimitedForHeaderStyle(current, family, headerStyle, model, softQuotaCacheTtlMs);
             const isOverThreshold = isOverSoftQuotaThreshold(current, family, softQuotaThresholdPercent, softQuotaCacheTtlMs, model);
-            if (!isLimitedForRequestedStyle && !isOverThreshold && !this.isAccountCoolingDown(current)) {
+            if (!isLimitedForRequestedStyle && !isOverThreshold && !this.isAccountCoolingDown(current)
+                && !accountLacksModel(current, model, softQuotaCacheTtlMs)) {
                 this.markTouchedForQuota(current, quotaKey);
                 return current;
             }
@@ -486,7 +504,8 @@ export class AccountManager {
             return a.enabled !== false &&
                 !isRateLimitedForHeaderStyle(a, family, headerStyle, model, softQuotaCacheTtlMs) &&
                 !isOverSoftQuotaThreshold(a, family, softQuotaThresholdPercent, softQuotaCacheTtlMs, model) &&
-                !this.isAccountCoolingDown(a);
+                !this.isAccountCoolingDown(a) &&
+                !accountLacksModel(a, model, softQuotaCacheTtlMs);
         });
         if (available.length === 0) {
             return null;
@@ -933,6 +952,7 @@ export class AccountManager {
                 fingerprintHistory: a.fingerprintHistory?.length ? a.fingerprintHistory : undefined,
                 cachedQuota: a.cachedQuota && Object.keys(a.cachedQuota).length > 0 ? a.cachedQuota : undefined,
                 cachedQuotaUpdatedAt: a.cachedQuotaUpdatedAt,
+                modelCatalog: a.modelCatalog,
                 verificationRequired: a.verificationRequired,
                 verificationRequiredAt: a.verificationRequiredAt,
                 verificationRequiredReason: a.verificationRequiredReason,
@@ -1064,6 +1084,36 @@ export class AccountManager {
             account.cachedQuota = quotaGroups;
             account.cachedQuotaUpdatedAt = nowMs();
         }
+    }
+    /** Stores the measured per-account model catalog used to steer rotation. */
+    updateModelCatalog(accountIndex, catalog) {
+        const account = this.accounts[accountIndex];
+        if (account && catalog) {
+            account.modelCatalog = catalog;
+        }
+    }
+    /**
+     * How the pool stands for a given model: how many accounts are measured to
+     * have it, how many are measured to lack it, and how many are still unknown.
+     */
+    getModelAvailability(model, ttlMs = 10 * 60 * 1000) {
+        const enabled = this.accounts.filter((a) => a.enabled !== false);
+        if (!model) {
+            return { entitled: enabled.length, missing: 0, unknown: 0 };
+        }
+        let entitled = 0;
+        let missing = 0;
+        let unknown = 0;
+        for (const account of enabled) {
+            const verdict = catalogAllowsModel(account.modelCatalog, model, ttlMs);
+            if (verdict === "unknown")
+                unknown += 1;
+            else if (verdict)
+                entitled += 1;
+            else
+                missing += 1;
+        }
+        return { entitled, missing, unknown };
     }
     isAccountOverSoftQuota(account, family, thresholdPercent, cacheTtlMs, model) {
         return isOverSoftQuotaThreshold(account, family, thresholdPercent, cacheTtlMs, model);

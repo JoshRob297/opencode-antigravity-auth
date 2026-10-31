@@ -27,6 +27,16 @@ export function progressBar(percent, width = 10) {
     const bar = "█".repeat(filled) + "░".repeat(empty);
     return `[${bar}] ${clamped.toFixed(0)}%`;
 }
+/**
+ * Absolute reset stamp in UTC as the backend reports it, e.g. `2026-11-07 01:37Z`.
+ * The dual-window buckets are days apart, so "in 6d 23h" alone cannot be acted on.
+ */
+export function formatResetStamp(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime()))
+        return "unknown";
+    const iso = date.toISOString();
+    return `${iso.slice(0, 10)} ${iso.slice(11, 16)}Z`;
+}
 function buildAuthFromAccount(account) {
     return {
         type: "oauth",
@@ -156,6 +166,7 @@ export async function fetchAccountQuotaDetails(account, index, client, providerI
                             remainingPercentage: Math.round(fraction * 100),
                             remainingFraction: fraction,
                             resetTime,
+                            resetTimeDisplay: formatResetStamp(resetTime),
                             timeUntilReset,
                             timeUntilResetFormatted: formatDuration(timeUntilReset),
                         };
@@ -199,6 +210,7 @@ export async function fetchAccountQuotaDetails(account, index, client, providerI
                     disabled,
                     groups,
                     cachedQuota,
+                    modelCatalog: account.modelCatalog,
                     updatedAccount,
                 };
             }
@@ -215,6 +227,7 @@ export async function fetchAccountQuotaDetails(account, index, client, providerI
                 status: disabled ? "disabled" : "ok",
                 disabled,
                 models: [],
+                modelCatalog: account.modelCatalog,
                 updatedAccount,
             };
         }
@@ -287,6 +300,7 @@ export async function fetchAccountQuotaDetails(account, index, client, providerI
                 remainingPercentage: Math.round(minFraction * 100),
                 remainingFraction: minFraction,
                 resetTime,
+                resetTimeDisplay: formatResetStamp(resetTime),
                 timeUntilReset,
                 timeUntilResetFormatted: formatDuration(timeUntilReset),
             };
@@ -332,6 +346,7 @@ export async function fetchAccountQuotaDetails(account, index, client, providerI
             groups: groups.length > 0 ? groups : undefined,
             models,
             cachedQuota,
+            modelCatalog: account.modelCatalog,
             updatedAccount,
         };
     }
@@ -353,88 +368,198 @@ export async function checkAccountsQuota(accounts, client, providerId = ANTIGRAV
     }
     return results;
 }
+function classifyQuotaGroup(displayName) {
+    const lower = displayName.toLowerCase();
+    // Argon has its own weekly bucket (`gemini-argon-wtu-weekly`); it must not be
+    // folded into the Gemini Flash/Pro group, which is what a plain
+    // `includes("gemini")` check used to do.
+    if (lower.includes("argon"))
+        return "argon";
+    if (lower.includes("claude") || lower.includes("gpt"))
+        return "claude";
+    if (lower.includes("gemini"))
+        return "gemini";
+    return "other";
+}
+const GROUP_TITLES = {
+    argon: "Gemini 4 Argon (own weekly bucket)",
+    gemini: "Gemini Models (Flash / Pro)",
+    claude: "Claude & GPT Models (Opus / Sonnet / GPT-OSS)",
+    other: "Other models",
+};
+const GROUP_ORDER = ["argon", "gemini", "claude", "other"];
+/** `[bar] 99%` + absolute reset stamp + relative countdown, padded for a table. */
+function formatBucketCells(bucket) {
+    if (!bucket)
+        return { quota: "N/A".padEnd(18, " "), reset: "-".padEnd(15, " ") };
+    const quota = progressBar(bucket.remainingPercentage).padEnd(18, " ");
+    // Short countdown only: the absolute date was noise in a table that already
+    // tells you how long is left.
+    const reset = bucket.timeUntilResetFormatted.padEnd(15, " ");
+    return { quota, reset };
+}
+/**
+ * Whether the account can actually use this family right now.
+ *
+ * A 5h window with quota left is meaningless while the weekly window is at 0%:
+ * the backend refuses the request until the weekly bucket resets. The report used
+ * to print a static health score (100%) next to "weekly 0%", which read as
+ * "usable" when it was the opposite.
+ */
+function formatUsabilityCells(group) {
+    const buckets = [group?.fiveHour, group?.weekly].filter((b) => Boolean(b));
+    if (buckets.length === 0)
+        return { usable: "?".padEnd(16, " "), sortKey: 0 };
+    const blocking = buckets.find((b) => b.remainingFraction <= 0);
+    if (blocking) {
+        return { usable: `no · ${blocking.timeUntilResetFormatted}`.padEnd(16, " "), sortKey: 0 };
+    }
+    const worst = Math.min(...buckets.map((b) => b.remainingFraction));
+    return { usable: `yes`.padEnd(16, " "), sortKey: worst };
+}
+function summarizeCatalog(catalog) {
+    const ids = catalog?.models ? Object.keys(catalog.models) : [];
+    const summary = {
+        measured: ids.length > 0,
+        modelCount: ids.length,
+        claude46: false,
+        claude55: false,
+        flash38: false,
+    };
+    if (ids.length === 0)
+        return summary;
+    let bestArgon;
+    for (const id of ids) {
+        if (id.startsWith("gemini-4-argon")) {
+            const entry = catalog.models[id];
+            if (!bestArgon || (entry.remainingFraction ?? 0) > (bestArgon.remainingFraction ?? 0)) {
+                bestArgon = { remainingFraction: entry.remainingFraction, resetTime: entry.resetTime };
+            }
+        }
+        if (/^claude-(sonnet|opus)-5-5/.test(id))
+            summary.claude55 = true;
+        if (/^claude-(sonnet|opus)-4-6/.test(id))
+            summary.claude46 = true;
+        if (/^gemini-3\.8-flash/.test(id))
+            summary.flash38 = true;
+    }
+    summary.argon = bestArgon;
+    return summary;
+}
+function formatArgonCell(summary) {
+    if (!summary.measured)
+        return "not measured";
+    if (!summary.argon)
+        return "no";
+    const remaining = summary.argon.remainingFraction;
+    const resetMs = summary.argon.resetTime ? new Date(summary.argon.resetTime).getTime() - Date.now() : NaN;
+    const reset = Number.isFinite(resetMs) ? formatDuration(Math.max(0, resetMs)) : "no reset";
+    if (typeof remaining !== "number")
+        return `yes · ${reset}`;
+    return `yes ${Math.round(remaining * 100)}% · ${reset}`;
+}
+/**
+ * Renders the quota report.
+ *
+ * Uses the per-account shape the backend actually returns now: one group per
+ * model family (Gemini Flash/Pro, Claude/GPT and the standalone `Gemini 4 Argon`
+ * bucket), each with its own 5h/weekly windows, plus the reset timestamps the
+ * backend declares (absolute and relative) and the measured model catalog of
+ * every account.
+ */
 export function formatQuotaReportMarkdown(results) {
     if (results.length === 0) {
         return "# Antigravity Quota Status\n\nNo accounts configured.\n";
     }
-    let output = "# Antigravity Quota Status\n\n";
+    let output = "# Antigravity Quota Status\n";
     const errors = [];
     const hasGroups = results.some((r) => r.status !== "error" && r.groups && r.groups.length > 0);
+    const byKind = new Map();
+    for (const result of results) {
+        if (result.status === "error") {
+            errors.push(`${shortEmail(result.email || `Account ${result.index + 1}`)}: ${result.error || "error"}`);
+            continue;
+        }
+        if (!result.groups)
+            continue;
+        const kinds = new Set();
+        for (const g of result.groups) {
+            kinds.add(classifyQuotaGroup(g.displayName));
+        }
+        for (const kind of kinds) {
+            if (!byKind.has(kind))
+                byKind.set(kind, []);
+            byKind.get(kind).push(result);
+        }
+    }
+    if (errors.length > 0) {
+        output += `\n**Errors:** ${errors.join(", ")}\n`;
+    }
     if (hasGroups) {
-        const groupMap = new Map();
+        const friendly = {};
         for (const result of results) {
-            if (result.status === "error" || !result.groups) {
-                errors.push(`${shortEmail(result.email || `Account ${result.index + 1}`)}: ${result.error || "error"}`);
+            if (result.email)
+                friendly[result.email] = shortEmail(result.email);
+        }
+        for (const kind of GROUP_ORDER) {
+            const accounts = byKind.get(kind);
+            if (!accounts || accounts.length === 0)
                 continue;
-            }
-            for (const g of result.groups) {
-                let groupKey = g.displayName;
-                if (groupKey.toLowerCase().includes("gemini")) {
-                    groupKey = "Gemini Models (Flash / Pro)";
-                }
-                else if (groupKey.toLowerCase().includes("claude") || groupKey.toLowerCase().includes("gpt")) {
-                    groupKey = "Claude & GPT Models (Opus / Sonnet / GPT-OSS)";
-                }
-                if (!groupMap.has(groupKey)) {
-                    groupMap.set(groupKey, []);
-                }
-                const email = result.email || `account-${result.index + 1}`;
-                const savedHealth = EngineStatsManager.getInstance().getSavedHealthScore(email) ?? 100;
-                groupMap.get(groupKey).push({
-                    email,
-                    disabled: result.disabled,
-                    health: savedHealth,
-                    fiveHour: g.fiveHour ? { percentage: g.fiveHour.remainingPercentage, resetIn: g.fiveHour.timeUntilResetFormatted } : undefined,
-                    weekly: g.weekly ? { percentage: g.weekly.remainingPercentage, resetIn: g.weekly.timeUntilResetFormatted } : undefined,
-                });
-            }
-        }
-        if (errors.length > 0) {
-            output += `Errors: ${errors.join(", ")}\n\n`;
-        }
-        const sortedGroups = Array.from(groupMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-        for (const [groupName, accountsList] of sortedGroups) {
-            output += `### ${groupName}\n`;
+            // Argon only has a weekly bucket; printing empty 5h columns for it is noise.
+            const groupOf = (result) => (result.groups || []).find((g) => classifyQuotaGroup(g.displayName) === kind);
+            const showFiveHour = accounts.some((result) => groupOf(result)?.fiveHour);
+            const showWeekly = accounts.some((result) => groupOf(result)?.weekly);
+            output += `\n## ${GROUP_TITLES[kind]}\n`;
             output += "```text\n";
-            output += "QUOTA (5h)          RESET (5h)  QUOTA (Weekly)      RESET (Wk)  HEALTH  ACCOUNT\n";
-            const sorted = accountsList.sort((a, b) => {
-                const pA = a.weekly?.percentage ?? a.fiveHour?.percentage ?? 0;
-                const pB = b.weekly?.percentage ?? b.fiveHour?.percentage ?? 0;
-                return pB - pA;
-            });
-            for (const acc of sorted) {
-                const fiveHourBar = acc.fiveHour ? progressBar(acc.fiveHour.percentage) : "N/A";
-                const fiveHourReset = acc.fiveHour ? acc.fiveHour.resetIn : "-";
-                const weeklyBar = acc.weekly ? progressBar(acc.weekly.percentage) : "N/A";
-                const weeklyReset = acc.weekly ? acc.weekly.resetIn : "-";
-                const healthCol = `${acc.health ?? 100}%`.padEnd(8, " ");
-                const email = `${shortEmail(acc.email)}${acc.disabled ? " (disabled)" : ""}`;
-                const fBarCol = fiveHourBar.padEnd(20, " ");
-                const fResetCol = fiveHourReset.padEnd(12, " ");
-                const wBarCol = weeklyBar.padEnd(20, " ");
-                const wResetCol = weeklyReset.padEnd(12, " ");
-                output += `${fBarCol}${fResetCol}${wBarCol}${wResetCol}${healthCol}${email}\n`;
-            }
-            output += "```\n\n";
+            let header = "";
+            if (showFiveHour)
+                header += `${"QUOTA (5h)".padEnd(18, " ")}${"RESET (5h)".padEnd(15, " ")}`;
+            if (showWeekly)
+                header += `${"QUOTA (weekly)".padEnd(18, " ")}${"RESET (weekly)".padEnd(15, " ")}`;
+            output += `${header}${"USABLE".padEnd(16, " ")}ACCOUNT\n`;
+            const rows = accounts
+                .map((result) => {
+                const group = groupOf(result);
+                const email = result.email || `account-${result.index + 1}`;
+                const five = formatBucketCells(group?.fiveHour);
+                const week = formatBucketCells(group?.weekly);
+                const usability = formatUsabilityCells(group);
+                const name = `${shortEmail(email)}${result.disabled ? " (disabled)" : ""}`;
+                let line = "";
+                if (showFiveHour)
+                    line += `${five.quota}${five.reset}`;
+                if (showWeekly)
+                    line += `${week.quota}${week.reset}`;
+                line += `${usability.usable}${name}`;
+                return { line, sortKey: usability.sortKey };
+            })
+                .sort((a, b) => b.sortKey - a.sortKey);
+            for (const row of rows)
+                output += `${row.line}\n`;
+            output += "```\n";
         }
     }
     else {
-        // Fallback model list format
+        // Fallback model list format (accounts whose summary endpoint is unavailable).
         const familyMap = new Map();
         for (const result of results) {
             if (result.status === "error" || !result.models) {
-                errors.push(`${shortEmail(result.email || `Account ${result.index + 1}`)}: ${result.error || "error"}`);
+                if (result.status === "error") {
+                    errors.push(`${shortEmail(result.email || `Account ${result.index + 1}`)}: ${result.error || "error"}`);
+                }
                 continue;
             }
             for (const model of result.models) {
                 const lower = model.label.toLowerCase();
                 let familyName = "Gemini Models (Flash / Pro)";
                 if (lower.includes("claude") || lower.includes("gpt")) {
-                    familyName = "Claude Models (Opus / Sonnet)";
+                    familyName = "Claude & GPT Models (Opus / Sonnet / GPT-OSS)";
                 }
-                if (!familyMap.has(familyName)) {
+                else if (lower.includes("argon")) {
+                    familyName = "Gemini 4 Argon (own weekly bucket)";
+                }
+                if (!familyMap.has(familyName))
                     familyMap.set(familyName, new Map());
-                }
                 const accountMap = familyMap.get(familyName);
                 const accKey = result.email || `account-${result.index + 1}`;
                 if (!accountMap.has(accKey)) {
@@ -446,29 +571,36 @@ export function formatQuotaReportMarkdown(results) {
                 }
             }
         }
-        if (errors.length > 0) {
-            output += `Errors: ${errors.join(", ")}\n\n`;
-        }
-        const sortedFamilies = Array.from(familyMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-        for (const [familyName, accountMap] of sortedFamilies) {
-            output += `### ${familyName}\n`;
+        for (const [familyName, accountMap] of Array.from(familyMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+            output += `\n## ${familyName}\n`;
             output += "```text\n";
-            output += "QUOTA               RESET IN    ACCOUNT\n";
-            const accountsList = Array.from(accountMap.entries()).map(([email, info]) => ({
-                email,
-                percentage: info.percentage,
-                resetIn: info.resetIn,
-                disabled: info.disabled,
-            }));
-            const sorted = accountsList.sort((a, b) => b.percentage - a.percentage);
-            for (const acc of sorted) {
-                const bar = progressBar(acc.percentage).padEnd(20, " ");
-                const reset = acc.resetIn.padEnd(12, " ");
-                const email = `${shortEmail(acc.email)}${acc.disabled ? " (disabled)" : ""}`;
-                output += `${bar}${reset}${email}\n`;
+            output += `${"QUOTA".padEnd(18, " ")}${"RESET".padEnd(15, " ")}ACCOUNT\n`;
+            const accountsList = Array.from(accountMap.entries()).map(([email, info]) => ({ email, ...info }));
+            for (const acc of accountsList.sort((a, b) => b.percentage - a.percentage)) {
+                output += `${progressBar(acc.percentage).padEnd(18, " ")}${acc.resetIn.padEnd(15, " ")}${shortEmail(acc.email)}${acc.disabled ? " (disabled)" : ""}\n`;
             }
-            output += "```\n\n";
+            output += "```\n";
         }
+    }
+    // Measured capabilities: what each account can actually reach, straight from
+    // the per-account catalog discovered from `fetchAvailableModels`.
+    const withCatalog = results.filter((r) => r.status !== "error");
+    if (withCatalog.length > 0) {
+        output += "\n## Account capabilities (measured)\n";
+        output += "```text\n";
+        output += `${"ACCOUNT".padEnd(28, " ")}${"MODELS".padEnd(8, " ")}${"GEMINI 4 ARGON".padEnd(34, " ")}${"CLAUDE 4.6".padEnd(12, " ")}${"CLAUDE 5.5".padEnd(12, " ")}GEMINI 3.8 FLASH\n`;
+        for (const result of withCatalog) {
+            const summary = summarizeCatalog(result.modelCatalog);
+            const name = (result.email ? shortEmail(result.email) : `account-${result.index + 1}`).padEnd(28, " ");
+            const models = String(summary.modelCount).padEnd(8, " ");
+            const argon = formatArgonCell(summary).padEnd(34, " ");
+            const claude46 = (summary.measured ? (summary.claude46 ? "yes" : "no") : "not measured").padEnd(12, " ");
+            const claude55 = (summary.measured ? (summary.claude55 ? "yes" : "no") : "not measured").padEnd(12, " ");
+            const flash = summary.measured ? (summary.flash38 ? "yes" : "no") : "not measured";
+            output += `${name}${models}${argon}${claude46}${claude55}${flash}\n`;
+        }
+        output += "```\n";
+        output += "\nUSABLE turns to `no` while any window of that family is at 0%, with the countdown to its reset: a 5h bar with quota left does not help while the weekly bucket is empty.\n";
     }
     return output.trimEnd() + "\n";
 }
