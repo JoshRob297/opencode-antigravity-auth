@@ -629,7 +629,7 @@ describe("formatQuotaReportMarkdown", () => {
     expect(report).toContain("user1 (disabled)");
   });
 
-  it("reports the standalone Argon bucket with absolute reset stamps and per-account capabilities", () => {
+  it("reports the standalone Argon bucket, short reset timers and per-account capabilities", () => {
     const reset = new Date(Date.now() + 6 * 86400000);
     const bucket = (percentage: number) => ({
       window: "weekly",
@@ -679,9 +679,9 @@ describe("formatQuotaReportMarkdown", () => {
     // Argon is its own group, not folded into the Gemini Flash/Pro table.
     expect(report).toContain("## Gemini 4 Argon (own weekly bucket)");
     expect(report).toContain("## Gemini Models (Flash / Pro)");
-    // Absolute reset from the backend, not just a countdown.
-    expect(report).toContain("2026-11-07 01:37Z");
-    expect(report).toContain("(6d 0h)");
+    // Short countdown only: the full date/time was noise.
+    expect(report).toContain("6d 0h");
+    expect(report).not.toContain("2026-11-07");
 
     expect(report).toContain("## Account capabilities (measured)");
     const capabilityLines = report.split("\n").filter((line) => line.startsWith("paid") || line.startsWith("free"));
@@ -715,5 +715,38 @@ describe("formatQuotaReportMarkdown", () => {
     ]);
 
     expect(report).toContain("not measured");
+  });
+
+  it("marks an account unusable when the weekly window is empty even if the 5h bar is full", () => {
+    const now = Date.now();
+    const bucket = (percentage: number, resetMs: number) => ({
+      window: percentage === 100 ? "weekly" : "5h",
+      displayName: "Limit",
+      remainingPercentage: percentage,
+      remainingFraction: percentage / 100,
+      resetTime: new Date(now + resetMs),
+      resetTimeDisplay: "2026-10-31 14:46Z",
+      timeUntilReset: resetMs,
+      timeUntilResetFormatted: formatDuration(resetMs),
+    });
+
+    const report = formatQuotaReportMarkdown([
+      {
+        index: 0,
+        email: "spent@gmail.com",
+        status: "ok",
+        groups: [
+          {
+            displayName: "Gemini Models",
+            fiveHour: bucket(100, 3 * 3600_000),
+            weekly: bucket(0, 12 * 3600_000),
+          },
+        ],
+      },
+    ]);
+
+    expect(report).toContain("USABLE");
+    expect(report).toContain("no · 12h 0m");
+    expect(report).not.toMatch(/\[█+░*\] 100%[^\n]*yes/);
   });
 });

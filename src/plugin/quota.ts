@@ -542,10 +542,32 @@ const GROUP_ORDER: QuotaGroupKind[] = ["argon", "gemini", "claude", "other"];
 
 /** `[bar] 99%` + absolute reset stamp + relative countdown, padded for a table. */
 function formatBucketCells(bucket: BucketQuotaDisplay | undefined): { quota: string; reset: string } {
-  if (!bucket) return { quota: "N/A".padEnd(18, " "), reset: "-".padEnd(30, " ") };
+  if (!bucket) return { quota: "N/A".padEnd(18, " "), reset: "-".padEnd(15, " ") };
   const quota = progressBar(bucket.remainingPercentage).padEnd(18, " ");
-  const reset = `${bucket.resetTimeDisplay} (${bucket.timeUntilResetFormatted})`.padEnd(30, " ");
+  // Short countdown only: the absolute date was noise in a table that already
+  // tells you how long is left.
+  const reset = bucket.timeUntilResetFormatted.padEnd(15, " ");
   return { quota, reset };
+}
+
+/**
+ * Whether the account can actually use this family right now.
+ *
+ * A 5h window with quota left is meaningless while the weekly window is at 0%:
+ * the backend refuses the request until the weekly bucket resets. The report used
+ * to print a static health score (100%) next to "weekly 0%", which read as
+ * "usable" when it was the opposite.
+ */
+function formatUsabilityCells(group: GroupQuotaDisplay | undefined): { usable: string; sortKey: number } {
+  const buckets = [group?.fiveHour, group?.weekly].filter((b): b is BucketQuotaDisplay => Boolean(b));
+  if (buckets.length === 0) return { usable: "?".padEnd(16, " "), sortKey: 0 };
+
+  const blocking = buckets.find((b) => b.remainingFraction <= 0);
+  if (blocking) {
+    return { usable: `no · ${blocking.timeUntilResetFormatted}`.padEnd(16, " "), sortKey: 0 };
+  }
+  const worst = Math.min(...buckets.map((b) => b.remainingFraction));
+  return { usable: `yes`.padEnd(16, " "), sortKey: worst };
 }
 
 interface CatalogSummary {
@@ -580,7 +602,8 @@ function formatArgonCell(summary: CatalogSummary): string {
   if (!summary.measured) return "not measured";
   if (!summary.argon) return "no";
   const remaining = summary.argon.remainingFraction;
-  const reset = summary.argon.resetTime ? formatResetStamp(new Date(summary.argon.resetTime)) : "no reset";
+  const resetMs = summary.argon.resetTime ? new Date(summary.argon.resetTime).getTime() - Date.now() : NaN;
+  const reset = Number.isFinite(resetMs) ? formatDuration(Math.max(0, resetMs)) : "no reset";
   if (typeof remaining !== "number") return `yes · ${reset}`;
   return `yes ${Math.round(remaining * 100)}% · ${reset}`;
 }
@@ -643,26 +666,25 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
       output += `\n## ${GROUP_TITLES[kind]}\n`;
       output += "```text\n";
       let header = "";
-      if (showFiveHour) header += `${"QUOTA (5h)".padEnd(18, " ")}${"RESET (5h)".padEnd(30, " ")}`;
-      if (showWeekly) header += `${"QUOTA (weekly)".padEnd(18, " ")}${"RESET (weekly)".padEnd(30, " ")}`;
-      output += `${header}${"HEALTH".padEnd(8, " ")}ACCOUNT\n`;
+      if (showFiveHour) header += `${"QUOTA (5h)".padEnd(18, " ")}${"RESET (5h)".padEnd(15, " ")}`;
+      if (showWeekly) header += `${"QUOTA (weekly)".padEnd(18, " ")}${"RESET (weekly)".padEnd(15, " ")}`;
+      output += `${header}${"USABLE".padEnd(16, " ")}ACCOUNT\n`;
 
       const rows = accounts
         .map((result) => {
           const group = groupOf(result);
           const email = result.email || `account-${result.index + 1}`;
-          const health = EngineStatsManager.getInstance().getSavedHealthScore(email) ?? 100;
           const five = formatBucketCells(group?.fiveHour);
           const week = formatBucketCells(group?.weekly);
+          const usability = formatUsabilityCells(group);
           const name = `${shortEmail(email)}${result.disabled ? " (disabled)" : ""}`;
-          const weeklyPercent = group?.weekly?.remainingPercentage ?? group?.fiveHour?.remainingPercentage ?? 0;
           let line = "";
           if (showFiveHour) line += `${five.quota}${five.reset}`;
           if (showWeekly) line += `${week.quota}${week.reset}`;
-          line += `${`${health}%`.padEnd(8, " ")}${name}`;
-          return { line, weeklyPercent };
+          line += `${usability.usable}${name}`;
+          return { line, sortKey: usability.sortKey };
         })
-        .sort((a, b) => b.weeklyPercent - a.weeklyPercent);
+        .sort((a, b) => b.sortKey - a.sortKey);
 
       for (const row of rows) output += `${row.line}\n`;
       output += "```\n";
@@ -694,7 +716,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
         if (!accountMap.has(accKey)) {
           accountMap.set(accKey, {
             percentage: model.remainingPercentage,
-            resetIn: `${model.resetTimeDisplay || formatResetStamp(model.resetTime)} (${model.timeUntilResetFormatted})`,
+            resetIn: model.timeUntilResetFormatted,
             disabled: result.disabled,
           });
         }
@@ -704,11 +726,11 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
     for (const [familyName, accountMap] of Array.from(familyMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
       output += `\n## ${familyName}\n`;
       output += "```text\n";
-      output += `${"QUOTA".padEnd(18, " ")}${"RESET".padEnd(30, " ")}ACCOUNT\n`;
+      output += `${"QUOTA".padEnd(18, " ")}${"RESET".padEnd(15, " ")}ACCOUNT\n`;
 
       const accountsList = Array.from(accountMap.entries()).map(([email, info]) => ({ email, ...info }));
       for (const acc of accountsList.sort((a, b) => b.percentage - a.percentage)) {
-        output += `${progressBar(acc.percentage).padEnd(18, " ")}${acc.resetIn.padEnd(30, " ")}${shortEmail(acc.email)}${acc.disabled ? " (disabled)" : ""}\n`;
+        output += `${progressBar(acc.percentage).padEnd(18, " ")}${acc.resetIn.padEnd(15, " ")}${shortEmail(acc.email)}${acc.disabled ? " (disabled)" : ""}\n`;
       }
       output += "```\n";
     }
@@ -731,7 +753,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
       output += `${name}${models}${argon}${claude}${flash}\n`;
     }
     output += "```\n";
-    output += "\nResets are shown in UTC exactly as the backend reports them, with the countdown in parentheses.\n";
+    output += "\nUSABLE turns to `no` while any window of that family is at 0%, with the countdown to its reset: a 5h bar with quota left does not help while the weekly bucket is empty.\n";
   }
 
   return output.trimEnd() + "\n";

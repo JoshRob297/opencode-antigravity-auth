@@ -115,18 +115,24 @@ Settings for managing multiple Google accounts.
 
 - **One table per model family**: `Gemini Models (Flash / Pro)`, `Claude & GPT Models (Opus / Sonnet / GPT-OSS)` and `Gemini 4 Argon`, which has its own weekly bucket (`gemini-argon-wtu-weekly`) and is not folded into the Gemini table.
 - **Both windows** (5h and weekly) with the bar, and only the windows that family actually has - Argon prints the weekly column alone.
-- **Absolute reset stamps in UTC** exactly as the backend declares them, with the countdown in parentheses, e.g. `2026-11-07 01:37Z (6d 23h)`. A weekly reset days away cannot be acted on from a relative duration alone.
-- **Account capabilities (measured)**: models each account can reach, whether it has Gemini 4 Argon (with its remaining percentage and reset) and Claude 5.5, and whether `gemini-3.8-flash` is available. Accounts that were never measured say `not measured` instead of guessing.
+- **Short reset countdown** per window (`3h 54m`, `6d 22h`), taken from the timestamp the backend declares. No full date/time clutter.
+- **`USABLE` instead of a static health score**: an account is `no · <countdown>` while any window of that family sits at `0%`, because a 5h bar with quota left cannot be used once the weekly bucket is empty. Only accounts that can actually serve the family show `yes`.
+- **Account capabilities (measured)**: models each account can reach, whether it has Gemini 4 Argon (with its remaining percentage and reset countdown) and Claude 5.5, and whether `gemini-3.8-flash` is available. Accounts that were never measured say `not measured` instead of guessing.
 
 ```
 ## Gemini 4 Argon (own weekly bucket)
-QUOTA (weekly)    RESET (weekly)                HEALTH  ACCOUNT
-[██████████] 99%  2026-11-07 01:37Z (6d 23h)    100%    joshuaadair.hr
+QUOTA (weekly)    RESET (weekly) USABLE          ACCOUNT
+[██████████] 99%  6d 22h         yes             joshuaadair.hr
+
+## Gemini Models (Flash / Pro)
+QUOTA (5h)        RESET (5h)     QUOTA (weekly)    RESET (weekly) USABLE          ACCOUNT
+[██████████] 99%  3h 53m         [██████████] 99%  6d 22h         yes             joshuaadair.hr
+[██████████] 100% 3h 38m         [░░░░░░░░░░] 0%   11h 59m        no · 11h 59m    hrjoces22
 
 ## Account capabilities (measured)
-ACCOUNT               MODELS  GEMINI 4 ARGON                CLAUDE 5.5  GEMINI 3.8 FLASH
-hrjoces22             19      no                            no          yes
-joshuaadair.hr        26      yes 99% · 2026-11-07 01:37Z    yes         yes
+ACCOUNT               MODELS  GEMINI 4 ARGON      CLAUDE 5.5  GEMINI 3.8 FLASH
+hrjoces22             19      no                  no          yes
+joshuaadair.hr        26      yes 99% · 6d 22h    yes         yes
 ```
 
 ---

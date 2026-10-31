@@ -18,7 +18,7 @@
 
 ### Changed
 
-- **Quota report rebuilt around the per-account shape the backend returns now.** `antigravity_quota` and `/antigravity-quota` render one table per model family, with `Gemini 4 Argon` kept separate from `Gemini Models` instead of being folded into it by a substring match; only the windows a family actually has (Argon is weekly-only); the **absolute UTC reset** the backend declares next to the countdown (`2026-11-07 01:37Z (6d 23h)`); and a measured **account capabilities** table (models reachable, Argon remaining and reset, Claude 5.5, 3.8 Flash). Accounts that were never measured say `not measured` instead of guessing.
+- **Quota report rebuilt around the per-account shape the backend returns now.** `antigravity_quota` and `/antigravity-quota` render one table per model family, with `Gemini 4 Argon` kept separate from `Gemini Models` instead of being folded into it by a substring match; only the windows a family actually has (Argon is weekly-only); the short reset countdown per window, and a **`USABLE`** column that turns to `no` (with the countdown to its reset) while any window of that family is at `0%` - a 5h bar with quota left is meaningless once the weekly bucket is empty, which is exactly what a static `HEALTH 100%` used to hide; and a measured **account capabilities** table (models reachable, Argon remaining and reset, Claude 5.5, 3.8 Flash). Accounts that were never measured say `not measured` instead of guessing.
 
 ## [2.3.0] - 2026-10-27
 

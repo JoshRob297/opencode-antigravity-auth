@@ -164,18 +164,24 @@ Los modelos descubiertos se agrupan por familia: una sola entrada en el selector
 
 - **Una tabla por familia de modelos**: `Gemini Models (Flash / Pro)`, `Claude & GPT Models (Opus / Sonnet / GPT-OSS)` y `Gemini 4 Argon`, que tiene su propio bucket semanal (`gemini-argon-wtu-weekly`) y no se mezcla con la tabla de Gemini.
 - **Ambas ventanas** (5h y semanal) con su barra, y solo las ventanas que esa familia realmente tiene; Argon imprime únicamente la columna semanal.
-- **Fecha de reset absoluta en UTC** tal como la declara el backend, con la cuenta regresiva entre paréntesis, por ejemplo `2026-11-07 01:37Z (6d 23h)`. Un reset semanal a días de distancia no se puede planear solo con una duración relativa.
-- **Capacidades por cuenta (medidas)**: cuántos modelos alcanza cada cuenta, si tiene Gemini 4 Argon (con su porcentaje restante y su reset) y Claude 5.5, y si `gemini-3.8-flash` está disponible. Las cuentas que nunca se midieron dicen `not measured` en lugar de adivinar.
+- **Cuenta regresiva corta por ventana** (`3h 54m`, `6d 22h`), tomada del timestamp que declara el backend. Sin la fecha y hora completa que solo agregaba ruido.
+- **`USABLE` en lugar de un health estático**: la cuenta aparece como `no · <cuenta regresiva>` mientras cualquier ventana de esa familia esté en `0%`, porque una barra de 5h con cuota no sirve si el bucket semanal está vacío. Solo las cuentas que realmente pueden servir esa familia muestran `yes`.
+- **Capacidades por cuenta (medidas)**: cuántos modelos alcanza cada cuenta, si tiene Gemini 4 Argon (con su porcentaje restante y su cuenta regresiva al reset) y Claude 5.5, y si `gemini-3.8-flash` está disponible. Las cuentas que nunca se midieron dicen `not measured` en lugar de adivinar.
 
 ```
 ## Gemini 4 Argon (own weekly bucket)
-QUOTA (weekly)    RESET (weekly)                HEALTH  ACCOUNT
-[██████████] 99%  2026-11-07 01:37Z (6d 23h)    100%    joshuaadair.hr
+QUOTA (weekly)    RESET (weekly) USABLE          ACCOUNT
+[██████████] 99%  6d 22h         yes             joshuaadair.hr
+
+## Gemini Models (Flash / Pro)
+QUOTA (5h)        RESET (5h)     QUOTA (weekly)    RESET (weekly) USABLE          ACCOUNT
+[██████████] 99%  3h 53m         [██████████] 99%  6d 22h         yes             joshuaadair.hr
+[██████████] 100% 3h 38m         [░░░░░░░░░░] 0%   11h 59m        no · 11h 59m    hrjoces22
 
 ## Account capabilities (measured)
-ACCOUNT               MODELS  GEMINI 4 ARGON                CLAUDE 5.5  GEMINI 3.8 FLASH
-hrjoces22             19      no                            no          yes
-joshuaadair.hr        26      yes 99% · 2026-11-07 01:37Z    yes         yes
+ACCOUNT               MODELS  GEMINI 4 ARGON      CLAUDE 5.5  GEMINI 3.8 FLASH
+hrjoces22             19      no                  no          yes
+joshuaadair.hr        26      yes 99% · 6d 22h    yes         yes
 ```
 
 ---
