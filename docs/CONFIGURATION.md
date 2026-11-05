@@ -259,6 +259,13 @@ append-only JSONL; rotate or truncate them freely, nothing else reads them. Requ
 are counted from the streaming path (`usageMetadata` in the SSE stream); a
 non-streaming request is not recorded.
 
+Sessions started with `agy --remote-agent` run their loop, workspace and tools on
+Google's infrastructure. The plugin never sees those requests, so they are absent from
+the ledger and from the quota snapshots: a zero there means "not measured here", not
+"nothing consumed". The CLI does report usage for its own headless runs
+(`agy -p ... --output-format json` returns `usage.total_tokens`), but that path is
+separate from this plugin.
+
 ---
 
 ## Recommended Configs

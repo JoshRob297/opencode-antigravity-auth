@@ -264,6 +264,13 @@ configuración de OpenCode y son JSONL de solo agregado; se pueden rotar o trunc
 romper nada. Las peticiones se cuentan desde la ruta de streaming (`usageMetadata` en
 el stream SSE); una petición sin streaming no se registra.
 
+Las sesiones iniciadas con `agy --remote-agent` corren su loop, workspace y tools en la
+infraestructura de Google. El plugin no ve esas peticiones, así que no aparecen en el
+ledger ni en los snapshots de cuota: un cero ahí significa "no medido aquí", no
+"no se consumió nada". El CLI sí reporta consumo en sus corridas headless
+(`agy -p ... --output-format json` devuelve `usage.total_tokens`), pero ese camino es
+independiente de este plugin.
+
 ---
 
 ## Configuraciones recomendadas

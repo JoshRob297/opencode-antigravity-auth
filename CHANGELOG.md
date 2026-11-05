@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.2] - 2026-11-05
+
+### Changed
+
+- **CLI signature fallback bumped to 1.5.1** (`agy update`: 1.4.12 -> 1.5.1, stable, 100% rollout). The signature is resolved from the CLI auto-updater at startup, so the runtime already used 1.5.1; this only keeps the offline fallback in step. Verified with a live request on `gemini-3.8-flash`: `agy models` still lists the same catalog and the request succeeds with the new signature.
+- **Docs: remote-agent sessions are not measured.** `agy --remote-agent` runs the loop on Google's side and rejects `--print` today, so the plugin cannot see those requests. A zero in the ledger means "not measured here", not "nothing consumed".
+
 ## [2.5.1] - 2026-10-31
 
 ### Fixed
