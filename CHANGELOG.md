@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.5.2] - 2026-11-05
+
+### Changed
+
+- **CLI signature fallback bumped to 1.5.1** (`agy update`: 1.4.12 -> 1.5.1, stable, 100% rollout). The signature is resolved from the CLI auto-updater at startup, so the runtime already used 1.5.1; this only keeps the offline fallback in step. Verified with a live request on `gemini-3.8-flash`: `agy models` still lists the same catalog and the request succeeds with the new signature.
+
 ## [2.5.1] - 2026-10-31
 
 ### Fixed
