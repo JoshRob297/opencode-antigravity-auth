@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { ANTIGRAVITY_ENDPOINT, EMPTY_SCHEMA_PLACEHOLDER_NAME, EMPTY_SCHEMA_PLACEHOLDER_DESCRIPTION, SKIP_THOUGHT_SIGNATURE, getRandomizedHeaders, getAntigravityCliVersion, getAntigravityCliUserAgent, } from "../constants";
+import { ANTIGRAVITY_ENDPOINT, EMPTY_SCHEMA_PLACEHOLDER_NAME, EMPTY_SCHEMA_PLACEHOLDER_DESCRIPTION, SKIP_THOUGHT_SIGNATURE, getAntigravityCliVersion, getAntigravityCliUserAgent, } from "../constants";
 import { cacheSignature, getCachedSignature } from "./cache";
 import { getKeepThinking } from "./config";
 import { createStreamingTransformer, transformSseLine, transformStreamingPayload, sanitizeGuardrailMessage, } from "./core/streaming";
@@ -13,7 +13,6 @@ import { sanitizeCrossModelPayloadInPlace } from "./transform/cross-model-saniti
 import { isGemini3Model, isImageGenerationModel, buildImageGenerationConfig, applyGeminiTransforms } from "./transform";
 import { resolveModelWithTier, resolveModelWithVariant, resolveModelForHeaderStyle, resolveAntigravityGemini35FlashBackendModel, resolveAntigravityGemini36FlashBackendModel, resolveAntigravityGemini37FlashBackendModel, resolveAntigravityGemini38FlashBackendModel, resolveAntigravityTieredFamilyBackendModel, isAntigravityTieredFamilyModel, isClaudeModel, isClaudeThinkingModel, CLAUDE_THINKING_MAX_OUTPUT_TOKENS, } from "./transform";
 import { detectErrorType } from "./recovery";
-import { getSessionFingerprint, buildFingerprintHeaders } from "./fingerprint";
 const log = createLogger("request");
 const PLUGIN_SESSION_ID = `-${crypto.randomUUID()}`;
 const sessionDisplayedThinkingHashes = new Set();
@@ -1375,21 +1374,14 @@ export function prepareAntigravityRequest(input, init, accessToken, projectId, e
             headers.set("anthropic-beta", interleavedHeader);
         }
     }
-    // Antigravity mode: Match Antigravity Manager & CLI signature
-    const fingerprint = options?.fingerprint ?? getSessionFingerprint();
-    const fingerprintHeaders = buildFingerprintHeaders(fingerprint);
-    const selectedHeaders = getRandomizedHeaders("antigravity", requestedModel);
-    let userAgent = fingerprintHeaders["User-Agent"] || selectedHeaders["User-Agent"];
-    // Gemini 3.7/3.8 Flash are only served to the official Antigravity CLI user agent.
-    // With the generic `antigravity/<ver> <platform>/<arch>` UA the backend
-    // returns 404 NOT_FOUND (rewritten as "enable preview features").
-    // Verified with the official CLI: UA `antigravity/cli/<ver> (aidev_client; ...)`
-    // returns 200 with modelVersion gemini-3.7-flash / gemini-3.8-flash for low/medium/high.
-    // The version is resolved at startup from the CLI auto-updater (see version.ts);
-    // it used to be hardcoded and silently drifted behind the real client.
-    if (/gemini-3\.[78]-flash|gemini-4|argon/i.test(effectiveModel)) {
-        userAgent = getAntigravityCliUserAgent();
-    }
+    // Antigravity mode: Match the official CLI signature on every model.
+    // Every model now requires the official Antigravity CLI signature. Measured
+    // 2026-11-07: the generic `Antigravity/<ver> <platform>/<arch>` UA still returns
+    // HTTP 200 for every model, but the body is "This version of Antigravity is no
+    // longer supported..." instead of an answer, which reads as a successful turn.
+    // Gemini 3.7/3.8 Flash and Gemini 4 hit the same wall earlier as a 404. The CLI
+    // version is resolved at startup from the CLI auto-updater (see version.ts).
+    const userAgent = getAntigravityCliUserAgent();
     headers.set("User-Agent", userAgent);
     return {
         request: transformedUrl,
