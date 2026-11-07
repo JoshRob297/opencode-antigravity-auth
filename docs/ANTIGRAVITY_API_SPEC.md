@@ -78,13 +78,15 @@ Accept: text/event-stream
 
 ## Client Signature (CLI User-Agent)
 
-Gemini 3.7 / 3.8 Flash are only served to the official Antigravity **CLI** signature. Requests for those models carry:
+Every model is served only to the official Antigravity **CLI** signature. Requests carry:
 
 ```http
 User-Agent: antigravity/cli/<version> (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)
 ```
 
-Everything else keeps the generic Electron-style UA (`Antigravity/<version> ...`). Sending the generic one for a 3.7/3.8 Flash or a Gemini 4 (Argon) model returns `404 NOT_FOUND` (rewritten as *"enable preview features"*). Claude 5.5 does not need it.
+The generic Electron-style UA (`Antigravity/<version> ...`) is no longer accepted. Measured 2026-11-07 on a three-account pool, for `claude-sonnet-4-6`, `claude-sonnet-5-5`, `gemini-3.8-flash` and `gemini-4-argon-*`: the generic UA returns **HTTP 200** with the body *"This version of Antigravity is no longer supported. Please download and install the latest version..."* instead of an answer. Because it is a `200` with text, it looks like a successful turn in the client, which is worse than the old `404 NOT_FOUND` those Gemini models returned in the same situation. Sending the CLI UA for the same requests returns content.
+
+The IDE-style version (`Antigravity/<version>`) is still resolved from the IDE auto-updater, but it is no longer used for content requests.
 
 `<version>` is resolved at plugin startup from the CLI auto-updater endpoint (`https://antigravity-cli-auto-updater-974169037036.us-central1.run.app`), falling back to `ANTIGRAVITY_CLI_VERSION_FALLBACK` in `src/constants.ts` when unreachable. It used to be hardcoded, which meant it silently drifted behind the real client: only the version string is spoofed, so bumping it is a one-line change once the endpoint is reachable. The IDE-style version (`Antigravity/<version>`) is resolved the same way from the IDE auto-updater endpoint.
 

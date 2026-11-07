@@ -1250,15 +1250,20 @@ describe("CLI client signature User-Agent", () => {
     expect(getAntigravityCliVersion()).toBe("7.7.7");
   });
 
-  it("keeps the generic UA for models that do not need the CLI signature", () => {
-    const result = prepareAntigravityRequest(
-      genlang("antigravity-claude-sonnet-4-6"),
-      { method: "POST", body: JSON.stringify({ contents: [] }) },
-      "token",
-      "project",
-    );
-    const headers = new Headers(result.init.headers as HeadersInit);
-    expect(headers.get("User-Agent")).not.toContain("aidev_client");
+  it("sends the CLI UA for every model, not only the Gemini 3.x/4 line", () => {
+    // Measured 2026-11-07: the generic `Antigravity/<ver>` UA answers HTTP 200 for
+    // Claude and older Gemini with "This version of Antigravity is no longer
+    // supported..." instead of content, so every model has to carry the CLI one.
+    for (const model of ["antigravity-claude-sonnet-4-6", "antigravity-gemini-2.5-pro", "antigravity-gpt-oss-120b-medium"]) {
+      const result = prepareAntigravityRequest(
+        genlang(model),
+        { method: "POST", body: JSON.stringify({ contents: [] }) },
+        "token",
+        "project",
+      );
+      const headers = new Headers(result.init.headers as HeadersInit);
+      expect(headers.get("User-Agent")).toContain("aidev_client");
+    }
   });
 });
 

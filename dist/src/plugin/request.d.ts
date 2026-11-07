@@ -1,7 +1,7 @@
 import { type HeaderStyle } from "../constants";
 import { createStreamingTransformer, transformSseLine, transformStreamingPayload } from "./core/streaming";
 import { type AntigravityDebugContext } from "./debug";
-import { type Fingerprint } from "./fingerprint";
+import type { Fingerprint } from "./fingerprint";
 import type { GoogleSearchConfig } from "./transform/types";
 declare function buildSignatureSessionKey(sessionId: string, model?: string, conversationKey?: string, projectKey?: string): string;
 declare function hashConversationSeed(seed: string): string;

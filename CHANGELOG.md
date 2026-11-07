@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.5.3] - 2026-11-07
+
+### Fixed
+
+- **Claude (and every non-Gemini-3.x model) answered with "This version of Antigravity is no longer supported" instead of content.** The plugin only used the official CLI signature for Gemini 3.7/3.8 Flash, Gemini 4 and Argon; everything else kept the generic Electron UA, which the backend stopped accepting. It now returns `HTTP 200` with a refusal message, so the turn looked successful. Every content request carries the CLI User-Agent. Measured on a three-account pool for `claude-sonnet-4-6`, `claude-sonnet-5-5`, `gemini-3.8-flash` and `gemini-4-argon-*`: generic UA returns the refusal text, CLI UA returns content.
+- **Dead fingerprint headers removed** from the request path: the UA was the only consumer, and it is now a constant.
+
+### Docs
+
+- **API spec updated:** the Electron UA is gone for every model, and the failure mode is a `200` with text rather than a `404`, so it cannot be detected from the status code.
+
 ## [2.5.2] - 2026-11-05
 
 ### Changed
