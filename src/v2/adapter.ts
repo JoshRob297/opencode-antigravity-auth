@@ -590,6 +590,46 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
 
   // 1. Session hooks: Native HTTP request/response pipeline and multi-account retry
   if (context.session && typeof context.session.hook === "function") {
+    // Bridge the selected model variant into the request options.
+    //
+    // The model transform registers variants as `Model.Variant.settings`, but
+    // OpenCode v2 does not forward those settings to an OAuth/http-hook provider:
+    // measured 2026-11-07, `google/antigravity-gemini-3.8-flash#high`,
+    // `...#medium` and `google/antigravity-claude-opus-5-5#high` all reached the
+    // backend as their `-low` tier, and the final body carried no
+    // `generationConfig.thinkingConfig` at all. The session `context` hook still
+    // exposes `model.variant`, and `options` set there are lowered into provider
+    // options, so the tier is injected here.
+    const TIER_VARIANTS = new Set(["low", "medium", "high", "max"]);
+    const CLAUDE_BUDGETS: Record<string, number> = {
+      low: 8192,
+      medium: 16384,
+      high: 24576,
+      max: 32768,
+    };
+    await context.session.hook(
+      "context",
+      (event: any) => {
+        const modelId = typeof event?.model?.id === "string" ? event.model.id.toLowerCase() : "";
+        const variant = typeof event?.model?.variant === "string" ? event.model.variant.toLowerCase() : "";
+        if (!modelId.startsWith("antigravity-") || !TIER_VARIANTS.has(variant)) {
+          return;
+        }
+        event.options = event.options ?? {};
+        const isTieredFamily = /(gemini-4-argon|claude-(?:sonnet|opus)-5-5)/.test(modelId);
+        if (modelId.includes("claude") && !isTieredFamily) {
+          // Claude with a thinking budget in its id (`-thinking`): the variant is
+          // a budget, not a tier suffix.
+          event.options.thinkingConfig = { thinkingBudget: CLAUDE_BUDGETS[variant] };
+          return;
+        }
+        // Gemini 3.8 Flash and every tiered family pick the tier from the model
+        // id suffix; the request transform reads it back from thinkingConfig.
+        event.options.thinkingConfig = { thinkingLevel: variant };
+      },
+      { providerID: "google" },
+    );
+
     // Intercept outbound HTTP requests to Google Cloud Code
     await context.session.hook("http.request", async (event: any) => {
       const url = event.request?.url || "";
