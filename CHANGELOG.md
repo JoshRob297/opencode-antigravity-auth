@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.5.4] - 2026-11-07
+
+### Fixed
+
+- **Thinking variants were ignored: every request went out as the lowest tier.** In OpenCode v2 the model transform registers variants as `Model.Variant.settings`, but those settings are never forwarded to an OAuth/http-hook provider. Measured on 2.5.3: `google/antigravity-gemini-3.8-flash#high`, `#medium`, `google/antigravity-gemini-4-argon#high` and `google/antigravity-claude-opus-5-5#high` all reached the backend as their `-low` tier, and the final body carried no `generationConfig.thinkingConfig` at all. The model answered, so the degradation was silent. The plugin now bridges the variant from the session `context` hook (which still exposes `model.variant`) into `options.thinkingConfig`: `thinkingLevel` for Gemini 3.8 Flash and the tiered families (Argon, Claude 5.5), `thinkingBudget` for Claude ids that carry thinking. Verified end to end: the ledger records `gemini-3.8-flash-high`, `gemini-4-argon-high` and `claude-opus-5-5-high` when those variants are selected.
+
+### Docs
+
+- **Model variants page** explains the v2 bridge and why the variant has to travel through `context` instead of the model registration.
+
 ## [2.5.3] - 2026-11-07
 
 ### Fixed

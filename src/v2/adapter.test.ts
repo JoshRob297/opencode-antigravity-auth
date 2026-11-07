@@ -121,6 +121,35 @@ describe("OpenCode v2 Adapter", () => {
     await registeredHooks["retry"]!(retryEvent);
     expect(retryEvent.decision).toBeUndefined();
 
+    // Variant bridge: OpenCode v2 registers variants as Model.Variant.settings
+    // but never forwards them to an http-hook provider, so `context` maps the
+    // selected variant to the provider options the request transform reads.
+    const variantHook = registeredHooks["context"]!;
+    expect(variantHook).toBeDefined();
+
+    const tieredHigh: any = { model: { id: "antigravity-gemini-3.8-flash", variant: "high" }, options: {} };
+    variantHook(tieredHigh);
+    expect(tieredHigh.options.thinkingConfig).toEqual({ thinkingLevel: "high" });
+
+    const claudeTierHigh: any = { model: { id: "antigravity-claude-opus-5-5", variant: "high" }, options: {} };
+    variantHook(claudeTierHigh);
+    expect(claudeTierHigh.options.thinkingConfig).toEqual({ thinkingLevel: "high" });
+
+    const claudeThinkingMax: any = {
+      model: { id: "antigravity-claude-opus-4-6-thinking", variant: "max" },
+      options: {},
+    };
+    variantHook(claudeThinkingMax);
+    expect(claudeThinkingMax.options.thinkingConfig).toEqual({ thinkingBudget: 32768 });
+
+    const foreignModel: any = { model: { id: "gemini-2.5-pro", variant: "high" }, options: {} };
+    variantHook(foreignModel);
+    expect(foreignModel.options.thinkingConfig).toBeUndefined();
+
+    const unknownVariant: any = { model: { id: "antigravity-gemini-3.8-flash", variant: "turbo" }, options: {} };
+    variantHook(unknownVariant);
+    expect(unknownVariant.options.thinkingConfig).toBeUndefined();
+
     // Verify cleanup execution
     if (typeof cleanup === "function") {
       expect(() => cleanup()).not.toThrow();

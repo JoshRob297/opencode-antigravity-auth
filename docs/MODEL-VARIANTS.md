@@ -8,6 +8,8 @@ OpenCode's variant system lets you configure the thinking budget dynamically wit
 
 When you define a model with `variants`, OpenCode shows variant options in the model picker. Selecting a variant passes the `providerOptions` to the plugin, which extracts the thinking configuration.
 
+> **OpenCode v2:** the variant settings you register on the model (`Model.Variant.settings`) are not forwarded to an OAuth/http-hook provider. The plugin reads `model.variant` from the session `context` hook instead and maps it to `options.thinkingConfig` before dispatch. Without that bridge, every request silently fell back to the lowest tier (2.5.4).
+
 ```bash
 opencode run "Hello" --model=google/antigravity-claude-opus-4-6-thinking --variant=max
 ```
