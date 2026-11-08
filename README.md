@@ -1,4 +1,6 @@
-# Antigravity OAuth Plugin for OpenCode (Revived & Extended)
+# Antigravity Auth — Reloaded
+
+**Google Antigravity OAuth plugin for OpenCode.** Continuation of the stalled [NoeFabris](https://github.com/NoeFabris/opencode-antigravity-auth) project: the same plugin, actively maintained.
 
 **English** | [Español](README.es.md)
 
@@ -101,6 +103,28 @@ Add to `plugins` in `~/.config/opencode/opencode.json`:
 {
   "plugins": ["github:JoshRob297/opencode-antigravity-auth"]
 }
+```
+
+To pin a version, so what you run does not change under you:
+
+
+
+```json
+{
+  "plugins": ["github:JoshRob297/opencode-antigravity-auth#v2.6.0"]
+}
+```
+
+
+
+Every release also ships the packed plugin as an asset, for offline installs:
+
+
+
+```bash
+
+npm install https://github.com/JoshRob297/opencode-antigravity-auth/releases/download/v2.6.0/opencode-antigravity-auth-2.6.0.tgz
+
 ```
 
 > OpenCode v2 will automatically clone, build, and update the plugin directly from the official repository.
@@ -599,6 +623,28 @@ In OpenCode v2, use the native plural key:
 {
   "plugins": ["github:JoshRob297/opencode-antigravity-auth"]
 }
+```
+
+To pin a version, so what you run does not change under you:
+
+
+
+```json
+{
+  "plugins": ["github:JoshRob297/opencode-antigravity-auth#v2.6.0"]
+}
+```
+
+
+
+Every release also ships the packed plugin as an asset, for offline installs:
+
+
+
+```bash
+
+npm install https://github.com/JoshRob297/opencode-antigravity-auth/releases/download/v2.6.0/opencode-antigravity-auth-2.6.0.tgz
+
 ```
 
 OpenCode v1 uses the legacy singular key `"plugin"`. The updater detects both automatically and preserves whichever convention your configuration uses.

@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.6.0] - 2026-11-08
+
+### Changed
+
+- **The project has a name: Antigravity Auth — Reloaded.** The repository URL is unchanged, so every existing install (`github:JoshRob297/opencode-antigravity-auth`) keeps working exactly as before; only the title, the description and the release titles change. The upstream this continues has not been committed to since 2026-10-27, and its community pull requests and issues are unreviewed.
+
+### Added
+
+- **Every release ships the packed plugin as an asset.** `npm pack` runs in the release workflow and the resulting `.tgz` is attached to the release, so a version can be installed without cloning or building, and the download counter on the releases page becomes a real adoption signal. The README now shows both installs: the auto-updating repository spec and a spec pinned to a tag.
+- **A canary workflow** runs the build and the full test suite daily on a clean runner, so dependency rot or a Node change is caught before a user reports it. The credentialed end-to-end run against the live Antigravity service needs an account and is not in CI.
+- **`docs/UPSTREAM-PRS.md`** records, for every open pull request on the upstream project, whether its problem exists here. Three of the five fix code that no longer exists in this line; one contradicts a measured design decision; one (moving state out of the watched config directory) is real and is tracked for its own release.
+
+### Notes
+
+- No source changes in this release: the code is the same as 2.5.4, which passes 1,162 tests, typecheck and build.
+
 ## [2.5.4] - 2026-11-07
 
 ### Fixed
