@@ -508,6 +508,22 @@ npx tsx script/test-regression.ts --dry-run     # Lista las pruebas
 
 ---
 
+## Ayer funcionaba y hoy no
+
+`github:JoshRob297/opencode-antigravity-auth` sigue a `main`, así que OpenCode toma cada commit. Cuando una actualización rompe algo, fija la versión que sabes que funciona y reporta el fallo contra esa:
+
+```json
+{ "plugins": ["github:JoshRob297/opencode-antigravity-auth#v2.6.0"] }
+```
+
+Con `git log` ves qué cambió entre la etiqueta que fijaste y el head. Cada release también publica el plugin empaquetado como asset, por si prefieres instalar un build exacto:
+
+```bash
+npm install https://github.com/JoshRob297/opencode-antigravity-auth/releases/download/v2.6.0/opencode-antigravity-auth-2.6.0.tgz
+```
+
+---
+
 ## ¿Sigues atascado?
 
 Abre un issue en [GitHub](https://github.com/JoshRob297/opencode-antigravity-auth/issues).
