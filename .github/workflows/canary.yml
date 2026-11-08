@@ -61,8 +61,10 @@ jobs:
           [ -n "${live_ide:-}" ] && [ "$live_ide" != "$pin_ide" ] && drift=1
           echo "drift=$drift" >> "$GITHUB_OUTPUT"
           {
-            echo "cli_live=${live_cli:-unknown} cli_pinned=${pin_cli:-unknown}"
-            echo "ide_live=${live_ide:-unknown} ide_pinned=${pin_ide:-unknown}"
+            echo "cli_live=${live_cli:-unknown}"
+            echo "cli_pinned=${pin_cli:-unknown}"
+            echo "ide_live=${live_ide:-unknown}"
+            echo "ide_pinned=${pin_ide:-unknown}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Open an issue when the fallback drifts
