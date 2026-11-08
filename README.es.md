@@ -1,4 +1,6 @@
-# Plugin de OAuth de Antigravity para OpenCode (Edición Revivida y Extendida)
+# Antigravity Auth — Reloaded
+
+**Plugin de OAuth de Antigravity para OpenCode.** Continuación del proyecto de [NoeFabris](https://github.com/NoeFabris/opencode-antigravity-auth), que quedó parado: el mismo plugin, mantenido de verdad.
 
 [English](README.md) | **Español**
 
@@ -102,7 +104,7 @@ Añade a `plugins` en `~/.config/opencode/opencode.json`:
 
 ```json
 {
-  "plugins": ["github:JoshRob297/opencode-antigravity-auth"]
+  "plugins": ["github:JoshRob297/opencode-antigravity-auth#v2.6.0"]
 }
 ```
 
