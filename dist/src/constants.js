@@ -54,7 +54,7 @@ export const ANTIGRAVITY_ENDPOINT = ANTIGRAVITY_ENDPOINT_DAILY;
  * Hardcoded project id used when Antigravity does not return one (e.g., business/workspace accounts).
  */
 export const ANTIGRAVITY_DEFAULT_PROJECT_ID = "rising-fact-p41fc";
-export const ANTIGRAVITY_VERSION_FALLBACK = "1.18.3";
+export const ANTIGRAVITY_VERSION_FALLBACK = "2.0.6";
 let antigravityVersion = ANTIGRAVITY_VERSION_FALLBACK;
 let versionLocked = false;
 export function getAntigravityVersion() { return antigravityVersion; }
@@ -73,7 +73,7 @@ export function setAntigravityVersion(version) {
  * signature that the backend requires for Gemini 3.7/3.8 Flash. Kept current by
  * `initAntigravityCliVersion()`; see docs/ANTIGRAVITY_API_SPEC.md.
  */
-export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.5.1";
+export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.5.3";
 let antigravityCliVersion = ANTIGRAVITY_CLI_VERSION_FALLBACK;
 let cliVersionLocked = false;
 export function getAntigravityCliVersion() { return antigravityCliVersion; }
