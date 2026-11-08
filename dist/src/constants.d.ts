@@ -40,7 +40,7 @@ export declare const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.
  * Hardcoded project id used when Antigravity does not return one (e.g., business/workspace accounts).
  */
 export declare const ANTIGRAVITY_DEFAULT_PROJECT_ID = "rising-fact-p41fc";
-export declare const ANTIGRAVITY_VERSION_FALLBACK = "1.18.3";
+export declare const ANTIGRAVITY_VERSION_FALLBACK = "2.0.6";
 export declare function getAntigravityVersion(): string;
 /**
  * Set the runtime Antigravity version. Can only be called once (at startup).
@@ -52,7 +52,7 @@ export declare function setAntigravityVersion(version: string): void;
  * signature that the backend requires for Gemini 3.7/3.8 Flash. Kept current by
  * `initAntigravityCliVersion()`; see docs/ANTIGRAVITY_API_SPEC.md.
  */
-export declare const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.5.1";
+export declare const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.5.3";
 export declare function getAntigravityCliVersion(): string;
 export declare function getAntigravityCliUserAgent(): string;
 /**
@@ -60,13 +60,13 @@ export declare function getAntigravityCliUserAgent(): string;
  */
 export declare function setAntigravityCliVersion(version: string): void;
 /** @deprecated Use getAntigravityVersion() for runtime access. */
-export declare const ANTIGRAVITY_VERSION = "1.18.3";
+export declare const ANTIGRAVITY_VERSION = "2.0.6";
 export declare function getAntigravityHeaders(): HeaderSet & {
     "Client-Metadata": string;
 };
 /** @deprecated Use getAntigravityHeaders() for runtime access. */
 export declare const ANTIGRAVITY_HEADERS: {
-    readonly "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Antigravity/1.18.3 Chrome/138.0.7204.235 Electron/37.3.1 Safari/537.36";
+    readonly "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Antigravity/2.0.6 Chrome/138.0.7204.235 Electron/37.3.1 Safari/537.36";
     readonly "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1";
     readonly "Client-Metadata": "{\"ideType\":\"ANTIGRAVITY\",\"platform\":\"WINDOWS\",\"pluginType\":\"GEMINI\"}" | "{\"ideType\":\"ANTIGRAVITY\",\"platform\":\"MACOS\",\"pluginType\":\"GEMINI\"}";
 };
