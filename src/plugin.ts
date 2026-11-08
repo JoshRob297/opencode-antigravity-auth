@@ -31,6 +31,7 @@ import {
   prepareAntigravityRequest,
   transformAntigravityResponse,
 } from "./plugin/request";
+import { fetchWithHeaderTimeoutRetry } from "./plugin/header-timeout-retry";
 import { resolveModelWithTier } from "./plugin/transform/model-resolver";
 import {
   isEmptyResponseBody,
@@ -2028,7 +2029,10 @@ export const createAntigravityPlugin = (providerId: string) => async (
                   tokenConsumed = getTokenTracker().consume(account.index);
                 }
 
-                const response = await fetch(prepared.request, prepared.init);
+                const response = await fetchWithHeaderTimeoutRetry(() =>
+                  fetch(prepared.request, prepared.init),
+                  { onRetry: (attempt) => pushDebug(`header timeout, retry ${attempt}`) },
+                );
                 pushDebug(`status=${response.status} ${response.statusText}`);
 
 
