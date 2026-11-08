@@ -88,7 +88,14 @@ The generic Electron-style UA (`Antigravity/<version> ...`) is no longer accepte
 
 The IDE-style version (`Antigravity/<version>`) is still resolved from the IDE auto-updater, but it is no longer used for content requests.
 
-`<version>` is resolved at plugin startup from the CLI auto-updater endpoint (`https://antigravity-cli-auto-updater-974169037036.us-central1.run.app`), falling back to `ANTIGRAVITY_CLI_VERSION_FALLBACK` in `src/constants.ts` when unreachable. It used to be hardcoded, which meant it silently drifted behind the real client: only the version string is spoofed, so bumping it is a one-line change once the endpoint is reachable. The IDE-style version (`Antigravity/<version>`) is resolved the same way from the IDE auto-updater endpoint.
+`<version>` is resolved at plugin startup from the CLI auto-updater endpoint (`https://antigravity-cli-auto-updater-974169037036.us-central1.run.app`), falling back to `ANTIGRAVITY_CLI_VERSION_FALLBACK` in `src/constants.ts` when unreachable. It used to be hardcoded, which meant it silently drifted behind the real client: only the version string is spoofed, so bumping it is a one-line change once the endpoint is reachable.
+
+Two things measured against `agy` 1.5.3 (2026-11-08) that are worth writing down before someone "fixes" them:
+
+- **Do not bump the changelist in the signature.** The 1.5.3 binary builds its own UA with `cl=1012564305`, while this plugin sends `cl=962369648`, and the backend still accepts it — a live request with the older `cl` returns content. Changing the number has no demonstrated benefit and breaks the tests that assert the signature literally.
+- **Deep-reasoning models can take longer than a minute to emit the first response header.** The 1.5.3 client retries when a request fails with `http2: timeout awaiting response headers` before any SSE chunk arrives. A fetch layer that aborts at 60 s will surface a timeout where the model was about to answer; keep the retry, or keep the timeout above the model's time-to-first-header.
+
+The web changelog is not the source of truth for this: at 2026-11-08 it documented up to 1.5.1 while 1.5.3 was already rolled out to 100% through the auto-updater. Read the updater endpoint. The IDE-style version (`Antigravity/<version>`) is resolved the same way from the IDE auto-updater endpoint.
 
 ---
 

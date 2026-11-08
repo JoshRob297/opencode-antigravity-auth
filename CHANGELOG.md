@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.6.1] - 2026-11-08
+
+### Fixed
+
+- **The offline fallbacks were behind the clients they stand in for.** `ANTIGRAVITY_CLI_VERSION_FALLBACK` was `1.5.1` while the CLI auto-updater has been serving `1.5.3` as stable to 100%, and `ANTIGRAVITY_VERSION_FALLBACK` was `1.18.3` against a fixed IDE baseline of `2.0.6`. Online runs were never affected — `initAntigravityCliVersion()` and `initAntigravityVersion()` resolve the live value at startup — but an install that could not reach the updater within the 5 s timeout sent a signature two CLI versions old. Found by the canary drift check (issue #86).
+
+### Docs
+
+- **The API spec now records two measurements from `agy` 1.5.3** that would otherwise be "fixed" into a regression: the changelist inside the signature does not need to match the CLI build, and deep-reasoning models can exceed a minute before the first response header, so a fetch layer must not abort earlier.
+
 ## [2.6.0] - 2026-11-08
 
 ### Changed
