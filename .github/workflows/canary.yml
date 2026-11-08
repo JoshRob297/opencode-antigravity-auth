@@ -25,3 +25,77 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  # Zero credentials, zero quota: the two Antigravity auto-updaters answer with a
+  # public 82-byte string. When the version they report moves away from the
+  # offline fallback pinned in src/constants.ts, the CLI signature the backend
+  # requires may have moved with it — that is the event worth waking up for,
+  # not a periodic authenticated call.
+  upstream-drift:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compare the pinned versions with the live ones
+        id: drift
+        run: |
+          set -u
+          CLI_URL="https://antigravity-cli-auto-updater-974169037036.us-central1.run.app"
+          IDE_URL="https://antigravity-auto-updater-974169037036.us-central1.run.app"
+
+          curl -sS -m 20 "$CLI_URL" -o cli.txt || true
+          curl -sS -m 20 "$IDE_URL" -o ide.txt || true
+          live_cli=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' cli.txt | head -1)
+          live_ide=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' ide.txt | head -1)
+          pin_cli=$(grep -oE 'ANTIGRAVITY_CLI_VERSION_FALLBACK = "[0-9.]+"' src/constants.ts | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          pin_ide=$(grep -oE 'ANTIGRAVITY_VERSION_FALLBACK = "[0-9.]+"' src/constants.ts | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+
+          echo "cli: live=${live_cli:-?} pinned=${pin_cli:-?}"
+          echo "ide: live=${live_ide:-?} pinned=${pin_ide:-?}"
+
+          drift=0
+          [ -n "${live_cli:-}" ] && [ "$live_cli" != "$pin_cli" ] && drift=1
+          [ -n "${live_ide:-}" ] && [ "$live_ide" != "$pin_ide" ] && drift=1
+          echo "drift=$drift" >> "$GITHUB_OUTPUT"
+          {
+            echo "cli_live=${live_cli:-unknown} cli_pinned=${pin_cli:-unknown}"
+            echo "ide_live=${live_ide:-unknown} ide_pinned=${pin_ide:-unknown}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open an issue when the fallback drifts
+        if: steps.drift.outputs.drift == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLI_LIVE: ${{ steps.drift.outputs.cli_live }}
+          CLI_PIN: ${{ steps.drift.outputs.cli_pinned }}
+          IDE_LIVE: ${{ steps.drift.outputs.ide_live }}
+          IDE_PIN: ${{ steps.drift.outputs.ide_pinned }}
+        run: |
+          cat > body.md <<EOF
+          The Antigravity auto-updaters report a version the offline fallback in
+          \`src/constants.ts\` does not have.
+
+          | | live | pinned |
+          |---|---|---|
+          | CLI (\`agy\`) | ${CLI_LIVE} | ${CLI_PIN} |
+          | IDE | ${IDE_LIVE} | ${IDE_PIN} |
+
+          The runtime resolves the CLI signature from the updater at startup, so
+          this is not a break on its own: it is the offline fallback drifting.
+          Bumping \`ANTIGRAVITY_CLI_VERSION_FALLBACK\` changes the signature the
+          plugin sends when the fetch fails, so bump it only after a live request
+          succeeds with the new value — see \`docs/ANTIGRAVITY_API_SPEC.md\`.
+
+          Nothing to do for the IDE line unless its own fallback is what the
+          request path uses.
+          EOF
+
+          existing=$(gh issue list --state open --search "Antigravity fallback version drift in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "Antigravity fallback version drift: CLI ${CLI_PIN} -> ${CLI_LIVE}" --body-file body.md
+          fi
