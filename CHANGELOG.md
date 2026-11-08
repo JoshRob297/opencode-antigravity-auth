@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.7.0] - 2026-11-08
+
+### Added
+
+- **A request that times out waiting for the first response header is retried instead of failing.** A deep-reasoning model can take more than a minute before the backend emits its first header, and Node's HTTP/2 client gives up with `http2: timeout awaiting response headers` while the model was still about to answer. The Antigravity CLI 1.5.3 retries in that case, and now the plugin does too: three attempts, one second apart and doubling. Only that failure is retried, and only when no response object exists — a partially read body is never replayed. Everything else keeps its existing path: `ECONNRESET`, a refused connection, a `429` and every accounted error.
+
 ## [2.6.1] - 2026-11-08
 
 ### Fixed

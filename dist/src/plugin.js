@@ -7,6 +7,7 @@ import { promptAddAnotherAccount, promptLoginMode, promptProjectId } from "./plu
 import { ensureProjectContext, invalidateProjectContext, loadManagedProject, onboardManagedProject } from "./plugin/project";
 import { startAntigravityDebugRequest, logAntigravityDebugResponse, logAccountContext, logRateLimitEvent, logRateLimitSnapshot, logResponseBody, logModelFamily, isDebugEnabled, getLogFilePath, initializeDebug, } from "./plugin/debug";
 import { buildThinkingWarmupBody, isGenerativeLanguageRequest, prepareAntigravityRequest, transformAntigravityResponse, } from "./plugin/request";
+import { fetchWithHeaderTimeoutRetry } from "./plugin/header-timeout-retry";
 import { resolveModelWithTier } from "./plugin/transform/model-resolver";
 import { isEmptyResponseBody, createSyntheticErrorResponse, } from "./plugin/request-helpers";
 import { EmptyResponseError } from "./plugin/errors";
@@ -1639,7 +1640,7 @@ export const createAntigravityPlugin = (providerId) => async ({ client, director
                                         if (config.account_selection_strategy === 'hybrid') {
                                             tokenConsumed = getTokenTracker().consume(account.index);
                                         }
-                                        const response = await fetch(prepared.request, prepared.init);
+                                        const response = await fetchWithHeaderTimeoutRetry(() => fetch(prepared.request, prepared.init), { onRetry: (attempt) => pushDebug(`header timeout, retry ${attempt}`) });
                                         pushDebug(`status=${response.status} ${response.statusText}`);
                                         // Handle 429 rate limit (or Service Overloaded) with improved logic
                                         if (response.status === 429 || response.status === 503 || response.status === 529) {
