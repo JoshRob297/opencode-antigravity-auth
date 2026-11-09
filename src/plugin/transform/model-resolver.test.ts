@@ -9,7 +9,8 @@ import {
   resolveAntigravityGemini38FlashBackendModel,
   resolveAntigravityTieredFamilyBackendModel,
   isAntigravityTieredFamilyModel,
-} from "./model-resolver";
+} from "./model-resolver"
+import { forgetTieredFamilies, rememberTieredFamily } from "../config/tiered-families";
 
 describe("resolveModelWithTier", () => {
   describe("Gemini 3 flash models (Issue #109)", () => {
@@ -367,6 +368,24 @@ describe("resolveAntigravityGemini36FlashBackendModel", () => {
 });
 
 describe("resolveAntigravityTieredFamilyBackendModel", () => {
+  it("resolves a family discovery learned, with a tier the plugin never knew", () => {
+    // Discovery recorded `hyperion` and the suffixes the catalog advertised. The
+    // request path must build the backend id from that, not from a name list here.
+    rememberTieredFamily("hyperion", ["minimal", "low", "medium", "high"]);
+    try {
+      expect(resolveAntigravityTieredFamilyBackendModel("antigravity-hyperion", "minimal")).toBe(
+        "hyperion-minimal",
+      );
+      expect(resolveAntigravityTieredFamilyBackendModel("antigravity-hyperion", "high")).toBe(
+        "hyperion-high",
+      );
+      expect(resolveAntigravityTieredFamilyBackendModel("antigravity-hyperion")).toBe("hyperion-low");
+      expect(isAntigravityTieredFamilyModel("antigravity-hyperion")).toBe(true);
+    } finally {
+      forgetTieredFamilies();
+    }
+  });
+
   it("appends the selected tier to the Gemini 4 Argon family", () => {
     expect(resolveAntigravityTieredFamilyBackendModel("antigravity-gemini-4-argon", "medium")).toBe("gemini-4-argon-medium");
     expect(resolveAntigravityTieredFamilyBackendModel("gemini-4-argon", "high")).toBe("gemini-4-argon-high");

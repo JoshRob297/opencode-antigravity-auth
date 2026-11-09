@@ -1,4 +1,5 @@
 import type { OpencodeModelDefinition, OpencodeModelDefinitions, ModelVariant } from "./models";
+import { compareTiers, groupTieredFamilies, rememberTieredFamily } from "./tiered-families.js"
 import { OPENCODE_WHITELIST_MODELS } from "./models";
 import { fetchAvailableModels } from "../quota";
 import { createLogger } from "../logger";
@@ -231,7 +232,7 @@ export function displayNameForModelId(id: string): string {
 export function buildDiscoveredModelDefinition(
   id: string,
   metadata?: DiscoveredModelMetadata,
-  tiers?: readonly TierName[],
+  tiers?: readonly string[],
 ): OpencodeModelDefinition {
   const lower = id.toLowerCase();
   const isClaude = lower.startsWith("claude-");
@@ -287,20 +288,70 @@ export function buildDiscoveredModelDefinition(
  * a `low|medium|high` variant picker, and the same for
  * `claude-sonnet-5-5-*` / `claude-opus-5-5-*`.
  */
+/**
+ * The same forward-only rule the curated floors encode, applied to families that
+ * were learned from the catalog: a versioned line has to be newer than the
+ * curated one, and a line with no version in its name (Argon, Hyperion, Carbon)
+ * is taken as it comes.
+ */
+function isForwardOnly(base: string): boolean {
+  const gemini = /^gemini-(\d+)(?:[.-](\d+))?/.exec(base);
+  if (gemini) {
+    const [major, minor] = [Number(gemini[1]), Number(gemini[2] ?? 0)];
+    const floor = DISCOVERY_GEMINI_FLASH_FLOOR;
+    return major > floor.major || (major === floor.major && minor > floor.minor);
+  }
+  const claude = /^claude-(?:sonnet|opus)-(\d+)(?:-(\d+))?/.exec(base);
+  if (claude) {
+    const [major, minor] = [Number(claude[1]), Number(claude[2] ?? 0)];
+    const floor = DISCOVERY_CLAUDE_FLOOR;
+    return major > floor.major || (major === floor.major && minor > floor.minor);
+  }
+  return true;
+}
+
 export function buildDiscoveredModels(
   backendIds: Iterable<string>,
   metadata: Record<string, DiscoveredModelMetadata> = {},
 ): OpencodeModelDefinitions {
-  const groups = new Map<string, { tiers: Set<TierName>; ids: Set<string>; sawTierless: boolean }>();
+  const groups = new Map<string, { tiers: Set<string>; ids: Set<string>; sawTierless: boolean }>();
 
-  for (const rawId of backendIds) {
-    const id = typeof rawId === "string" ? rawId.trim().toLowerCase() : "";
-    if (!isDiscoverableModelId(id)) continue;
+  const all = [...backendIds].map((rawId) => (typeof rawId === "string" ? rawId.trim().toLowerCase() : ""));
+  // Families the catalog itself splits by tier. Learned from the ids, not from a
+  // list: a family that debuts a suffix nobody knew (`hyperion-minimal`) groups
+  // the same way as the curated ones.
+  const learned = groupTieredFamilies(all);
+
+  for (const id of all) {
+    if (!id) continue;
     if (isCoveredByCuratedCatalog(id)) continue;
 
-    const family = familyIdOf(id);
-    const tier = tierOf(id);
-    const group = groups.get(family) ?? { tiers: new Set<TierName>(), ids: new Set<string>(), sawTierless: false };
+    let family = familyIdOf(id);
+    let tier: string | undefined = tierOf(id);
+    let learnedFamily = false;
+    for (const [base, tiers] of learned) {
+      if (id === base) {
+        family = base;
+        tier = undefined;
+        learnedFamily = true;
+        break;
+      }
+      if (id.startsWith(`${base}-`)) {
+        const suffix = id.slice(base.length + 1);
+        if (tiers.includes(suffix)) {
+          family = base;
+          tier = suffix;
+          learnedFamily = true;
+          break;
+        }
+      }
+    }
+
+    if (!learnedFamily && !isDiscoverableModelId(id)) continue;
+    if (learnedFamily && DISCOVERY_DENYLIST.some((pattern) => pattern.test(id))) continue;
+    if (learnedFamily && !isForwardOnly(family)) continue;
+
+    const group = groups.get(family) ?? { tiers: new Set<string>(), ids: new Set<string>(), sawTierless: false };
     if (tier) {
       group.tiers.add(tier);
     } else {
@@ -312,7 +363,7 @@ export function buildDiscoveredModels(
 
   const discovered: OpencodeModelDefinitions = {};
   for (const [family, group] of groups) {
-    const observedTiers = TIER_ORDER.filter((tier) => group.tiers.has(tier));
+    const observedTiers = [...group.tiers].sort(compareTiers);
     // Limits are declared per concrete id, so take them from whichever id in the
     // group actually carries them (they are identical across tiers).
     const groupMetadata: DiscoveredModelMetadata | undefined =
@@ -322,6 +373,9 @@ export function buildDiscoveredModels(
         .find((entry): entry is DiscoveredModelMetadata => Boolean(entry && (entry.maxTokens || entry.maxOutputTokens)));
     const definition = buildDiscoveredModelDefinition(family, groupMetadata, observedTiers);
     discovered[`antigravity-${family}`] = definition;
+    // The request path builds `family-<tier>` from this, so recording it here is
+    // what keeps a brand new family working without a release.
+    if (observedTiers.length > 0) rememberTieredFamily(family, observedTiers);
   }
   return discovered;
 }
