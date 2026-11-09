@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.3] - 2026-11-09
+
+### Fixed
+
+- **The release tarball could not load.** OpenCode resolves a configured plugin directory by the conventional name at its root (`index.js`), not by `main`, and the packed plugin had neither that file nor its dependencies — an unpacked install left a directory OpenCode could not import, so the provider never registered and every request fell through to "API key not valid". The pack now builds one self-contained `dist/standalone.js` and a root `index.js` that re-exports it: no `node_modules`, no build step, 725 KB instead of 12 MB. Verified by unpacking the tarball, pointing `plugins` at it, restarting the service and running a prompt — the answer comes back.
+- **`install.sh` says to restart the service.** A server already running keeps the old module in memory, so a path change only takes effect after `opencode service restart`; without it the install looks broken.
+
 ## [2.8.2] - 2026-11-09
 
 ### Changed

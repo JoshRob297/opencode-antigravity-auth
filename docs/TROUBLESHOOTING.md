@@ -146,6 +146,27 @@ Then restart OpenCode.
 
 ---
 
+## The plugin installs but nothing answers ("API key not valid")
+
+That message means the provider was never registered: OpenCode fell back to the plain
+Google provider and read an API key from the environment. The plugin did not load.
+
+1. Restart the server so the module is read again:
+
+   ```bash
+   opencode service restart
+   ```
+
+2. If it persists, look at the reason in the log:
+
+   ```bash
+   grep "failed to load plugin" ~/.local/share/opencode/log/opencode.log | tail -1
+   ```
+
+   `Cannot find package ...` means the directory is missing files — reinstall from a
+   release (`install.sh`), which ships one bundled file and no dependencies.
+   `Plugin entrypoint not found` means the directory has no `index.js` at its root.
+
 ### "git dep preparation failed"
 
 The plugin cannot be installed with the `github:` spec:
