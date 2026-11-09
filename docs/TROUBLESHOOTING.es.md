@@ -510,20 +510,40 @@ npx tsx script/test-regression.ts --dry-run     # Lista las pruebas
 
 ## Ayer funcionaba y hoy no
 
-`github:JoshRob297/opencode-antigravity-auth` sigue a `main`, así que OpenCode toma cada commit. Cuando una actualización rompe algo, fija la versión que sabes que funciona y reporta el fallo contra esa:
-
-```json
-{ "plugins": ["github:JoshRob297/opencode-antigravity-auth#v2.6.0"] }
-```
-
-Con `git log` ves qué cambió entre la etiqueta que fijaste y el head. Cada release también publica el plugin empaquetado como asset, por si prefieres instalar un build exacto:
+Fija la versión que sabes que funciona y reporta el fallo contra esa:
 
 ```bash
-npm install https://github.com/JoshRob297/opencode-antigravity-auth/releases/download/v2.6.0/opencode-antigravity-auth-2.6.0.tgz
+curl -fsSL https://raw.githubusercontent.com/JoshRob297/opencode-antigravity-auth/main/install.sh | bash -s -- v2.6.0
 ```
+
+Con `git log` entre esa etiqueta y `main` ves qué cambió. El instalador siempre trae exactamente la release que le pides, así que puedes moverte entre builds sin volver a tocar la config.
+
+---
+
+## "git dep preparation failed"
+
+El plugin no se puede instalar con el spec `github:`:
+
+```json
+{ "plugins": ["github:JoshRob297/opencode-antigravity-auth"] }
+```
+
+El npm embebido de OpenCode no logra preparar la dependencia de git, ni en 1.19.5 ni en
+2.2.6, y tampoco con el repositorio del upstream — el problema es el instalador, no el paquete.
+
+Usa el tarball de la release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JoshRob297/opencode-antigravity-auth/main/install.sh | bash
+```
+
+Si prefieres hacerlo a mano, descomprime `opencode-antigravity-auth-<versión>.tgz` donde
+quieras y apunta `plugin` / `plugins` al directorio `package/` que trae dentro. Un clon con
+`npm install && npm run build` también sirve, porque el npm real sí prepara dependencias de git.
 
 ---
 
 ## ¿Sigues atascado?
 
 Abre un issue en [GitHub](https://github.com/JoshRob297/opencode-antigravity-auth/issues).
+

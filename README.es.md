@@ -98,28 +98,52 @@ No hace falta cambiar nada de configuración al pasar de OpenCode v1 a v2.
 
 ## Instalación
 
-### Opción A: Directo desde GitHub (Recomendado)
+El plugin **no necesita npm ni git**. El instalador propio de OpenCode no sabe preparar
+dependencias de git (`git dep preparation failed`) y no hay paquete de npm publicado con
+este nombre, así que la instalación sale del tarball de cada release.
 
-Añade a `plugins` en `~/.config/opencode/opencode.json`:
+### Opción A: El instalador (Recomendado)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JoshRob297/opencode-antigravity-auth/main/install.sh | bash
+```
+
+Para fijar una versión en vez de seguir la última release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JoshRob297/opencode-antigravity-auth/main/install.sh | bash -s -- v2.8.1
+```
+
+Descarga la release empaquetada, la descomprime en `~/.local/share/opencode-antigravity-auth/`
+y apunta `plugin` / `plugins` a ella — la clave que ya use tu config, así que la entrada
+funciona igual en OpenCode v1 y v2. Vuelve a correrlo para actualizar. Solo pide `curl` y `tar`.
+
+### Opción B: El tarball, a mano
+
+Cada release lleva el plugin empaquetado como asset. Descarga
+`opencode-antigravity-auth-<versión>.tgz` de [Releases](../../releases) y luego:
+
+```bash
+mkdir -p ~/.local/share/opencode-antigravity-auth
+tar -xzf opencode-antigravity-auth-2.8.1.tgz -C ~/.local/share/opencode-antigravity-auth
+```
+
+Y en `~/.config/opencode/opencode.json`:
 
 ```json
 {
-  "plugins": ["github:JoshRob297/opencode-antigravity-auth#v2.6.0"]
+  "plugin": ["/home/tu-usuario/.local/share/opencode-antigravity-auth/package"]
 }
 ```
 
-> OpenCode v2 clona, compila y actualiza el plugin automáticamente desde el repositorio oficial.
+OpenCode **v1 lee `plugin`, v2 lee `plugins`** — el instalador detecta cuál tienes.
 
-### Opción B: Directorio local (Desarrollo / Sin conexión)
-
-Clona y referencia de forma local:
+### Opción C: Desde el código (Desarrollo)
 
 ```bash
 git clone https://github.com/JoshRob297/opencode-antigravity-auth.git /path/to/plugin
 cd /path/to/plugin && npm install && npm run build
 ```
-
-Luego, en `~/.config/opencode/opencode.json`:
 
 ```json
 {
@@ -127,16 +151,22 @@ Luego, en `~/.config/opencode/opencode.json`:
 }
 ```
 
+### ¿Por qué no el spec `github:`?
+
+`"plugins": ["github:JoshRob297/opencode-antigravity-auth"]` **no instala** hoy: el npm
+embebido de OpenCode termina en `git dep preparation failed`. Se reprodujo en OpenCode
+1.19.5 y 2.2.6, desde una máquina limpia, y **también contra el repositorio del upstream**
+— o sea que es el instalador, no este paquete. El npm real maneja el mismo spec sin
+quejarse, por eso se queda documentado para quien tenga uno que funcione.
+
 ---
 
 ## Inicio rápido (cero configuración en OpenCode v2)
 
-1. **Añade el plugin** a `~/.config/opencode/opencode.json`:
+1. **Instala el plugin** — Opción A de arriba:
 
-   ```json
-   {
-     "plugins": ["github:JoshRob297/opencode-antigravity-auth"]
-   }
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/JoshRob297/opencode-antigravity-auth/main/install.sh | bash
    ```
 
 2. **Autentícate con Google:**

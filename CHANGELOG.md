@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.8.1] - 2026-11-09
+
+### Added
+
+- **`install.sh`**: downloads a release tarball, unpacks it under `~/.local/share/opencode-antigravity-auth/` and wires the config entry. `curl` and `tar` are the only requirements — no npm, no git, no build step. Takes an optional version (`install.sh v2.8.1`), respects `OPENCODE_ANTIGRAVITY_HOME` and `XDG_CONFIG_HOME`, keeps the other keys of `opencode.json` intact, and writes to whichever key the config already uses (`plugin` on v1, `plugins` on v2).
+
+### Fixed
+
+- **The documented install path did not work.** `"plugins": ["github:JoshRob297/opencode-antigravity-auth"]` fails with `git dep preparation failed` in OpenCode's embedded npm, on 1.19.5 and 2.2.6, from a clean machine, and **against the upstream repository too**. `README`, `README.es.md` and `docs/TROUBLESHOOTING.md` now lead with the tarball and the installer, and say plainly that the `github:` spec is broken instead of claiming it clones and builds. Real npm still installs the same spec, which is why Option C stays available.
+- **2.8.0's changelog was wrong about this**: it stated the `github:` spec "still clones and builds the plugin on install". It does not, on the OpenCode builds tested.
+
 ## [2.8.0] - 2026-11-08
 
 ### Changed

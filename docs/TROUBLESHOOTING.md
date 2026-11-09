@@ -146,6 +146,27 @@ Then restart OpenCode.
 
 ---
 
+### "git dep preparation failed"
+
+The plugin cannot be installed with the `github:` spec:
+
+```json
+{ "plugins": ["github:JoshRob297/opencode-antigravity-auth"] }
+```
+
+OpenCode's embedded npm fails to prepare the git dependency, on both 1.19.5 and 2.2.6,
+and with the upstream repository as well — the installer is at fault, not the package.
+
+Use the release tarball instead:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JoshRob297/opencode-antigravity-auth/main/install.sh | bash
+```
+
+If you would rather do it by hand, unpack `opencode-antigravity-auth-<version>.tgz` anywhere
+and point `plugin` / `plugins` at the `package/` directory inside it. A clone plus
+`npm install && npm run build` works too, because real npm does prepare git dependencies.
+
 ## IAM / Google Cloud Project Permission Error
 
 If you see:
@@ -507,17 +528,13 @@ npx tsx script/test-regression.ts --dry-run     # List tests
 
 ## It worked yesterday and broke today
 
-`github:JoshRob297/opencode-antigravity-auth` follows `main`, so OpenCode picks up every commit. When an update breaks something, pin the version you know works and report the regression against it:
-
-```json
-{ "plugins": ["github:JoshRob297/opencode-antigravity-auth#v2.6.0"] }
-```
-
-`git log` then tells you what changed between the tag you pinned and the head. Every release also publishes the packed plugin as an asset, if you would rather install an exact build:
+Pin the version you know works and report the regression against it:
 
 ```bash
-npm install https://github.com/JoshRob297/opencode-antigravity-auth/releases/download/v2.6.0/opencode-antigravity-auth-2.6.0.tgz
+curl -fsSL https://raw.githubusercontent.com/JoshRob297/opencode-antigravity-auth/main/install.sh | bash -s -- v2.6.0
 ```
+
+`git log` between that tag and `main` then tells you what changed. The installer always fetches exactly the release you name, so you can move between builds without editing the config again.
 
 ---
 
