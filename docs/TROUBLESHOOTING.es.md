@@ -520,6 +520,28 @@ Con `git log` entre esa etiqueta y `main` ves qué cambió. El instalador siempr
 
 ---
 
+## El plugin se instala pero nada responde ("API key not valid")
+
+Ese mensaje significa que el proveedor nunca se registró: OpenCode cayó al proveedor de
+Google a secas y leyó una API key del entorno. El plugin no cargó.
+
+1. Reinicia el servidor para que vuelva a leer el módulo:
+
+   ```bash
+   opencode service restart
+   ```
+
+2. Si sigue, mira el motivo en el log:
+
+   ```bash
+   grep "failed to load plugin" ~/.local/share/opencode/log/opencode.log | tail -1
+   ```
+
+   `Cannot find package ...` significa que al directorio le faltan archivos — reinstala
+   desde una release (`install.sh`), que trae un solo archivo empaquetado y ninguna
+   dependencia. `Plugin entrypoint not found` significa que el directorio no tiene
+   `index.js` en su raíz.
+
 ## "git dep preparation failed"
 
 El plugin no se puede instalar con el spec `github:`:
