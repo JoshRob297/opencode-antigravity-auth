@@ -86,6 +86,16 @@ entries = [
     e for e in entries
     if not (isinstance(e, str) and ("opencode-antigravity-auth" in e or "antigravity" in e))
 ]
+# Drop what a previous install left behind: absolute paths that no longer exist and
+# duplicates. A dead entry is silent at load time and misleads the next diagnosis.
+kept = []
+for e in entries:
+    if isinstance(e, str) and e.startswith("/") and not os.path.exists(e):
+        continue
+    if e in kept:
+        continue
+    kept.append(e)
+entries = kept
 entries.append(plugin)
 data[key] = entries
 
