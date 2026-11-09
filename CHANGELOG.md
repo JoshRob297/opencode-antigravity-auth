@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.8.0] - 2026-11-08
+
+### Changed
+
+- **`dist/` is no longer tracked in git.** The compiled output of `src/` was committed, and CI failed any pull request whose committed `dist/` differed from a fresh build. That forced every source change to carry generated files and made reviews noisy without protecting anyone: the build is reproducible from the sources. `dist/` is now in `.gitignore`, and CI builds it but no longer compares it against the index. `npm run build` still produces it locally.
+- **Installs are unchanged for users.** The build happens where the package is consumed, via the existing `prepare` script (`npm run build`):
+  - the `github:JoshRob297/opencode-antigravity-auth` (or pinned `#vX.Y.Z`) spec in `~/.config/opencode/opencode.json` still clones and builds the plugin on install;
+  - the `.tgz` attached to each release is packed after `npm run build` in the release workflow, so it already contains `dist/`;
+  - `npm install github:JoshRob297/opencode-antigravity-auth` builds `dist/` through `prepare` as part of the npm install.
+  Sources checkouts follow the same path: `npm install` runs `prepare`, and `npm run build` rebuilds on demand. No manual step was added.
+
 ## [2.7.0] - 2026-11-08
 
 ### Added

@@ -5,6 +5,7 @@ bun.lockb
 
 # output
 out
+dist/
 *.tgz
 
 # code coverage
