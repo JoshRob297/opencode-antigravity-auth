@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.2] - 2026-11-09
+
+### Changed
+
+- **Model reference rewritten against a live account.** The table now lists all seven models the plugin registers — Gemini 3.8 Flash, Claude Sonnet 4.6, Claude Opus 4.6 Thinking, GPT-OSS 120B, Gemini 4 Argon, Claude Sonnet 5.5 and Claude Opus 5.5 — with the variants each one actually accepts (Argon: `low|medium|high`; Claude 5.5: `low|medium|high|max`). Claude 4.6 is marked as retiring rather than with a date that has passed, and the discovery paragraph no longer repeats the list.
+- **Quota warning for the fast-burning models.** Gemini 4 Argon and both Claude 5.5 models consume quota several times faster than the rest; the README now says so up front instead of leaving it to be discovered.
+
 ## [2.8.1] - 2026-11-09
 
 ### Added
