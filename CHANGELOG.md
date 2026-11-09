@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.8.4] - 2026-11-09
+
+### Fixed
+
+- **`install.sh` cleans up after previous installs.** It now drops configured paths that no longer exist and duplicated entries, not only the ones named after this plugin. A dead path stays silent at load time and misleads anyone debugging why a plugin "does not work".
+
 ## [2.8.3] - 2026-11-09
 
 ### Fixed
