@@ -114,7 +114,8 @@ curl -fsSL https://raw.githubusercontent.com/JoshRob297/opencode-antigravity-aut
 It downloads the packed release, unpacks it under `~/.local/share/opencode-antigravity-auth/`
 and points `plugin` / `plugins` at it — whichever key your config already uses, so the entry
 works on OpenCode v1 and v2 alike. Re-run it to upgrade. `curl` and `tar` are the only
-requirements.
+requirements. This is the copy to point at the config your agents run: it is a released
+version and a `git pull` cannot leave it stale. Use Option C for a tree you edit.
 
 ### Option B: The tarball, by hand
 
@@ -192,14 +193,20 @@ complaint, which is why it stays documented for setups that ship a working one.
 
 | Model | Variants | Description |
 |---|---|---|
-| `antigravity-gemini-3.8-flash` | `low`, `medium`, `high` | **Gemini 3.8 Flash** with thinking tiers *(Default)* |
-| `antigravity-claude-sonnet-4-6` | `low`, `medium`, `high`, `max` | Claude Sonnet 4.6 *(retiring 2026-11-02)* |
-| `antigravity-claude-opus-4-6-thinking` | `low`, `medium`, `high`, `max` | Claude Opus 4.6 with extended thinking *(retiring 2026-11-02)* |
-| `antigravity-gpt-oss-120b-medium` | `low`, `medium`, `high` | GPT-OSS 120B open-source model |
+| `antigravity-gemini-3.8-flash` | `low`, `medium`, `high` | **Gemini 3.8 Flash** — the default; 1M context |
+| `antigravity-claude-sonnet-4-6` | `low`, `medium`, `high`, `max` | Claude Sonnet 4.6 — retiring; grant accounts already get "switch to Claude Sonnet 5.5" |
+| `antigravity-claude-opus-4-6-thinking` | `low`, `medium`, `high`, `max` | Claude Opus 4.6 with extended thinking; 200k context |
+| `antigravity-gpt-oss-120b-medium` | `low`, `medium`, `high` | GPT-OSS 120B, open weights |
+| `antigravity-gemini-4-argon` | `low`, `medium`, `high` | **Gemini 4 Argon** — registered by `model_discovery` when the account holds the grant |
+| `antigravity-claude-sonnet-5-5` | `low`, `medium`, `high`, `max` | Claude Sonnet 5.5 — 1M context / 128k output |
+| `antigravity-claude-opus-5-5` | `low`, `medium`, `high`, `max` | Claude Opus 5.5 |
 
-Newer families are **not** hardcoded. `model_discovery` registers them from the account's own catalog; measured 2026-10-31 on an entitled account: `antigravity-gemini-4-argon` (`low`/`medium`/`high`), `antigravity-claude-sonnet-5-5` and `antigravity-claude-opus-5-5`. Limits come from the backend (Claude 5.5: 1M context / 128k output).
+> [!WARNING]
+> **Gemini 4 Argon and both Claude 5.5 models spend quota much faster** than the rest of the list: a single long turn can cost what a whole day of Gemini 3.8 Flash costs. Work on `low` / `medium` and keep `high` / `max` for the hard problems.
 
----
+The first four are hardcoded. Argon and the 5.5 family arrive through `model_discovery`,
+which registers whatever the account's own catalog exposes — no release needed. Token
+limits come from the backend.
 
 <details>
 <summary><b>Manual models configuration (Optional / Advanced)</b></summary>
