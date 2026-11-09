@@ -95,50 +95,53 @@ No configuration changes are required when transitioning between OpenCode v1 and
 
 ## Installation
 
-### Option A: Direct from GitHub (Recommended)
+The plugin needs **neither npm nor git**. OpenCode's own installer cannot prepare git
+dependencies (`git dep preparation failed`) and there is no npm package published under
+this name, so installs come from the release tarball.
 
-Add to `plugins` in `~/.config/opencode/opencode.json`:
-
-```json
-{
-  "plugins": ["github:JoshRob297/opencode-antigravity-auth"]
-}
-```
-
-To pin a version, so what you run does not change under you:
-
-
-
-```json
-{
-  "plugins": ["github:JoshRob297/opencode-antigravity-auth#v2.6.0"]
-}
-```
-
-
-
-Every release also ships the packed plugin as an asset, for offline installs:
-
-
+### Option A: The installer (Recommended)
 
 ```bash
-
-npm install https://github.com/JoshRob297/opencode-antigravity-auth/releases/download/v2.6.0/opencode-antigravity-auth-2.6.0.tgz
-
+curl -fsSL https://raw.githubusercontent.com/JoshRob297/opencode-antigravity-auth/main/install.sh | bash
 ```
 
-> OpenCode v2 will automatically clone, build, and update the plugin directly from the official repository.
+To pin a version instead of following the latest release:
 
-### Option B: Local Directory (Development / Offline)
+```bash
+curl -fsSL https://raw.githubusercontent.com/JoshRob297/opencode-antigravity-auth/main/install.sh | bash -s -- v2.8.1
+```
 
-Clone and reference locally:
+It downloads the packed release, unpacks it under `~/.local/share/opencode-antigravity-auth/`
+and points `plugin` / `plugins` at it — whichever key your config already uses, so the entry
+works on OpenCode v1 and v2 alike. Re-run it to upgrade. `curl` and `tar` are the only
+requirements.
+
+### Option B: The tarball, by hand
+
+Every release carries the packed plugin as an asset. Download
+`opencode-antigravity-auth-<version>.tgz` from [Releases](../../releases), then:
+
+```bash
+mkdir -p ~/.local/share/opencode-antigravity-auth
+tar -xzf opencode-antigravity-auth-2.8.1.tgz -C ~/.local/share/opencode-antigravity-auth
+```
+
+And in `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "plugin": ["/home/you/.local/share/opencode-antigravity-auth/package"]
+}
+```
+
+OpenCode **v1 reads `plugin`, v2 reads `plugins`** — the installer detects which one you have.
+
+### Option C: From source (Development)
 
 ```bash
 git clone https://github.com/JoshRob297/opencode-antigravity-auth.git /path/to/plugin
 cd /path/to/plugin && npm install && npm run build
 ```
-
-Then in `~/.config/opencode/opencode.json`:
 
 ```json
 {
@@ -146,16 +149,22 @@ Then in `~/.config/opencode/opencode.json`:
 }
 ```
 
+### Why not the `github:` spec?
+
+`"plugins": ["github:JoshRob297/opencode-antigravity-auth"]` **does not install** today:
+OpenCode's embedded npm ends with `git dep preparation failed`. It was reproduced on
+OpenCode 1.19.5 and 2.2.6, from a clean machine, and **against the upstream repository as
+well** — so it is the installer, not this package. Real npm handles the same spec without
+complaint, which is why it stays documented for setups that ship a working one.
+
 ---
 
 ## Quick Start (Zero-Config in OpenCode v2)
 
-1. **Add the plugin** to `~/.config/opencode/opencode.json`:
+1. **Install the plugin** — Option A above:
 
-   ```json
-   {
-     "plugins": ["github:JoshRob297/opencode-antigravity-auth"]
-   }
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/JoshRob297/opencode-antigravity-auth/main/install.sh | bash
    ```
 
 2. **Authenticate with Google:**
@@ -637,15 +646,7 @@ To pin a version, so what you run does not change under you:
 
 
 
-Every release also ships the packed plugin as an asset, for offline installs:
-
-
-
-```bash
-
-npm install https://github.com/JoshRob297/opencode-antigravity-auth/releases/download/v2.6.0/opencode-antigravity-auth-2.6.0.tgz
-
-```
+See [Installation](#installation) for how to get the files.
 
 OpenCode v1 uses the legacy singular key `"plugin"`. The updater detects both automatically and preserves whichever convention your configuration uses.
 
