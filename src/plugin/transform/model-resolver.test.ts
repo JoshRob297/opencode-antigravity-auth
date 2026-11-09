@@ -368,7 +368,7 @@ describe("resolveAntigravityGemini36FlashBackendModel", () => {
 });
 
 describe("resolveAntigravityTieredFamilyBackendModel", () => {
-  test("resolves a family discovery learned, with a tier the plugin never knew", () => {
+  it("resolves a family discovery learned, with a tier the plugin never knew", () => {
     // Discovery recorded `hyperion` and the suffixes the catalog advertised. The
     // request path must build the backend id from that, not from a name list here.
     rememberTieredFamily("hyperion", ["minimal", "low", "medium", "high"]);
