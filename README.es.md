@@ -205,9 +205,12 @@ quejarse, por eso se queda documentado para quien tenga uno que funcione.
 > [!WARNING]
 > **Gemini 4 Argon y los dos Claude 5.5 gastan cuota mucho más rápido** que el resto de la lista: un solo turno largo puede costar lo que un día entero de Gemini 3.8 Flash. Trabaja en `low` / `medium` y guarda `high` / `max` para lo difícil.
 
-Los cuatro primeros están hardcodeados. Argon y la familia 5.5 llegan por `model_discovery`,
-que registra lo que exponga el catálogo de la cuenta — sin esperar una release. Los límites
-de tokens salen del backend.
+Los cuatro primeros están hardcodeados. Todo lo demás lo **aprende del catálogo de la cuenta**
+`model_discovery`: los ids que comparten base y solo cambian por un sufijo de razonamiento se
+vuelven una entrada con sus variantes, y el vocabulario de sufijos sale de lo que anuncia el
+backend — así una familia que debute `minimal`, o un nombre que nadie ha visto, funciona sin
+publicar el plugin. Las líneas con versión siguen teniendo que ser más nuevas que el piso
+curado; el catálogo nunca resucita una generación vieja. Los límites de tokens salen del backend.
 
 <details>
 <summary><b>Configuración manual de modelos (Opcional / Avanzado)</b></summary>

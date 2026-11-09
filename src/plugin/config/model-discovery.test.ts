@@ -1,3 +1,4 @@
+import { forgetTieredFamilies } from "./tiered-families"
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("../quota", () => ({
@@ -244,5 +245,26 @@ describe("collectDiscoveredModels", () => {
   it("does nothing without an access token", async () => {
     await expect(collectDiscoveredModels("")).resolves.toEqual({});
     expect(fetchAvailableModels).not.toHaveBeenCalled();
+  });
+});
+
+describe("buildDiscoveredModels with a family nobody taught the plugin", () => {
+  it("groups a new family from the catalog and remembers how it encodes tiers", () => {
+    const models = buildDiscoveredModels([
+      "hyperion",
+      "hyperion-minimal",
+      "hyperion-low",
+      "hyperion-medium",
+      "hyperion-high",
+    ]);
+    const family = models["antigravity-hyperion"];
+    expect(family).toBeDefined();
+    expect(Object.keys(family!.variants ?? {})).toEqual(["minimal", "low", "medium", "high"]);
+    forgetTieredFamilies();
+  });
+
+  it("does not read two different model lines as tiers", () => {
+    const models = buildDiscoveredModels(["gemini-2.5-pro", "gemini-2.5-flash"]);
+    expect(models).toEqual({});
   });
 });

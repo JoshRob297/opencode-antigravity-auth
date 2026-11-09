@@ -204,9 +204,12 @@ complaint, which is why it stays documented for setups that ship a working one.
 > [!WARNING]
 > **Gemini 4 Argon and both Claude 5.5 models spend quota much faster** than the rest of the list: a single long turn can cost what a whole day of Gemini 3.8 Flash costs. Work on `low` / `medium` and keep `high` / `max` for the hard problems.
 
-The first four are hardcoded. Argon and the 5.5 family arrive through `model_discovery`,
-which registers whatever the account's own catalog exposes — no release needed. Token
-limits come from the backend.
+The first four are hardcoded. Everything after them is **learned from the account's
+catalog** by `model_discovery`: ids that share a base and differ by a thinking suffix
+become one entry with its variants, and the suffix vocabulary comes from what the backend
+advertises — so a family that debuts `minimal`, or a name nobody has seen yet, works
+without a plugin release. Versioned lines still have to be newer than the curated floor;
+the catalog never resurrects an older generation. Token limits come from the backend.
 
 <details>
 <summary><b>Manual models configuration (Optional / Advanced)</b></summary>

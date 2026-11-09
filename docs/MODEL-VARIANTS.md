@@ -80,6 +80,19 @@ Gemini 3 models use string-based thinking levels. Available levels differ by mod
 
 > **Note (2026-10-13):** Gemini 3.7 Flash, Gemini 3.6 Flash and Gemini 3.1 Pro moved to **Google AI Ultra / Enterprise-only** and are no longer registered by this plugin for consumer plans. Gemini 3.8 Flash is the only Gemini model available on consumer plans.
 >
+## Families are learned, not listed
+
+Discovery groups the catalog by structure, not by name: ids that share a base and differ
+only by a thinking suffix (`hyperion-minimal`, `hyperion-low`, ...) become one entry with a
+variant per suffix, and the request path builds `family-<tier>` from what discovery
+recorded. The suffix vocabulary is the backend's, so a tier that did not exist when this
+plugin was built works the day an account lists it.
+
+Two guards keep it forward-only. A versioned line (`gemini-3.5-flash`, `claude-opus-4-6`)
+still has to be newer than the curated floor. And an unknown suffix is only read as a tier
+when the catalog also lists the plain base, so `gemini-2.5-flash` and `gemini-2.5-pro`
+never collapse into one model with `flash` and `pro` variants.
+
 > **Gemini 4 ("Argon") needs no plugin release.** Its ids are `gemini-4-argon-{low,medium,high}` and the grant is **per account** (measured 2026-10-31: a `free-tier` account had it, other accounts only received the `gemini-4-argon-disabled` placeholder). It is deliberately not in the curated catalog: enable [`model_discovery`](CONFIGURATION.md#model-discovery) and one `antigravity-gemini-4-argon` entry with `low`/`medium`/`high` variants is registered for the accounts that have it. Requests must carry the CLI User-Agent, which the plugin sets automatically.
 
 ---

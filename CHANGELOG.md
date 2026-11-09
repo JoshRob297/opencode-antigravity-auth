@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.9.0] - 2026-11-09
+
+### Changed
+
+- **A new model family no longer needs a release.** Discovery recognised tiered families from a list (`gemini-4-argon`, `claude-sonnet/opus-5-5`) and a fixed tier vocabulary (`low|medium|high|max`). Both are learned from the catalog now: ids that share a base and differ by a thinking suffix group into one family with its variants, and the request path builds `family-<tier>` from what discovery recorded instead of matching a name list. A family that debuts `minimal` — Gemini 4 Hyperion advertises `hyperion-minimal|low|medium|high` — or a name nobody has seen works the day the account lists it.
+- **Forward-only stays enforced, generically.** A versioned line still has to be newer than the curated floor, and an unknown suffix is only trusted when the catalog also lists the plain base: without that, `gemini-2.5-flash` and `gemini-2.5-pro` would group as one model with `flash` and `pro` variants.
+- `docs/MODEL-VARIANTS.md` and both READMEs describe the rule instead of listing the families it covers.
+
 ## [2.8.4] - 2026-11-09
 
 ### Fixed

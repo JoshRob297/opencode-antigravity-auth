@@ -4,6 +4,7 @@
  * Resolves model names with tier suffixes (e.g., gemini-3-pro-high, claude-opus-4-6-thinking-low)
  * to their actual API model names and corresponding thinking configurations.
  */
+import { tieredFamilyOf } from "../config/tiered-families.js"
 
 import type { ResolvedModel, ThinkingTier, GoogleSearchConfig } from "./types";
 
@@ -232,6 +233,20 @@ export function resolveAntigravityTieredFamilyBackendModel(
   thinkingLevel?: string,
 ): string | undefined {
   const modelWithoutQuota = model.replace(QUOTA_PREFIX_REGEX, "").toLowerCase();
+
+  // What discovery saw wins: it knows the family and the suffixes it actually
+  // advertises, including tiers this file never heard of.
+  const learned = tieredFamilyOf(modelWithoutQuota);
+  if (learned) {
+    const requested = (thinkingLevel ?? "").toLowerCase();
+    const level = learned.tiers.includes(requested)
+      ? requested
+      : learned.tiers.includes("low")
+        ? "low"
+        : learned.tiers[0]!;
+    return `${learned.base}-${level}`;
+  }
+
   const match = modelWithoutQuota.match(TIERED_FAMILY_REGEX);
   if (!match) {
     return undefined;
@@ -249,7 +264,8 @@ export function resolveAntigravityTieredFamilyBackendModel(
  * tier as a suffix, so a variant can select it.
  */
 export function isAntigravityTieredFamilyModel(model: string): boolean {
-  return TIERED_FAMILY_REGEX.test(model.replace(QUOTA_PREFIX_REGEX, "").toLowerCase());
+  const normalized = model.replace(QUOTA_PREFIX_REGEX, "").toLowerCase();
+  return tieredFamilyOf(normalized) !== undefined || TIERED_FAMILY_REGEX.test(normalized);
 }
 
 /**
