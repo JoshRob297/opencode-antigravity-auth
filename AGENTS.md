@@ -28,12 +28,13 @@
 - Auth, entitlement and rate-limit logic is sensitive. Never weaken error handling or silently
   swallow failures to make something pass.
 
-## Committed artifacts
-- `dist/` is committed and CI verifies it is in sync with `src/`. After any `src/` change run
-  `npm run build` and commit the regenerated `dist/` in the same PR.
+## Build artifacts
+- `dist/` is generated build output and is not committed. `npm install` runs the `prepare`
+  script (`npm run build`) so package installs from git or the release tarball contain a fresh
+  build; run `npm run build` yourself after changing `src/`.
 
 ## Gotchas
 - Tests mock `./token` (refresh-queue). Do not rely on real network access in tests.
 - `antigravity-accounts.json` and any credentials/tokens must never be committed.
-- CI (`.github/workflows/ci.yml`) runs typecheck, tests, build and a `dist/` sync check, and posts
+- CI (`.github/workflows/ci.yml`) runs typecheck, tests and a build, and posts
   an `Automated verification` comment on each PR.

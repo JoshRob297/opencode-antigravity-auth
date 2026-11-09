@@ -42,17 +42,12 @@ jobs:
           set -o pipefail
           npm test 2>&1 | tee /tmp/tests.log
 
-      - name: Build and check dist/ sync
+      - name: Build
         id: build
         continue-on-error: true
         run: |
-          set -e
+          set -o pipefail
           npm run build 2>&1 | tee /tmp/build.log
-          git add -f dist
-          if ! git diff --cached --exit-code -- dist; then
-            echo "::error::committed dist/ is out of sync with src/ - run 'npm run build' and commit the result."
-            exit 1
-          fi
 
       # Reports branch hygiene so an automated contributor (MCP client) knows whether to
       # update the branch instead of guessing.
@@ -106,7 +101,7 @@ jobs:
             echo '|---|---|'
             echo "| typecheck | ${{ steps.typecheck.outcome }} |"
             echo "| tests | ${{ steps.tests.outcome }} |"
-            echo "| build + dist | ${{ steps.build.outcome }} |"
+            echo "| build | ${{ steps.build.outcome }} |"
             echo "| branch | ${HYGIENE:-n/a} |"
             echo ''
             case "$HYGIENE" in
