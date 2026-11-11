@@ -211,6 +211,20 @@ advertises — so a family that debuts `minimal`, or a name nobody has seen yet,
 without a plugin release. Versioned lines still have to be newer than the curated floor;
 the catalog never resurrects an older generation. Token limits come from the backend.
 
+### Announced, not yet observed
+
+**Gemini 4 Carbon** (`gemini-4-carbon`) went generally available on 2026-11-10 and is being
+rolled out to Antigravity accounts. Discovery should register it with no plugin release: the
+allowlist covers the whole `gemini-4-*` line, so `gemini-4-carbon` and its thinking variants
+group into one entry with variants the same way Argon does. The `-image` and `-disabled`
+suffixes stay excluded.
+
+**This has not been validated against a live catalog.** The account this repository is
+developed against does not receive Carbon yet: after clearing the model cache and restarting
+the OpenCode service, the catalog still answers with the seven models above — Argon present,
+Carbon absent. Treat it as *ready, unproven*: when an account is granted the model it should
+appear by itself, but nobody has watched that happen here.
+
 <details>
 <summary><b>Manual models configuration (Optional / Advanced)</b></summary>
 

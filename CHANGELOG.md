@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Docs
+
+- **Gemini 4 Carbon is covered by discovery, and not yet observed.** The `gemini-4-*`
+  allowlist already matches `gemini-4-carbon` and its thinking variants, so no release is
+  needed when an account is granted it. It has not been validated against a live catalog:
+  the reference account does not receive the model yet, and a full refresh still answers
+  with the seven documented models.
+
 ## [2.9.0] - 2026-11-09
 
 ### Changed
