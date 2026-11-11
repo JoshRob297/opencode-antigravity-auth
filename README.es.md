@@ -212,6 +212,20 @@ backend — así una familia que debute `minimal`, o un nombre que nadie ha vist
 publicar el plugin. Las líneas con versión siguen teniendo que ser más nuevas que el piso
 curado; el catálogo nunca resucita una generación vieja. Los límites de tokens salen del backend.
 
+### Anunciado, aún no observado
+
+**Gemini 4 Carbon** (`gemini-4-carbon`) salió a disponibilidad general el 2026-11-10 y se está
+desplegando por tandas en las cuentas de Antigravity. El descubrimiento debería registrarlo sin
+publicar una versión nueva: la lista blanca cubre toda la línea `gemini-4-*`, así que
+`gemini-4-carbon` y sus variantes de thinking se agrupan en una entrada con sus niveles igual
+que Argon. Los sufijos `-image` y `-disabled` siguen excluidos.
+
+**Esto no está validado contra un catálogo real.** La cuenta con la que se desarrolla este
+repositorio todavía no recibe Carbon: después de borrar el caché de modelos y reiniciar el
+servicio de OpenCode, el catálogo sigue respondiendo con los siete modelos de arriba — Argon
+presente, Carbon ausente. Tómese como *listo, no comprobado*: cuando una cuenta reciba el
+modelo debería aparecer solo, pero aquí nadie lo ha visto ocurrir.
+
 <details>
 <summary><b>Configuración manual de modelos (Opcional / Avanzado)</b></summary>
 
