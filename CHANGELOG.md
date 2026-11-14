@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [2.9.1] - 2026-11-13
+
+### Fixed
+
+- **The CLI version fallback was two releases behind.** `ANTIGRAVITY_CLI_VERSION_FALLBACK`
+  still said `1.5.3` while the CLI auto-updater reports `1.5.8` at 100% rollout. At runtime
+  `initAntigravityCliVersion()` already fetches the live value, so signatures were correct;
+  the stale constant only mattered when the updater was unreachable, which is exactly the
+  case a fallback exists for.
+
+## [Unreleased]
+
 ### Docs
 
 - **Gemini 4 Carbon is covered by discovery, and not yet observed.** The `gemini-4-*`
