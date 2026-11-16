@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Gemini 4 Hydrogen's `xhigh` tier is recognized.** The official CLI 1.5.9
+  lists Hydrogen as Low|Medium|High|XHigh and already accepts `--effort xhigh`,
+  but `TIER_SUFFIX` and `TIER_ORDER` only knew low|medium|high|max, so
+  `gemini-4-hydrogen-xhigh` was not grouped with its family. The tier is now
+  parsed and stripped from the family id. It is deliberately not offered as a
+  picker variant: OpenCode's `ModelThinkingLevel` has no `xhigh`, and faking one
+  would silently downgrade the request. The `-xhigh` suffix still travels through
+  the launch-model path.
+
 ### Fixed
 
 - **A quota window with a future reset was treated as exhausted.** The cached-quota
