@@ -120,8 +120,8 @@ const TIERED_SUFFIX = /-tiered$/i;
  * a thinking dial is noise, and the curated catalog already models 3.8 Flash that
  * way (`antigravity-gemini-3.8-flash` + `low|medium|high` variants).
  */
-const TIER_SUFFIX = /-(low|medium|high|max)$/i;
-const TIER_ORDER = ["low", "medium", "high", "max"] as const;
+const TIER_SUFFIX = /-(low|medium|high|xhigh|max)$/i;
+const TIER_ORDER = ["low", "medium", "high", "xhigh", "max"] as const;
 type TierName = (typeof TIER_ORDER)[number];
 
 /** Backend limits measured from `fetchAvailableModels`, keyed by backend id. */
@@ -168,6 +168,17 @@ const GEMINI_THINKING_VARIANTS: Record<string, ModelVariant> = {
   medium: { thinkingLevel: "medium" },
   high: { thinkingLevel: "high" },
 };
+
+/**
+ * Tiers the backend encodes in the id but OpenCode's `ModelThinkingLevel` cannot
+ * express yet. Gemini 4 Hydrogen ships `-xhigh` (the official CLI exposes it as
+ * `--effort xhigh` and lists Low|Medium|High|XHigh), but the selector type only
+ * knows low|medium|high. The tier is still recognized and stripped so the
+ * family groups correctly and nothing is duplicated; it simply is not offered as
+ * a picker variant until the type grows the level. `#xhigh` still travels through
+ * the launch-model suffix.
+ */
+const UNMAPPED_TIERS = new Set<string>(["xhigh"]);
 
 const CLAUDE_THINKING_VARIANTS: Record<string, ModelVariant> = {
   low: { thinkingConfig: { thinkingBudget: 8192 } },
@@ -273,7 +284,7 @@ export function buildDiscoveredModelDefinition(
       : { ...CLAUDE_THINKING_VARIANTS };
   } else if (!isGptOss) {
     definition.variants = observed
-      ? Object.fromEntries(observed.map((tier) => [tier, { thinkingLevel: tier as "low" | "medium" | "high" }]))
+      ? Object.fromEntries(observed.filter((tier) => !UNMAPPED_TIERS.has(tier)).map((tier) => [tier, { thinkingLevel: tier as "low" | "medium" | "high" }]))
       : { ...GEMINI_THINKING_VARIANTS };
   }
 
