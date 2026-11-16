@@ -71,6 +71,28 @@ describe("model discovery is forward-only", () => {
     expect(buildDiscoveredModels(["gemini-4-argon"])["antigravity-gemini-4-argon"]).toBeDefined();
   });
 
+  it("groups the Gemini 4 Hydrogen family and keeps xhigh out of the picker", () => {
+    // The official CLI ships Hydrogen as Low|Medium|High|XHigh. OpenCode's
+    // ModelThinkingLevel has no `xhigh`, so the tier is still recognized and
+    // stripped from the family id, but it is not offered as a variant.
+    expect(isDiscoverableModelId("gemini-4-hydrogen-xhigh")).toBe(true);
+    expect(isDiscoverableModelId("gemini-4-carbon-high")).toBe(true);
+
+    const discovered = buildDiscoveredModels([
+      "gemini-4-hydrogen-low",
+      "gemini-4-hydrogen-medium",
+      "gemini-4-hydrogen-high",
+      "gemini-4-hydrogen-xhigh",
+    ]);
+
+    expect(Object.keys(discovered)).toEqual(["antigravity-gemini-4-hydrogen"]);
+    expect(Object.keys(discovered["antigravity-gemini-4-hydrogen"]!.variants!).sort()).toEqual([
+      "high",
+      "low",
+      "medium",
+    ]);
+  });
+
   it("surfaces Claude generations newer than the curated floor", () => {
     // Successors of the Claude 4.6 trio that Google removes on 2026-11-02.
     expect(isDiscoverableModelId("claude-sonnet-5-5")).toBe(true);
