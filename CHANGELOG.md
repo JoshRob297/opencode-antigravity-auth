@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A quota window with a future reset was treated as exhausted.** The cached-quota
+  check only looked at `resetTime`, so any group whose reset had not happened yet
+  counted as drained. Weekly-only buckets (Gemini 4 Argon) always carry a future
+  reset, which kept the model blocked for the whole window while reporting
+  `quota exhausted (100% remaining, resets at ~07:24, in 168.0h)`. The group now
+  counts as drained only when `remainingFraction` is at or below
+  `QUOTA_EXHAUSTED_EPSILON` (0.01), and a missing fraction fails open: an
+  unmeasured window is unknown, not empty. The same criterion drives the wait-time
+  calculation so the message and the decision cannot disagree.
+
 ## [2.9.1] - 2026-11-13
 
 ### Fixed
