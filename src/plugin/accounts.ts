@@ -39,6 +39,33 @@ export const MAX_RPM_RETRY_AFTER_MS = 60_000;
 const DEFAULT_QUOTA_CACHE_TTL_MS = 10 * 60 * 1000;
 
 /**
+ * A cached quota group only counts as drained when its remaining fraction is at
+ * or below this margin.
+ *
+ * The backend reports float noise (e.g. 0.9999999) and weekly-only buckets
+ * (Gemini 4 Argon) always carry a resetTime in the future, so gating exhaustion
+ * on resetTime alone declared the model blocked for the whole window even at
+ * 100% remaining. The margin still flags a truly empty bucket as dry.
+ */
+const QUOTA_EXHAUSTED_EPSILON = 0.01;
+
+/**
+ * Remaining fraction of a cached quota group when it is actually exhausted.
+ *
+ * Returns `undefined` when the group still has quota OR when the data is
+ * missing: an unmeasured window is unknown, not empty, so callers must fail
+ * open instead of turning a whole model off.
+ */
+function exhaustedRemainingFraction(groupData: QuotaGroupSummary | undefined): number | undefined {
+  const fraction = groupData?.remainingFraction;
+  if (typeof fraction !== "number" || !Number.isFinite(fraction)) {
+    return undefined;
+  }
+  const clamped = Math.max(0, Math.min(1, fraction));
+  return clamped <= QUOTA_EXHAUSTED_EPSILON ? clamped : undefined;
+}
+
+/**
  * Generate a random jitter value for backoff timing.
  * Helps prevent thundering herd problem when multiple clients retry simultaneously.
  */
@@ -1115,7 +1142,9 @@ export class AccountManager {
 
       const quotaGroup = resolveQuotaGroup(family, model);
       const groupData = a.cachedQuota?.[quotaGroup];
-      if (groupData?.resetTime) {
+      // Same criterion as getAllBlockedReasons: a future resetTime only counts
+      // as wait time when the group is actually drained.
+      if (groupData?.resetTime && exhaustedRemainingFraction(groupData) !== undefined) {
         const resetMs = new Date(groupData.resetTime).getTime();
         if (resetMs > now) waitTimes.push(resetMs - now);
       }
@@ -1177,10 +1206,13 @@ export class AccountManager {
         };
       }
 
-      // Check soft quota / exhausted cached quota
+      // Check soft quota / exhausted cached quota. A future resetTime alone is
+      // not exhaustion (weekly-only buckets always have one), so the group must
+      // be drained for this reason to apply.
       const quotaGroup = resolveQuotaGroup(family, model);
       const groupData = a.cachedQuota?.[quotaGroup];
-      if (groupData?.resetTime) {
+      const exhaustedFraction = exhaustedRemainingFraction(groupData);
+      if (groupData?.resetTime && exhaustedFraction !== undefined) {
         const resetMs = new Date(groupData.resetTime).getTime();
         if (resetMs > now) {
           const remainingMs = resetMs - now;
@@ -1191,10 +1223,9 @@ export class AccountManager {
             ? `${Math.ceil(remSec / 60)}m`
             : `${remSec}s`;
           const resetDate = new Date(resetMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const remainingFrac = groupData.remainingFraction ?? 0;
           return {
             email: label,
-            reason: `quota exhausted (${(remainingFrac * 100).toFixed(0)}% remaining, resets at ~${resetDate}, in ${durationStr})`,
+            reason: `quota exhausted (${(exhaustedFraction * 100).toFixed(0)}% remaining, resets at ~${resetDate}, in ${durationStr})`,
             waitMs: remainingMs,
           };
         }

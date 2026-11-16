@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccountManager, type ModelFamily, type HeaderStyle, parseRateLimitReason, calculateBackoffMs, type RateLimitReason, resolveQuotaGroup } from "./accounts";
 import type { AccountStorageV4 } from "./storage";
@@ -2061,6 +2061,91 @@ describe("AccountManager", () => {
       expect(reasons[2]?.waitMs).toBeNull();
 
       vi.useRealTimers();
+    });
+  });
+
+  describe("cached quota exhaustion gate", () => {
+    const nowValue = new Date("2026-11-16T10:00:00Z").getTime();
+    const weeklyReset = new Date("2026-11-23T07:24:00Z").toISOString();
+
+    function managerWithArgonQuota(
+      quota: { remainingFraction?: number; resetTime?: string },
+      extra: { coolingDownUntil?: number; cooldownReason?: "network-error" } = {},
+    ): AccountManager {
+      const stored: AccountStorageV4 = {
+        version: 4,
+        accounts: [
+          {
+            email: "joshuaadair.hr@gmail.com",
+            refreshToken: "r1",
+            projectId: "p1",
+            addedAt: 1,
+            lastUsed: 0,
+            ...extra,
+          },
+        ],
+        activeIndex: 0,
+      };
+      const manager = new AccountManager(undefined, stored);
+      manager.updateQuotaCache(0, { argon: quota });
+      return manager;
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(nowValue);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("keeps a weekly-only bucket with quota left available despite a future resetTime", () => {
+      // Gemini 4 Argon only exposes a weekly window, so its resetTime is always
+      // in the future. That alone used to mark the model blocked at 100% left.
+      const manager = managerWithArgonQuota({ remainingFraction: 1, resetTime: weeklyReset });
+
+      expect(manager.getCurrentOrNextForFamily("gemini", "gemini-4-argon-high")).not.toBeNull();
+      expect(manager.getMinWaitTimeForFamily("gemini", "gemini-4-argon-high")).toBe(0);
+
+      const [blocked] = manager.getAllBlockedReasons("gemini", "gemini-4-argon-high");
+      expect(blocked?.reason).not.toContain("quota exhausted");
+      expect(blocked?.waitMs).toBeNull();
+    });
+
+    it("reports quota exhausted when the bucket is actually empty", () => {
+      const manager = managerWithArgonQuota({ remainingFraction: 0, resetTime: weeklyReset });
+
+      const [blocked] = manager.getAllBlockedReasons("gemini", "gemini-4-argon-high");
+      expect(blocked?.reason).toContain("quota exhausted (0% remaining");
+      expect(blocked?.waitMs).toBe(new Date(weeklyReset).getTime() - nowValue);
+    });
+
+    it("fails open when the cached fraction is missing", () => {
+      const manager = managerWithArgonQuota({ resetTime: weeklyReset });
+
+      expect(manager.getCurrentOrNextForFamily("gemini", "gemini-4-argon-high")).not.toBeNull();
+
+      const [blocked] = manager.getAllBlockedReasons("gemini", "gemini-4-argon-high");
+      expect(blocked?.reason).not.toContain("quota exhausted");
+      expect(blocked?.waitMs).toBeNull();
+    });
+
+    it("only counts the cached reset as wait time when the group is drained", () => {
+      const cooldownMs = 60 * 60 * 1000;
+      const quotaReset = new Date(nowValue + 30 * 60 * 1000).toISOString();
+
+      const withQuotaLeft = managerWithArgonQuota(
+        { remainingFraction: 1, resetTime: quotaReset },
+        { coolingDownUntil: nowValue + cooldownMs, cooldownReason: "network-error" },
+      );
+      expect(withQuotaLeft.getMinWaitTimeForFamily("gemini", "gemini-4-argon-high")).toBe(cooldownMs);
+
+      const drained = managerWithArgonQuota(
+        { remainingFraction: 0, resetTime: quotaReset },
+        { coolingDownUntil: nowValue + cooldownMs, cooldownReason: "network-error" },
+      );
+      expect(drained.getMinWaitTimeForFamily("gemini", "gemini-4-argon-high")).toBe(30 * 60 * 1000);
     });
   });
 });
