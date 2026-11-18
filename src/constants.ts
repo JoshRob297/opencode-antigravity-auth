@@ -33,16 +33,21 @@ export const ANTIGRAVITY_REDIRECT_URI = "http://localhost:51121/oauth-callback";
  * then fallback to autopush and prod if needed.
  */
 export const ANTIGRAVITY_ENDPOINT_DAILY = "https://daily-cloudcode-pa.sandbox.googleapis.com";
+/** Daily production host (no `.sandbox`); this is the host the agy CLI logs. */
+export const ANTIGRAVITY_ENDPOINT_DAILY_DIRECT = "https://daily-cloudcode-pa.googleapis.com";
 export const ANTIGRAVITY_ENDPOINT_AUTOPUSH = "https://autopush-cloudcode-pa.sandbox.googleapis.com";
 export const ANTIGRAVITY_ENDPOINT_PROD = "https://cloudcode-pa.googleapis.com";
 
 /**
- * Endpoint fallback order (daily → prod).
- * Note: autopush endpoint has been decommissioned by Google for consumer licenses and responds with 403 #3501.
+ * Endpoint fallback order (daily → prod → sandbox).
+ * The CLI talks to the non-sandbox daily host first; the sandbox stays as the
+ * last resort. Note: autopush has been decommissioned by Google for consumer
+ * licenses and responds with 403 #3501, so it is not part of the list.
  */
 export const ANTIGRAVITY_ENDPOINT_FALLBACKS = [
-  ANTIGRAVITY_ENDPOINT_DAILY,
+  ANTIGRAVITY_ENDPOINT_DAILY_DIRECT,
   ANTIGRAVITY_ENDPOINT_PROD,
+  ANTIGRAVITY_ENDPOINT_DAILY,
 ] as const;
 
 /**

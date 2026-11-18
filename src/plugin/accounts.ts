@@ -270,10 +270,9 @@ function isRateLimitedForQuotaKey(
   if (resetTime === undefined || nowMs() >= resetTime) {
     return false;
   }
-  const remainingMs = resetTime - nowMs();
-  if (remainingMs <= MAX_RPM_RETRY_AFTER_MS) {
-    return true;
-  }
+  // A short reset is normally an RPM guard, but a guard must never switch off
+  // an account that still has quota: when the cached group proves there is
+  // room, the account stays eligible. Missing data still blocks, as before.
   const remaining = getFreshRemainingFraction(account, family, cacheTtlMs, model);
   if (remaining !== undefined && remaining > 0) {
     return false;
@@ -1188,6 +1187,12 @@ export class AccountManager {
       if (family === "gemini" && resetTime === undefined) {
         const fallbackKey = getQuotaKey(family, "antigravity", model);
         resetTime = a.rateLimitResetTimes[fallbackKey];
+      }
+      // Older adapter builds marked the family-wide key with no model. Without
+      // this lookup the account fell through to "temporarily unavailable" even
+      // though a concrete reset was persisted.
+      if (family === "gemini" && resetTime === undefined) {
+        resetTime = a.rateLimitResetTimes[getQuotaKey(family, headerStyle)];
       }
 
       if (resetTime !== undefined && resetTime > now) {
