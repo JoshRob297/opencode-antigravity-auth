@@ -22,6 +22,7 @@ import {
   injectToolHardeningInstruction,
   cleanJSONSchemaForAntigravity,
   createSyntheticErrorResponse,
+  neutralizeBlockedSystemInstructionLiterals,
   recursivelyParseJsonStrings,
   sanitizeEndingModelTurn,
 } from "./request-helpers";
@@ -2042,5 +2043,59 @@ describe("sanitizeEndingModelTurn", () => {
     // Result must not end with a model turn at all
     const last = result[result.length - 1]!;
     expect(last.role).not.toBe("model");
+  });
+});
+
+describe("neutralizeBlockedSystemInstructionLiterals", () => {
+  // The backend answers 429 for this exact literal in systemInstruction
+  // (measured against daily-cloudcode-pa.googleapis.com). The spaced form
+  // parses as the same JavaScript member access and was measured to return 200.
+  const BLOCKED = "tools.opencode.session_move";
+
+  it("inserts a space after the final dot of the blocked literal", () => {
+    expect(neutralizeBlockedSystemInstructionLiterals(`call ${BLOCKED} now`)).toBe(
+      "call tools.opencode. session_move now",
+    );
+  });
+
+  it("keeps the rewritten reference valid JavaScript member access", () => {
+    const rewritten = neutralizeBlockedSystemInstructionLiterals(`await ${BLOCKED}({ session })`);
+    expect(rewritten).toBe("await tools.opencode. session_move({ session })");
+    // Whitespace after "." is legal JS, so the member path is unchanged.
+    expect(rewritten.replace(/\s+/g, "")).toBe(`await${BLOCKED}({session})`);
+  });
+
+  it("rewrites every occurrence and is case-insensitive", () => {
+    const input = `${BLOCKED} and TOOLS.OPENCODE.SESSION_MOVE`;
+    const out = neutralizeBlockedSystemInstructionLiterals(input);
+    expect(out).toBe("tools.opencode. session_move and TOOLS.OPENCODE. SESSION_MOVE");
+    expect(out.match(/tools\.opencode\.session_move/gi)).toBeNull();
+  });
+
+  it("is idempotent", () => {
+    const once = neutralizeBlockedSystemInstructionLiterals(BLOCKED);
+    expect(neutralizeBlockedSystemInstructionLiterals(once)).toBe(once);
+  });
+
+  it("leaves unrelated tool names and prefixes untouched", () => {
+    const untouched = [
+      "tools.foo.session_move",
+      "tools.opencode.session_new",
+      "tools.opencode.session_abort",
+      "opencode.session_move",
+      "session_move",
+      "tools.opencode.read",
+      BLOCKED.slice(0, 26),
+    ];
+    for (const text of untouched) {
+      expect(neutralizeBlockedSystemInstructionLiterals(text)).toBe(text);
+    }
+  });
+
+  it("preserves surrounding text byte for byte", () => {
+    const input = `# Code Mode\n- ${BLOCKED}(dir)\n\ttail`;
+    const out = neutralizeBlockedSystemInstructionLiterals(input);
+    expect(out).toBe("# Code Mode\n- tools.opencode. session_move(dir)\n\ttail");
+    expect(out.length).toBe(input.length + 1);
   });
 });

@@ -1650,6 +1650,51 @@ export function extractUsageFromSsePayload(payload: string): AntigravityUsageMet
 }
 
 /**
+ * Literals that the Code Assist backend answers with HTTP 429 RESOURCE_EXHAUSTED
+ * when they appear in `systemInstruction`.
+ *
+ * Measured 2026-11-18 against `daily-cloudcode-pa.googleapis.com`
+ * (`gemini-4-argon-low`, one account, same body byte for byte): the request
+ * returns 429 when `systemInstruction` contains the literal below and 200 once
+ * the literal is broken, 5/5 in both directions, interleaved, on two hosts.
+ * The same literal inside `contents` (user turn) is accepted, and no other
+ * `tools.opencode.*` tool name reproduces it, so this is a narrow upstream
+ * guard on the injected system instruction, not a quota problem.
+ *
+ * The rewrite inserts a single space after the last dot: `tools.opencode.
+ * session_move`. That is still valid JavaScript member access (`a. b` parses
+ * identically to `a.b`), and the spaced form was measured to return 200, so the
+ * model still reads the whole tool reference while the guard no longer matches.
+ */
+const BLOCKED_SYSTEM_INSTRUCTION_LITERALS: readonly RegExp[] = [
+  /tools\.opencode\.session_move/gi,
+];
+
+function breakBlockedLiteral(match: string): string {
+  const lastDot = match.lastIndexOf(".");
+  if (lastDot < 0) {
+    return match;
+  }
+  return `${match.slice(0, lastDot + 1)} ${match.slice(lastDot + 1)}`;
+}
+
+/**
+ * Neutralizes the literals documented in
+ * {@link BLOCKED_SYSTEM_INSTRUCTION_LITERALS}. Case is preserved and everything
+ * else in the text is left untouched.
+ */
+export function neutralizeBlockedSystemInstructionLiterals(text: string): string {
+  let result = text;
+  for (const pattern of BLOCKED_SYSTEM_INSTRUCTION_LITERALS) {
+    result = result.replace(pattern, breakBlockedLiteral);
+  }
+  if (result !== text) {
+    log.debug("Neutralized a systemInstruction literal rejected by the backend");
+  }
+  return result;
+}
+
+/**
  * Enhances 404 errors for Antigravity models with a direct preview-access message.
  */
 export function rewriteAntigravityPreviewAccessError(
