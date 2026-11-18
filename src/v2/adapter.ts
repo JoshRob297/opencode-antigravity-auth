@@ -19,7 +19,7 @@ import { executeSearch } from "../plugin/search";
 import { createLogger } from "../plugin/logger";
 import { writeRequestAudit } from "../plugin/debug";
 import { aggregateUsage, buildUsageEntry, estimateCapacity, formatUsageReport, readQuotaSnapshots, readUsage, recordUsage } from "../plugin/usage-ledger";
-import { ANTIGRAVITY_PROVIDER_ID } from "../constants";
+import { ANTIGRAVITY_ENDPOINT_FALLBACKS, ANTIGRAVITY_PROVIDER_ID } from "../constants";
 import type { OAuthAuthDetails } from "../plugin/types";
 import {
   prepareAntigravityRequest,
@@ -767,7 +767,12 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         },
         accessToken,
         account.managedProjectId || account.projectId || "default-cli-project",
-        undefined,
+        // This hook rewrites the request itself, so it must apply the same
+        // preferred host as the v1 fallback loop. Left unspecified,
+        // prepareAntigravityRequest defaults to the legacy sandbox host, which
+        // measured 2026-11-18 answers 429 RESOURCE_EXHAUSTED for a pool with
+        // live quota.
+        ANTIGRAVITY_ENDPOINT_FALLBACKS[0],
         "antigravity",
       );
 
@@ -870,7 +875,9 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
             }
           } else if (isRateLimitedOrQuota) {
             // Immediately mark failed account as limited in shared AccountManager & disk cache
-            mgr.markRateLimitedByIndex(meta.accountIndex, 60_000, meta.family, "antigravity");
+            // Scope the cooldown to the model that failed: a 429 on one model
+            // must not write the family-wide key and block every other model.
+            mgr.markRateLimitedByIndex(meta.accountIndex, 60_000, meta.family, "antigravity", meta.modelName);
             // Invalidate cached quota updatedAt so next request refreshes from live backend
             const failedAccountSnap = mgr.getAccounts()[meta.accountIndex];
             if (failedAccountSnap) {
@@ -1063,8 +1070,8 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         // request for the same model family lands on the healthy account.
         const mgr = await getSharedAccountManager();
         if (status === 429 || status === 403) {
-          // Put the failed account on a temporary cooldown for this family
-          mgr.markRateLimitedByIndex(prevIndex, 60_000, family, "antigravity");
+          // Put the failed account on a temporary cooldown for this model only
+          mgr.markRateLimitedByIndex(prevIndex, 60_000, family, "antigravity", meta?.modelName);
         }
         if (isNotFound) {
           // A 404 is proof that the measured catalog was stale for this model;

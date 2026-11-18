@@ -42,6 +42,7 @@ import {
   injectToolHardeningInstruction,
   isThinkingCapableModel,
   normalizeThinkingConfig,
+  neutralizeBlockedSystemInstructionLiterals,
   parseAntigravityApiBody,
   resolveThinkingConfig,
   rewriteAntigravityPreviewAccessError,
@@ -1710,6 +1711,24 @@ export function prepareAntigravityRequest(
               role: "user",
               parts: [{ text: ANTIGRAVITY_SYSTEM_INSTRUCTION }],
             };
+          }
+        }
+
+        // The backend answers 429 for a few literals inside systemInstruction
+        // (see neutralizeBlockedSystemInstructionLiterals). Run it last so the
+        // text we inject and the text OpenCode injects are both covered.
+        const finalSystemInstruction = requestPayload.systemInstruction;
+        if (typeof finalSystemInstruction === "string") {
+          requestPayload.systemInstruction = neutralizeBlockedSystemInstructionLiterals(finalSystemInstruction);
+        } else if (finalSystemInstruction && typeof finalSystemInstruction === "object" && !Array.isArray(finalSystemInstruction)) {
+          const sysParts = (finalSystemInstruction as Record<string, unknown>).parts;
+          if (Array.isArray(sysParts)) {
+            for (const part of sysParts) {
+              if (part && typeof part === "object" && typeof (part as Record<string, unknown>).text === "string") {
+                const sysPart = part as Record<string, unknown>;
+                sysPart.text = neutralizeBlockedSystemInstructionLiterals(sysPart.text as string);
+              }
+            }
           }
         }
 

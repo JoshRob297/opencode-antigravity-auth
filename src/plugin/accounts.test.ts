@@ -136,7 +136,9 @@ describe("AccountManager", () => {
     vi.useRealTimers();
   });
 
-  it("still honors a short RPM cooldown when remainingFraction is positive", () => {
+  it("lets a short RPM cooldown through when remainingFraction is positive", () => {
+    // An RPM guard may not switch off an account that still has quota; that
+    // was the self-rearming block that made the pool look permanently down.
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);
 
@@ -157,7 +159,7 @@ describe("AccountManager", () => {
     };
 
     const manager = new AccountManager(undefined, stored);
-    expect(manager.getCurrentOrNextForFamily("claude")).toBeNull();
+    expect(manager.getCurrentOrNextForFamily("claude")).not.toBeNull();
 
     vi.useRealTimers();
   });
@@ -2062,6 +2064,34 @@ describe("AccountManager", () => {
 
       vi.useRealTimers();
     });
+
+    it("names the cause when only the model-less family key was marked", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(10_000);
+
+      const stored: AccountStorageV4 = {
+        version: 4,
+        accounts: [
+          {
+            email: "user1@example.com",
+            refreshToken: "r1",
+            addedAt: 1,
+            lastUsed: 0,
+            rateLimitResetTimes: { "gemini-antigravity": 70_000 },
+          },
+        ],
+        activeIndex: 0,
+      };
+
+      const manager = new AccountManager(undefined, stored);
+      const [blocked] = manager.getAllBlockedReasons("gemini", "gemini-4-argon-high");
+
+      expect(blocked?.reason).toContain("quota/rate-limited");
+      expect(blocked?.reason).not.toContain("temporarily unavailable");
+      expect(blocked?.waitMs).toBe(60_000);
+
+      vi.useRealTimers();
+    });
   });
 
   describe("cached quota exhaustion gate", () => {
@@ -2129,6 +2159,23 @@ describe("AccountManager", () => {
       const [blocked] = manager.getAllBlockedReasons("gemini", "gemini-4-argon-high");
       expect(blocked?.reason).not.toContain("quota exhausted");
       expect(blocked?.waitMs).toBeNull();
+    });
+
+    it("does not let a short RPM cooldown block a model that still has quota", () => {
+      const manager = managerWithArgonQuota({ remainingFraction: 1, resetTime: weeklyReset });
+      const account = manager.getAccounts()[0]!;
+      manager.markRateLimited(account, 30_000, "gemini", "antigravity", "gemini-4-argon-high");
+
+      expect(manager.getCurrentOrNextForFamily("gemini", "gemini-4-argon-high")).not.toBeNull();
+      expect(manager.getMinWaitTimeForFamily("gemini", "gemini-4-argon-high")).toBe(0);
+    });
+
+    it("still blocks a short RPM cooldown when the model quota is drained", () => {
+      const manager = managerWithArgonQuota({ remainingFraction: 0, resetTime: weeklyReset });
+      const account = manager.getAccounts()[0]!;
+      manager.markRateLimited(account, 30_000, "gemini", "antigravity", "gemini-4-argon-high");
+
+      expect(manager.getCurrentOrNextForFamily("gemini", "gemini-4-argon-high")).toBeNull();
     });
 
     it("only counts the cached reset as wait time when the group is drained", () => {

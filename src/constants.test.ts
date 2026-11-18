@@ -2,8 +2,21 @@ import { describe, it, expect } from "vitest";
 import {
   getRandomizedHeaders,
   ANTIGRAVITY_HEADERS,
+  ANTIGRAVITY_ENDPOINT_DAILY,
+  ANTIGRAVITY_ENDPOINT_FALLBACKS,
+  ANTIGRAVITY_ENDPOINT_PROD,
   type HeaderSet,
 } from "./constants.ts";
+
+describe("ANTIGRAVITY_ENDPOINT_FALLBACKS", () => {
+  it("tries the daily production host first and leaves the sandbox last", () => {
+    expect(ANTIGRAVITY_ENDPOINT_FALLBACKS[0]).toBe("https://daily-cloudcode-pa.googleapis.com");
+    expect(ANTIGRAVITY_ENDPOINT_FALLBACKS).toContain(ANTIGRAVITY_ENDPOINT_PROD);
+    expect(ANTIGRAVITY_ENDPOINT_FALLBACKS[ANTIGRAVITY_ENDPOINT_FALLBACKS.length - 1]).toBe(
+      ANTIGRAVITY_ENDPOINT_DAILY,
+    );
+  });
+});
 
 describe("ANTIGRAVITY_HEADERS", () => {
   it("matches Antigravity header structure", () => {

@@ -1,5 +1,5 @@
 import {
-  ANTIGRAVITY_ENDPOINT_PROD,
+  ANTIGRAVITY_ENDPOINT_FALLBACKS,
   getAntigravityHeaders,
   getAntigravityCliUserAgent,
   ANTIGRAVITY_PROVIDER_ID,
@@ -178,7 +178,7 @@ export async function fetchQuotaSummary(
   accessToken: string,
   projectId?: string,
 ): Promise<CloudCodeQuotaSummaryResponse> {
-  const endpoint = ANTIGRAVITY_ENDPOINT_PROD;
+  const endpoint = ANTIGRAVITY_ENDPOINT_FALLBACKS[0];
   const antigravityHeaders = getAntigravityHeaders();
   const body = projectId ? { project: projectId } : {};
 
@@ -204,7 +204,7 @@ export async function fetchAvailableModels(
   accessToken: string,
   projectId?: string,
 ): Promise<FetchAvailableModelsResponse> {
-  const endpoint = ANTIGRAVITY_ENDPOINT_PROD;
+  const endpoint = ANTIGRAVITY_ENDPOINT_FALLBACKS[0];
   const antigravityHeaders = getAntigravityHeaders();
   const body = projectId ? { project: projectId } : {};
 
