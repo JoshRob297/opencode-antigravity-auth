@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Antigravity answered 429 for every model while the quota report said 100%.**
+  The block was content, not quota: the backend rejects a request whose
+  `systemInstruction` contains the literal `tools.opencode.session_move`, which
+  OpenCode injects in its Code Mode catalog and the plugin forwarded verbatim.
+  Measured with one byte-identical body, interleaved, on both hosts: 200 x5
+  benign, 429 x5 with the literal; case-insensitive, exact substring, only in
+  `systemInstruction` (the same literal in `contents` passes), and only that
+  name out of 19 `tools.opencode.*` tried. The plugin now inserts a space after
+  the last dot, the only rewrite measured at 200 (backticks, `\.`, zero-width
+  and the bracket form gave 429 or 400); it is still valid JavaScript member
+  access.
+- **The model catalog was read from a different host than the one serving
+  requests.** `quota.ts` asked `cloudcode-pa.googleapis.com` while requests went
+  to `daily-cloudcode-pa.googleapis.com`. Aligned, the account went from 7 to 10
+  visible models: Gemini 4 Hydrogen, its sonar and tiered variants, and Gemini 4
+  Neon appeared without any discovery change.
+- **A 60-second speed guard switched off accounts that still had quota.** A short
+  reset window blocked unconditionally, and the adapter marked the family-wide
+  quota key (no model), so one 429 on one model took the whole provider down and
+  the reason fell through to `temporarily unavailable`. The guard now consults
+  the real quota, the adapter marks the model key, and the reason names its
+  cause.
+- **The tier suffix is mandatory in the backend model id.** `gemini-4-hydrogen`
+  answers 404; `gemini-4-hydrogen-medium` answers 200. Documented with the rest
+  of the `agy` 1.5.11 contract in `docs/AGY-CONTRACT.md`.
+
 ### Added
 
 - **Gemini 4 Hydrogen's `xhigh` tier is recognized.** The official CLI 1.5.9
