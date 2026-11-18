@@ -43,6 +43,7 @@ import {
   isThinkingCapableModel,
   normalizeThinkingConfig,
   neutralizeBlockedSystemInstructionLiterals,
+  neutralizeSystemInstructionInPayload,
   parseAntigravityApiBody,
   resolveThinkingConfig,
   rewriteAntigravityPreviewAccessError,
@@ -984,6 +985,9 @@ export function prepareAntigravityRequest(
     try {
       const parsedBody = JSON.parse(baseInit.body) as Record<string, unknown>;
       const isWrapped = typeof parsedBody.project === "string" && "request" in parsedBody;
+
+      // Both shapes carry the literal, and only the unwrapped path used to clean it.
+      neutralizeSystemInstructionInPayload(parsedBody);
 
       // #37: apply the thinking variant (effort) BEFORE resolving the backend model
       // so the selected tier is honored on both wrapped and unwrapped bodies.

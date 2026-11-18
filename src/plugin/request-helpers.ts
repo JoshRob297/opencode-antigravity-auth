@@ -1695,6 +1695,41 @@ export function neutralizeBlockedSystemInstructionLiterals(text: string): string
 }
 
 /**
+ * Applies the blocked-literal neutralization to whichever shape the payload uses.
+ *
+ * A request arrives either unwrapped (`systemInstruction` at the top level) or
+ * already wrapped by a caller (`{ project, request: { systemInstruction } }`).
+ * The unwrapped path neutralized on its own, so a wrapped request still carried
+ * the literal and still earned the 429; this walks both shapes before the split.
+ */
+export function neutralizeSystemInstructionInPayload(payload: Record<string, unknown>): void {
+  const applyTo = (holder: Record<string, unknown>): void => {
+    const value = holder.systemInstruction;
+    if (typeof value === "string") {
+      holder.systemInstruction = neutralizeBlockedSystemInstructionLiterals(value);
+      return;
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const parts = (value as Record<string, unknown>).parts;
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (part && typeof part === "object" && typeof (part as Record<string, unknown>).text === "string") {
+            const concreto = part as Record<string, unknown>;
+            concreto.text = neutralizeBlockedSystemInstructionLiterals(concreto.text as string);
+          }
+        }
+      }
+    }
+  };
+
+  applyTo(payload);
+  const inner = payload.request;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    applyTo(inner as Record<string, unknown>);
+  }
+}
+
+/**
  * Enhances 404 errors for Antigravity models with a direct preview-access message.
  */
 export function rewriteAntigravityPreviewAccessError(

@@ -23,6 +23,7 @@ import {
   cleanJSONSchemaForAntigravity,
   createSyntheticErrorResponse,
   neutralizeBlockedSystemInstructionLiterals,
+  neutralizeSystemInstructionInPayload,
   recursivelyParseJsonStrings,
   sanitizeEndingModelTurn,
 } from "./request-helpers";
@@ -2097,5 +2098,42 @@ describe("neutralizeBlockedSystemInstructionLiterals", () => {
     const out = neutralizeBlockedSystemInstructionLiterals(input);
     expect(out).toBe("# Code Mode\n- tools.opencode. session_move(dir)\n\ttail");
     expect(out.length).toBe(input.length + 1);
+  });
+});
+
+describe("neutralizeSystemInstructionInPayload", () => {
+  const BLOCKED = "tools.opencode.session_move";
+  const SAFE = "tools.opencode. session_move";
+
+  it("cleans the top-level systemInstruction string", () => {
+    const payload: Record<string, unknown> = { systemInstruction: `call ${BLOCKED}` };
+    neutralizeSystemInstructionInPayload(payload);
+    expect(payload.systemInstruction).toBe(`call ${SAFE}`);
+  });
+
+  it("cleans every part of a top-level systemInstruction object", () => {
+    const payload: Record<string, unknown> = {
+      systemInstruction: { parts: [{ text: `a ${BLOCKED}` }, { text: `b ${BLOCKED}` }] },
+    };
+    neutralizeSystemInstructionInPayload(payload);
+    const parts = (payload.systemInstruction as { parts: Array<{ text: string }> }).parts;
+    expect(parts.map((p) => p.text)).toEqual([`a ${SAFE}`, `b ${SAFE}`]);
+  });
+
+  it("cleans a body that arrives already wrapped by the caller", () => {
+    const payload: Record<string, unknown> = {
+      project: "managed-project",
+      request: { systemInstruction: { parts: [{ text: `wrapped ${BLOCKED}` }] } },
+    };
+    neutralizeSystemInstructionInPayload(payload);
+    const request = payload.request as { systemInstruction: { parts: Array<{ text: string }> } };
+    expect(request.systemInstruction.parts[0]?.text).toBe(`wrapped ${SAFE}`);
+  });
+
+  it("leaves a payload without systemInstruction alone", () => {
+    const payload: Record<string, unknown> = { contents: [{ role: "user", parts: [{ text: BLOCKED }] }] };
+    const antes = JSON.stringify(payload);
+    neutralizeSystemInstructionInPayload(payload);
+    expect(JSON.stringify(payload)).toBe(antes);
   });
 });
