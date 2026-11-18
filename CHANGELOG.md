@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **The blocked-literal neutralization skipped bodies that arrive already
+  wrapped.** `request.ts` splits on `isWrapped` and the neutralization lived
+  inside the unwrapped branch, so a caller that already sent an
+  Antigravity-shaped body (`{ project, request: { systemInstruction } }`) kept
+  the literal and kept earning the 429. `neutralizeSystemInstructionInPayload`
+  now walks both shapes before the split. Found by a review A/B between six
+  models, not by a user report.
+
 - **Antigravity answered 429 for every model while the quota report said 100%.**
   The block was content, not quota: the backend rejects a request whose
   `systemInstruction` contains the literal `tools.opencode.session_move`, which
