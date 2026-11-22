@@ -2,6 +2,14 @@ import type { ProviderModel } from "../types";
 
 export type ModelThinkingLevel = "minimal" | "low" | "medium" | "high";
 
+/**
+ * Distinct thinkingBudget sentinel used to represent the `xhigh` tier in OpenCode
+ * variants (since OpenCode's `ModelThinkingLevel` cannot express `xhigh`).
+ * Kept distinct from `high` (24576) and Claude `max` (32768) so the request
+ * resolver maps it unambiguously back to the `-xhigh` backend suffix.
+ */
+export const GEMINI_XHIGH_THINKING_BUDGET = 28672;
+
 export interface ModelThinkingConfig {
   thinkingBudget: number;
 }

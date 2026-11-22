@@ -14,7 +14,17 @@ export * as TieredFamilies from "./tiered-families.js"
  */
 
 /** Order used to lay out the variant picker; unknown tiers follow, alphabetically. */
-const KNOWN_ORDER = ["minimal", "low", "medium", "high", "max"] as const
+const KNOWN_ORDER = ["minimal", "low", "medium", "high", "xhigh", "max"] as const
+
+const TIERED_SUFFIX = /-tiered$/i
+
+function stripRepeatedTieredSuffix(id: string): string {
+  let current = id
+  while (TIERED_SUFFIX.test(current)) {
+    current = current.replace(TIERED_SUFFIX, "")
+  }
+  return current
+}
 
 /** Lower is cheaper. Unknown tiers sort after the known ones. */
 export function compareTiers(a: string, b: string) {
@@ -80,16 +90,20 @@ export function groupTieredFamilies(ids: Iterable<string>): Map<string, string[]
   }
 
   const candidates = new Map<string, Set<string>>()
+  const hasBase = (base: string) => byId.has(base) || byId.has(`${base}-tiered`)
+
   for (const id of byId) {
-    const cut = id.lastIndexOf("-")
+    const withoutTrailingTiered = stripRepeatedTieredSuffix(id)
+    const cut = withoutTrailingTiered.lastIndexOf("-")
     if (cut <= 0) continue
-    const base = id.slice(0, cut)
-    const suffix = id.slice(cut + 1)
+    const rawBase = withoutTrailingTiered.slice(0, cut)
+    const suffix = withoutTrailingTiered.slice(cut + 1)
     if (!/^[a-z][a-z0-9]*$/.test(suffix)) continue
+    const base = stripRepeatedTieredSuffix(rawBase)
     // Only a known tier, or a suffix next to a base the catalog lists on its own,
     // reads as a tier. Without that, `gemini-2.5-flash` and `gemini-2.5-pro` would
     // group as one family with `flash` and `pro` as variants.
-    if (!isKnownTier(suffix) && !byId.has(base)) continue
+    if (!isKnownTier(suffix) && !hasBase(base)) continue
     const set = candidates.get(base) ?? new Set<string>()
     set.add(suffix)
     candidates.set(base, set)
@@ -100,8 +114,8 @@ export function groupTieredFamilies(ids: Iterable<string>): Map<string, string[]
     const ambiguous = [...tiers].some((tier) => !isKnownTier(tier));
     // An unknown suffix is only trusted when the catalog also names the plain base
     // (`hyperion` next to `hyperion-ultra`), never on its own.
-    if (ambiguous && !byId.has(base)) continue;
-    if (tiers.size < 2 && !byId.has(base)) continue;
+    if (ambiguous && !hasBase(base)) continue;
+    if (tiers.size < 2 && !hasBase(base)) continue;
     grouped.set(base, [...tiers].sort(compareTiers))
   }
   return grouped

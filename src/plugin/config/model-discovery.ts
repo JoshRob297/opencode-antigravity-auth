@@ -1,6 +1,6 @@
 import type { OpencodeModelDefinition, OpencodeModelDefinitions, ModelVariant } from "./models";
 import { compareTiers, groupTieredFamilies, rememberTieredFamily } from "./tiered-families.js"
-import { OPENCODE_WHITELIST_MODELS } from "./models";
+import { GEMINI_XHIGH_THINKING_BUDGET, OPENCODE_WHITELIST_MODELS } from "./models";
 import { fetchAvailableModels } from "../quota";
 import { createLogger } from "../logger";
 
@@ -131,29 +131,39 @@ export interface DiscoveredModelMetadata {
 }
 
 function tierOf(id: string): TierName | undefined {
-  const match = TIER_SUFFIX.exec(id);
+  let current = id.trim().toLowerCase();
+  while (TIERED_SUFFIX.test(current)) {
+    current = current.replace(TIERED_SUFFIX, "");
+  }
+  const match = TIER_SUFFIX.exec(current);
   return match ? (match[1]!.toLowerCase() as TierName) : undefined;
 }
 
 /**
  * Canonical family id used to group tier variants. `-tiered` and an explicit
- * tier both collapse onto the plain family id.
+ * tier both collapse onto the plain family id regardless of suffix order.
  */
-function familyIdOf(id: string): string {
-  return id.replace(TIERED_SUFFIX, "").replace(TIER_SUFFIX, "").toLowerCase();
+export function familyIdOf(id: string): string {
+  let current = id.trim().toLowerCase();
+  while (true) {
+    const next = current.replace(TIER_SUFFIX, "").replace(TIERED_SUFFIX, "");
+    if (next === current) return current;
+    current = next;
+  }
 }
 
 /**
  * True when the curated catalog already registers this model (with or without
- * the `-tiered` suffix), so discovery must not add a duplicate entry.
+ * the `-tiered` or tier suffix), so discovery must not add a duplicate entry.
  *
- * This is what keeps `gemini-3.8-flash-tiered` out while still surfacing
- * `gemini-4-argon-tiered`: a model with no curated entry has to stay selectable,
- * otherwise a brand new family would be hidden by a naming detail.
+ * This is what keeps `gemini-3.8-flash-tiered` (and `gemini-3.8-flash-tiered-high`)
+ * out while still surfacing `gemini-4-argon-tiered`: a model with no curated entry
+ * has to stay selectable, otherwise a brand new family would be hidden by a naming detail.
  */
 export function isCoveredByCuratedCatalog(id: string): boolean {
   const curated = new Set(OPENCODE_WHITELIST_MODELS);
-  const candidates = [id, id.replace(TIERED_SUFFIX, ""), familyIdOf(id)];
+  const normalized = id.trim().toLowerCase();
+  const candidates = [normalized, familyIdOf(normalized)];
   return candidates.some((candidate) => curated.has(`antigravity-${candidate}`));
 }
 
@@ -170,15 +180,17 @@ const GEMINI_THINKING_VARIANTS: Record<string, ModelVariant> = {
 };
 
 /**
- * Tiers the backend encodes in the id but OpenCode's `ModelThinkingLevel` cannot
- * express yet. Gemini 4 Hydrogen ships `-xhigh` (the official CLI exposes it as
- * `--effort xhigh` and lists Low|Medium|High|XHigh), but the selector type only
- * knows low|medium|high. The tier is still recognized and stripped so the
- * family groups correctly and nothing is duplicated; it simply is not offered as
- * a picker variant until the type grows the level. `#xhigh` still travels through
- * the launch-model suffix.
+ * Tiers the backend encodes in the id that cannot be mapped onto OpenCode's
+ * picker variants. Currently empty: `xhigh` (shipped by Gemini 4 Hydrogen/Neon
+ * as `-xhigh` and exposed by the official CLI as `--effort xhigh`) cannot be
+ * expressed as `ModelThinkingLevel` (`minimal|low|medium|high`), so it is
+ * declared via `thinkingConfig: { thinkingBudget: GEMINI_XHIGH_THINKING_BUDGET }`
+ * and mapped back to `-xhigh` by the request resolver (same round-trip pattern
+ * as Claude `max`). OpenCode validates `--model ...#<variant>` against
+ * `definition.variants` before launching, so leaving a tier here makes that
+ * variant unavailable.
  */
-const UNMAPPED_TIERS = new Set<string>(["xhigh"]);
+const UNMAPPED_TIERS = new Set<string>();
 
 const CLAUDE_THINKING_VARIANTS: Record<string, ModelVariant> = {
   low: { thinkingConfig: { thinkingBudget: 8192 } },
@@ -284,7 +296,16 @@ export function buildDiscoveredModelDefinition(
       : { ...CLAUDE_THINKING_VARIANTS };
   } else if (!isGptOss) {
     definition.variants = observed
-      ? Object.fromEntries(observed.filter((tier) => !UNMAPPED_TIERS.has(tier)).map((tier) => [tier, { thinkingLevel: tier as "low" | "medium" | "high" }]))
+      ? Object.fromEntries(
+          observed
+            .filter((tier) => !UNMAPPED_TIERS.has(tier))
+            .map((tier) => [
+              tier,
+              tier === "xhigh"
+                ? { thinkingConfig: { thinkingBudget: GEMINI_XHIGH_THINKING_BUDGET } }
+                : { thinkingLevel: tier as "low" | "medium" | "high" },
+            ]),
+        )
       : { ...GEMINI_THINKING_VARIANTS };
   }
 
@@ -340,15 +361,16 @@ export function buildDiscoveredModels(
     let family = familyIdOf(id);
     let tier: string | undefined = tierOf(id);
     let learnedFamily = false;
+    const matchId = id.replace(/-tiered(?=-|$)/gi, "");
     for (const [base, tiers] of learned) {
-      if (id === base) {
+      if (matchId === base) {
         family = base;
         tier = undefined;
         learnedFamily = true;
         break;
       }
-      if (id.startsWith(`${base}-`)) {
-        const suffix = id.slice(base.length + 1);
+      if (matchId.startsWith(`${base}-`)) {
+        const suffix = matchId.slice(base.length + 1);
         if (tiers.includes(suffix)) {
           family = base;
           tier = suffix;

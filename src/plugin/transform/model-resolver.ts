@@ -226,7 +226,7 @@ export function resolveAntigravityGemini38FlashBackendModel(
  * 2026-10-31 on an account with the Argon grant: all three Argon tiers answer 200
  * when the suffix matches the id and the request carries the CLI User-Agent.
  */
-const TIERED_FAMILY_REGEX = /^(gemini-4-argon|claude-(?:sonnet|opus)-5-5)(?:-(low|medium|high|max))?$/i;
+const TIERED_FAMILY_REGEX = /^(gemini-4-(?:argon|hydrogen|neon)|claude-(?:sonnet|opus)-5-5)(?:-(low|medium|high|xhigh|max))?$/i;
 
 export function resolveAntigravityTieredFamilyBackendModel(
   model: string,
@@ -253,7 +253,7 @@ export function resolveAntigravityTieredFamilyBackendModel(
   }
   const base = match[1]!.toLowerCase();
   const isClaude = base.startsWith("claude-");
-  const validLevels = isClaude ? ["low", "medium", "high", "max"] : ["low", "medium", "high"];
+  const validLevels = isClaude ? ["low", "medium", "high", "max"] : ["low", "medium", "high", "xhigh"];
   const requested = (thinkingLevel ?? match[2] ?? "low").toLowerCase();
   const level = validLevels.includes(requested) ? requested : "low";
   return `${base}-${level}`;

@@ -142,6 +142,13 @@ describe("OpenCode v2 Adapter", () => {
     variantHook(claudeThinkingMax);
     expect(claudeThinkingMax.options.thinkingConfig).toEqual({ thinkingBudget: 32768 });
 
+    const geminiXhigh: any = {
+      model: { id: "antigravity-gemini-4-hydrogen", variant: "xhigh" },
+      options: {},
+    };
+    variantHook(geminiXhigh);
+    expect(geminiXhigh.options.thinkingConfig).toEqual({ thinkingBudget: 28672 });
+
     const foreignModel: any = { model: { id: "gemini-2.5-pro", variant: "high" }, options: {} };
     variantHook(foreignModel);
     expect(foreignModel.options.thinkingConfig).toBeUndefined();
