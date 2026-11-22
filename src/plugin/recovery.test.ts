@@ -18,6 +18,23 @@ describe("detectErrorType", () => {
     it("returns null for unrelated messages", () => {
       expect(detectErrorType("Random server error")).toBeNull();
     });
+
+    // Regression: a bare "model turn" substring used to be enough to classify
+    // any session.error as recoverable, so unrelated failures aborted the
+    // session and showed a recovery toast without recovering anything.
+    it("does not treat unrelated mentions of a model turn as recoverable", () => {
+      expect(detectErrorType("Stopped after the model turn limit was reached")).toBeNull();
+      expect(detectErrorType("invalid model turn metadata")).toBeNull();
+      expect(
+        detectErrorType({ error: { message: "Upstream model turn timed out" } }),
+      ).toBeNull();
+    });
+
+    it("still recovers the Gemini 400 wording with surrounding text", () => {
+      expect(
+        detectErrorType({ error: { message: "Request contains unsupported input. Requests ending with a model turn are not supported." } }),
+      ).toBe("model_turn_end");
+    });
   });
 
   describe("tool_result_missing detection", () => {

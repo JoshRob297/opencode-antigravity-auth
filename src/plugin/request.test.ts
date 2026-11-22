@@ -31,6 +31,8 @@ const {
   hasToolUseInMessages,
   hasSignedThinkingInMessages,
   generateSyntheticProjectId,
+  shouldCacheThinkingSignatures,
+  modelForSignatureCacheKey,
   MIN_SIGNATURE_LENGTH,
   transformStreamingPayload,
   createStreamingTransformer,
@@ -1076,6 +1078,81 @@ it("removes x-api-key header", () => {
       expect(result.headerStyle).toBe("antigravity");
     });
 
+    describe("cached content normalization", () => {
+      it("keeps a legitimate camelCase cachedContent instead of deleting it", () => {
+        const result = prepareAntigravityRequest(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: "hi" }] }],
+              cachedContent: "cachedContents/legit-cache-1",
+            }),
+          },
+          mockAccessToken,
+          mockProjectId,
+        );
+
+        const wrapped = JSON.parse(result.init.body as string);
+        expect(wrapped.request.cachedContent).toBe("cachedContents/legit-cache-1");
+        expect(wrapped.request.cached_content).toBeUndefined();
+      });
+
+      it("normalizes a snake_case cached_content into the canonical camelCase field", () => {
+        const result = prepareAntigravityRequest(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: "hi" }] }],
+              cached_content: "cachedContents/legit-cache-2",
+            }),
+          },
+          mockAccessToken,
+          mockProjectId,
+        );
+
+        const wrapped = JSON.parse(result.init.body as string);
+        expect(wrapped.request.cachedContent).toBe("cachedContents/legit-cache-2");
+        expect(wrapped.request.cached_content).toBeUndefined();
+      });
+
+      it("hoists cachedContent out of extra_body and drops the empty extra_body", () => {
+        const result = prepareAntigravityRequest(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: "hi" }] }],
+              extra_body: { cachedContent: "cachedContents/legit-cache-3" },
+            }),
+          },
+          mockAccessToken,
+          mockProjectId,
+        );
+
+        const wrapped = JSON.parse(result.init.body as string);
+        expect(wrapped.request.cachedContent).toBe("cachedContents/legit-cache-3");
+        expect(wrapped.request.extra_body).toBeUndefined();
+      });
+
+      it("omits cachedContent when the request never had one", () => {
+        const result = prepareAntigravityRequest(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          {
+            method: "POST",
+            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "hi" }] }] }),
+          },
+          mockAccessToken,
+          mockProjectId,
+        );
+
+        const wrapped = JSON.parse(result.init.body as string);
+        expect(wrapped.request.cachedContent).toBeUndefined();
+        expect(wrapped.request.cached_content).toBeUndefined();
+      });
+    });
+
     describe("Issue #103: model name transformation during quota fallback", () => {
       it("transforms gemini-3-flash-preview to gemini-3-flash for antigravity headerStyle", () => {
         const result = prepareAntigravityRequest(
@@ -1554,5 +1631,98 @@ describe("T-AGY-TOOLARGS tool schema preservation & SSE streaming regression", (
       offset: 1,
       limit: 150,
     });
+  });
+});
+
+describe("thinking-signature caching for tiered families (4.3b)", () => {
+  it("caches signatures for the Gemini 4 families, not only Gemini 3", () => {
+    expect(shouldCacheThinkingSignatures("gemini-3-pro")).toBe(true);
+    expect(shouldCacheThinkingSignatures("gemini-4-argon-high")).toBe(true);
+    expect(shouldCacheThinkingSignatures("gemini-4-hydrogen-xhigh")).toBe(true);
+    expect(shouldCacheThinkingSignatures("antigravity-gemini-4-argon")).toBe(true);
+    expect(shouldCacheThinkingSignatures("gemini-2.5-flash")).toBe(false);
+    expect(shouldCacheThinkingSignatures(undefined)).toBe(false);
+  });
+
+  it("strips every tier suffix, including -xhigh and -max", () => {
+    for (const tier of ["minimal", "low", "medium", "high", "xhigh", "max"]) {
+      expect(modelForSignatureCacheKey(`gemini-4-argon-${tier}`)).toBe("gemini-4-argon");
+      expect(modelForSignatureCacheKey(`claude-sonnet-5-5-${tier}`)).toBe("claude-sonnet-5-5");
+    }
+    // Ids without a tier are untouched, and so is a tier-like word inside the name.
+    expect(modelForSignatureCacheKey("gemini-4-argon")).toBe("gemini-4-argon");
+    expect(modelForSignatureCacheKey("gemini-4-argon-high-preview")).toBe("gemini-4-argon-high-preview");
+  });
+
+  it("keeps one signature session key per conversation when the tier changes", () => {
+    const sessionKeyFor = (model: string, level: string) => {
+      const result = prepareAntigravityRequest(
+        `https://generativelanguage.googleapis.com/v1beta/models/antigravity-${model}:streamGenerateContent`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            project: "test-project",
+            request: { contents: [{ role: "user", parts: [{ text: "hello there" }] }] },
+            providerOptions: { google: { thinkingLevel: level } },
+          }),
+        },
+        "test-token",
+        "test-project",
+      );
+      return JSON.parse(result.init.body as string).request.sessionId as string;
+    };
+
+    const low = sessionKeyFor("gemini-4-argon", "low");
+    const high = sessionKeyFor("gemini-4-argon", "high");
+    expect(low).toBe(high);
+    expect(low).toContain(":gemini-4-argon:");
+
+    const claudeLow = sessionKeyFor("claude-sonnet-5-5", "low");
+    const claudeMax = sessionKeyFor("claude-sonnet-5-5", "max");
+    expect(claudeLow).toBe(claudeMax);
+    expect(claudeLow).toContain(":claude-sonnet-5-5:");
+  });
+
+  it("keeps the tier out of the key on the unwrapped Gemini contents path too", () => {
+    const sessionKeyFor = (level: string) => {
+      const result = prepareAntigravityRequest(
+        "https://generativelanguage.googleapis.com/v1beta/models/antigravity-gemini-4-argon:streamGenerateContent",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: "hello there" }] }],
+            generationConfig: { thinkingConfig: { includeThoughts: true, thinkingLevel: level } },
+          }),
+        },
+        "test-token",
+        "test-project",
+      );
+      return JSON.parse(result.init.body as string).request.sessionId as string;
+    };
+
+    expect(sessionKeyFor("low")).toBe(sessionKeyFor("high"));
+    expect(sessionKeyFor("low")).toContain(":gemini-4-argon:");
+  });
+
+  it("still separates conversations that differ in model or prompt", () => {
+    const sessionKey = (model: string, text: string) => {
+      const result = prepareAntigravityRequest(
+        `https://generativelanguage.googleapis.com/v1beta/models/antigravity-${model}:streamGenerateContent`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            project: "test-project",
+            request: { contents: [{ role: "user", parts: [{ text }] }] },
+            providerOptions: { google: { thinkingLevel: "high" } },
+          }),
+        },
+        "test-token",
+        "test-project",
+      );
+      return JSON.parse(result.init.body as string).request.sessionId as string;
+    };
+
+    expect(sessionKey("gemini-4-argon", "hello there")).not.toBe(sessionKey("gemini-4-argon", "different prompt"));
+    expect(sessionKey("gemini-4-argon", "hello there")).not.toBe(sessionKey("claude-sonnet-5-5", "hello there"));
   });
 });

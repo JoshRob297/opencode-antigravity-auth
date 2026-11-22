@@ -60,15 +60,11 @@ export const OPENCODE_MODEL_DEFINITIONS: OpencodeModelDefinitions = {
     name: "Claude Sonnet 4.6 (Antigravity)",
     limit: { context: 200000, output: 64000 },
     modalities: DEFAULT_MODALITIES,
-    // NOTE: Sonnet is treated as a non-thinking model (isClaudeThinkingModel requires
-    // "thinking" in the id), so these thinking tiers are currently inert at runtime.
-    // Kept to mirror the previous opencode.json config intent.
-    variants: {
-      low: { thinkingConfig: { thinkingBudget: 8192 } },
-      medium: { thinkingConfig: { thinkingBudget: 16384 } },
-      high: { thinkingConfig: { thinkingBudget: 24576 } },
-      max: { thinkingConfig: { thinkingBudget: 32768 } },
-    },
+    // No variants on purpose. Sonnet 4.6 is non-thinking for this backend: only ids
+    // carrying "thinking" get a budget (isClaudeThinkingModel), and the request path
+    // discards any client-sent thinkingConfig for this model. Advertising tiers here
+    // put four inert entries in the picker, so they were removed instead of being
+    // silently ignored. Adding them back needs a backend id that actually thinks.
   },
   "antigravity-claude-opus-4-6-thinking": {
     name: "Claude Opus 4.6 Thinking (Antigravity)",

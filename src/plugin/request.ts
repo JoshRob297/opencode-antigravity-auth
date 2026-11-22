@@ -115,9 +115,22 @@ function buildSignatureSessionKey(
 function shouldCacheThinkingSignatures(model?: string): boolean {
   if (typeof model !== "string") return false;
   const lower = model.toLowerCase();
-  // Both Claude and Gemini 3 models require thought signature caching
-  // for multi-turn conversations with function calling
-  return lower.includes("claude") || lower.includes("gemini-3");
+  // Claude, Gemini 3 and Gemini 4 families require thought signature caching
+  // for multi-turn conversations with function calling. Gemini 4 tiers live in
+  // the id suffix (`gemini-4-argon-high`), so the prefix check must cover them.
+  return lower.includes("claude") || lower.includes("gemini-3") || lower.includes("gemini-4");
+}
+
+/**
+ * Model component of the signature cache key.
+ *
+ * Tiered families encode the selected tier in the id suffix (`gemini-4-argon-high`,
+ * `claude-sonnet-5-5-max`), while the conversation and its signatures stay the same.
+ * Stripping the suffix keeps one cache entry per conversation across tier changes
+ * instead of orphaning the cached signatures when the user switches effort.
+ */
+function modelForSignatureCacheKey(model: string): string {
+  return model.replace(/-(minimal|low|medium|high|xhigh|max)$/i, "");
 }
 
 function hashConversationSeed(seed: string): string {
@@ -976,7 +989,7 @@ export function prepareAntigravityRequest(
   let tierSuffixLevel = tierThinkingLevel;
   let signatureSessionKey = buildSignatureSessionKey(
     PLUGIN_SESSION_ID,
-    effectiveModel,
+    modelForSignatureCacheKey(effectiveModel),
     undefined,
     resolveProjectKey(projectId),
   );
@@ -1075,7 +1088,7 @@ export function prepareAntigravityRequest(
         const conversationKey = resolveConversationKeyFromRequests(requestObjects);
         // Strip tier suffix from model for cache key to prevent cache misses on tier change
         // e.g., "claude-opus-4-6-thinking-high" -> "claude-opus-4-6-thinking"
-        const modelForCacheKey = effectiveModel.replace(/-(minimal|low|medium|high|xhigh|max)$/i, "");
+        const modelForCacheKey = modelForSignatureCacheKey(effectiveModel);
         signatureSessionKey = buildSignatureSessionKey(PLUGIN_SESSION_ID, modelForCacheKey, conversationKey, resolveProjectKey(parsedBody.project));
 
         if (requestObjects.length > 0) {
@@ -1353,8 +1366,11 @@ export function prepareAntigravityRequest(
           requestPayload.cachedContent = cachedContent;
         }
 
+        // Normalize to the single camelCase field the Antigravity backend accepts.
+        // `cachedContent` itself is legitimate and must survive: only its duplicates
+        // (snake_case at root, or a copy nested inside `extra_body`) are removed, and
+        // only after the value has been hoisted above.
         delete requestPayload.cached_content;
-        delete requestPayload.cachedContent;
         if (requestPayload.extra_body && typeof requestPayload.extra_body === "object") {
           delete (requestPayload.extra_body as Record<string, unknown>).cached_content;
           delete (requestPayload.extra_body as Record<string, unknown>).cachedContent;
@@ -1532,7 +1548,9 @@ export function prepareAntigravityRequest(
         }
 
         const conversationKey = resolveConversationKey(requestPayload);
-        signatureSessionKey = buildSignatureSessionKey(PLUGIN_SESSION_ID, effectiveModel, conversationKey, resolveProjectKey(projectId));
+        // Same tier-stripped key as the wrapped-body path above, so both paths share one
+        // cache entry per conversation instead of breaking it when the tier changes.
+        signatureSessionKey = buildSignatureSessionKey(PLUGIN_SESSION_ID, modelForSignatureCacheKey(effectiveModel), conversationKey, resolveProjectKey(projectId));
 
         // For Claude models, filter out unsigned thinking blocks (required by Claude API)
         // Attempts to restore signatures from cache for multi-turn conversations
@@ -2139,6 +2157,8 @@ export const __testExports = {
   ensureThinkingBeforeToolUseInContents,
   ensureThinkingBeforeToolUseInMessages,
   generateSyntheticProjectId,
+  shouldCacheThinkingSignatures,
+  modelForSignatureCacheKey,
   MIN_SIGNATURE_LENGTH,
   transformSseLine,
   transformStreamingPayload,
