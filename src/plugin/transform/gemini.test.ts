@@ -1476,5 +1476,89 @@ describe("transform/gemini", () => {
       expect(tools[0]).toHaveProperty("functionDeclarations");
       expect(tools[1]).toHaveProperty("googleSearch");
     });
+
+    it("preserves parametersJsonSchema from OpenCode functionDeclarations on Gemini requests", () => {
+      const payload: RequestPayload = {
+        contents: [],
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: "read",
+                description: "Read a file",
+                parametersJsonSchema: {
+                  $schema: "https://json-schema.org/draft/2020-12/schema",
+                  type: "object",
+                  properties: {
+                    path: { type: "string", description: "File path" },
+                    offset: { type: "integer" },
+                    limit: { type: ["integer", "null"] },
+                  },
+                  required: ["path"],
+                  additionalProperties: false,
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = applyGeminiTransforms(payload, { model: "gemini-4-hydrogen-low" });
+      expect(result.toolDebugMissing).toBe(0);
+
+      const tools = payload.tools as Array<Record<string, unknown>>;
+      expect(tools).toHaveLength(1);
+      const decls = tools[0]!.functionDeclarations as Array<Record<string, unknown>>;
+      expect(decls).toHaveLength(1);
+      expect(decls[0]!.name).toBe("read");
+
+      const params = decls[0]!.parameters as Record<string, unknown>;
+      expect(params.type).toBe("OBJECT");
+      expect(params.required).toEqual(["path"]);
+      expect(params).not.toHaveProperty("$schema");
+      expect(params).not.toHaveProperty("additionalProperties");
+
+      const props = params.properties as Record<string, Record<string, unknown>>;
+      expect(props["path"]).toEqual({ type: "STRING", description: "File path" });
+      expect(props["offset"]).toEqual({ type: "INTEGER" });
+      expect(props["limit"]).toEqual({ type: "INTEGER" });
+    });
+
+    it("preserves parametersJsonSchema on standalone/function/custom tools", () => {
+      const payload: RequestPayload = {
+        contents: [],
+        tools: [
+          {
+            name: "glob",
+            description: "Find files",
+            parametersJsonSchema: {
+              type: "object",
+              properties: { pattern: { type: "string" } },
+              required: ["pattern"],
+            },
+          },
+          {
+            function: {
+              name: "grep",
+              description: "Search content",
+              parametersJsonSchema: {
+                type: "object",
+                properties: { query: { type: "string" } },
+                required: ["query"],
+              },
+            },
+          },
+        ],
+      };
+
+      const result = applyGeminiTransforms(payload, { model: "gemini-3.8-flash-low" });
+      expect(result.toolDebugMissing).toBe(0);
+
+      const tools = payload.tools as Array<Record<string, unknown>>;
+      const decls = tools[0]!.functionDeclarations as Array<Record<string, unknown>>;
+      expect(decls.map((d) => d.name)).toEqual(["glob", "grep"]);
+      expect((decls[0]!.parameters as Record<string, unknown>).required).toEqual(["pattern"]);
+      expect((decls[1]!.parameters as Record<string, unknown>).required).toEqual(["query"]);
+    });
   });
 });

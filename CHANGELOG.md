@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.9.6
+
+### Fixed
+
+- **Los modelos Gemini llamaban a las herramientas sin argumentos.** OpenCode 2.3.2 envia las
+  definiciones bajo `tools[0].functionDeclarations[].parametersJsonSchema`. El camino Claude ya
+  leia ese campo; el camino Gemini lo ignoraba y reemplazaba el esquema por
+  `{ type: "OBJECT", properties: {} }`, asi que el modelo veia herramientas sin parametros y
+  llamaba a `read` sin `path`. Se extrae y normaliza en `normalizeGeminiTools` y
+  `wrapToolsAsFunctionDeclarations`. Detalle en `docs/TOOL-ARGS.md`.
+
 ## [Unreleased]
 
 ### Fixed
