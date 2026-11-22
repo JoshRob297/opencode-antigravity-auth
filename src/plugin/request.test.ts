@@ -1316,3 +1316,156 @@ describe("tiered families from discovery (Gemini 4 Argon / Claude 5.5)", () => {
     expect(headers.get("User-Agent")).toMatch(/^antigravity\/cli\//);
   });
 });
+
+describe("T-AGY-TOOLARGS tool schema preservation & SSE streaming regression", () => {
+  it("preserves functionDeclarations[].parametersJsonSchema through prepareAntigravityRequest for Gemini models", () => {
+    const bodyPayload = {
+      contents: [{ role: "user", parts: [{ text: "Read INSTRUCCIONES.md" }] }],
+      tools: [
+        {
+          functionDeclarations: [
+            {
+              name: "read",
+              description: "Read a file",
+              parametersJsonSchema: {
+                $schema: "https://json-schema.org/draft/2020-12/schema",
+                type: "object",
+                properties: {
+                  path: { type: "string", description: "Path to file" },
+                  offset: { type: "integer" },
+                  limit: { type: "integer" },
+                },
+                required: ["path"],
+                additionalProperties: false,
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    for (const model of ["antigravity-gemini-4-hydrogen", "antigravity-gemini-3.8-flash", "antigravity-gemini-4-argon"]) {
+      const prepared = prepareAntigravityRequest(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent`,
+        { method: "POST", body: JSON.stringify(bodyPayload) },
+        "test-token",
+        "test-project",
+      );
+
+      expect(prepared.toolDebugMissing).toBe(0);
+      const parsed = JSON.parse(prepared.init.body as string);
+      const decls = parsed.request.tools[0].functionDeclarations;
+      expect(decls).toHaveLength(1);
+      expect(decls[0].name).toBe("read");
+      expect(decls[0].parameters.type).toBe("OBJECT");
+      expect(decls[0].parameters.required).toEqual(["path"]);
+      expect(decls[0].parameters.properties.path).toEqual({
+        type: "STRING",
+        description: "Path to file",
+      });
+      expect(decls[0].parameters.properties.offset).toEqual({ type: "INTEGER" });
+      expect(decls[0].parameters.properties.limit).toEqual({ type: "INTEGER" });
+    }
+  });
+
+  it("preserves complete functionCall args when SSE stream splits payload across multiple chunks/deltas", async () => {
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    const thoughtEvent = `data: ${JSON.stringify({
+      response: {
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [{ thought: true, text: "Let me read the file." }],
+            },
+          },
+        ],
+      },
+    })}\n\n`;
+
+    const fullToolLine = `data: ${JSON.stringify({
+      response: {
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                {
+                  functionCall: {
+                    name: "read",
+                    args: {
+                      path: "runs/hydrogen/t1_defectos/r3/INSTRUCCIONES.md",
+                      offset: 1,
+                      limit: 150,
+                    },
+                  },
+                },
+              ],
+            },
+            finishReason: "STOP",
+          },
+        ],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 },
+      },
+    })}\n\n`;
+
+    const split1 = fullToolLine.indexOf("t1_defectos");
+    const split2 = fullToolLine.indexOf('"limit"');
+    const chunk1 = thoughtEvent + fullToolLine.slice(0, split1);
+    const chunk2 = fullToolLine.slice(split1, split2);
+    const chunk3 = fullToolLine.slice(split2);
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(chunk1));
+        controller.enqueue(encoder.encode(chunk2));
+        controller.enqueue(encoder.encode(chunk3));
+        controller.close();
+      },
+    });
+
+    const upstream = new Response(stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const transformed = await transformAntigravityResponse(
+      upstream,
+      true,
+      undefined,
+      "antigravity-gemini-4-hydrogen",
+      "test-project",
+      "https://daily-cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
+      "gemini-4-hydrogen-low",
+      "ses-toolargs-sse",
+    );
+
+    const reader = transformed.body!.getReader();
+    let output = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) output += decoder.decode(value, { stream: true });
+    }
+    output += decoder.decode();
+
+    const events = output
+      .split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => JSON.parse(line.slice(5).trim()));
+
+    const toolEvent = events.find((ev) =>
+      ev?.candidates?.[0]?.content?.parts?.some((p: any) => p?.functionCall),
+    );
+    expect(toolEvent).toBeDefined();
+    const fnCall = toolEvent.candidates[0].content.parts.find((p: any) => p?.functionCall).functionCall;
+    expect(fnCall.name).toBe("read");
+    expect(fnCall.args).toEqual({
+      path: "runs/hydrogen/t1_defectos/r3/INSTRUCCIONES.md",
+      offset: 1,
+      limit: 150,
+    });
+  });
+});

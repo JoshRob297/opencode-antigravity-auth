@@ -78,6 +78,13 @@ export function toGeminiSchema(schema: unknown): unknown {
     if (key === "type" && typeof value === "string") {
       // Convert type to uppercase for Gemini API
       result[key] = value.toUpperCase();
+    } else if (key === "type" && Array.isArray(value)) {
+      // JSON Schema 2020-12 (e.g. Zod .nullable()) emits type arrays like ["string", "null"];
+      // Gemini's Schema.type protobuf field only accepts a single Type enum string.
+      const nonNull = value.find((v) => typeof v === "string" && v !== "null");
+      if (typeof nonNull === "string") {
+        result[key] = nonNull.toUpperCase();
+      }
     } else if (key === "properties" && typeof value === "object" && value !== null) {
       // Recursively transform nested property schemas
       const props: Record<string, unknown> = {};
@@ -241,9 +248,37 @@ export function normalizeGeminiTools(
   payload.tools = (payload.tools as unknown[]).map((tool: unknown, toolIndex: number) => {
     const t = tool as Record<string, unknown>;
 
-    // Skip normalization for Google Search tools (both old and new API)
-    if (t.googleSearch || t.googleSearchRetrieval) {
+    // Skip normalization for Google Search and Code Execution passthrough tools
+    if (t.googleSearch || t.googleSearchRetrieval || t.codeExecution) {
       return t;
+    }
+
+    // OpenCode / @ai-sdk/google v2 sends tools pre-grouped in `functionDeclarations`
+    // with schemas under `parametersJsonSchema` (instead of `parameters`).
+    if (Array.isArray(t.functionDeclarations)) {
+      const normalizedDecls = (t.functionDeclarations as Record<string, unknown>[]).map((decl, declIdx) => {
+        const rawSchema =
+          decl?.parameters ||
+          decl?.parametersJsonSchema ||
+          decl?.input_schema ||
+          decl?.inputSchema;
+        const schemaOk = rawSchema && typeof rawSchema === "object" && !Array.isArray(rawSchema);
+        if (!schemaOk) {
+          toolDebugMissing += 1;
+        }
+        const normalizedSchema = schemaOk
+          ? (toGeminiSchema(rawSchema) as Record<string, unknown>)
+          : placeholderSchema;
+        const declName = String(decl?.name || `tool-${declIdx}`);
+        toolDebugSummaries.push(
+          `idx=${toolIndex}.${declIdx}, decl=${declName}, hasSchema=${schemaOk ? "y" : "n"}`,
+        );
+        return {
+          ...decl,
+          parameters: normalizedSchema,
+        };
+      });
+      return { ...t, functionDeclarations: normalizedDecls };
     }
 
     const newTool = { ...t };
@@ -251,10 +286,13 @@ export function normalizeGeminiTools(
     const schemaCandidates = [
       (newTool.function as Record<string, unknown> | undefined)?.input_schema,
       (newTool.function as Record<string, unknown> | undefined)?.parameters,
+      (newTool.function as Record<string, unknown> | undefined)?.parametersJsonSchema,
       (newTool.function as Record<string, unknown> | undefined)?.inputSchema,
       (newTool.custom as Record<string, unknown> | undefined)?.input_schema,
       (newTool.custom as Record<string, unknown> | undefined)?.parameters,
+      (newTool.custom as Record<string, unknown> | undefined)?.parametersJsonSchema,
       newTool.parameters,
+      newTool.parametersJsonSchema,
       newTool.input_schema,
       newTool.inputSchema,
     ].filter(Boolean);
@@ -314,7 +352,7 @@ export function normalizeGeminiTools(
         input_schema: schema,
       };
 
-      if (!newTool.parameters && !newTool.input_schema && !newTool.inputSchema) {
+      if (!newTool.parameters && !newTool.parametersJsonSchema && !newTool.input_schema && !newTool.inputSchema) {
         newTool.parameters = schema;
       }
     }
@@ -504,7 +542,13 @@ export function wrapToolsAsFunctionDeclarations(payload: RequestPayload): WrapTo
     if (tool.functionDeclarations) {
       if (Array.isArray(tool.functionDeclarations)) {
         for (const decl of tool.functionDeclarations as Array<Record<string, unknown>>) {
-          const rawParams = (decl.parameters as Record<string, unknown>) || { type: "OBJECT", properties: {} };
+          const rawParams = (
+            decl.parameters ||
+            decl.parametersJsonSchema ||
+            decl.input_schema ||
+            decl.inputSchema ||
+            { type: "OBJECT", properties: {} }
+          ) as Record<string, unknown>;
           functionDeclarations.push({
             name: String(decl.name || `tool-${functionDeclarations.length}`),
             description: String(decl.description || ""),
@@ -535,10 +579,13 @@ export function wrapToolsAsFunctionDeclarations(payload: RequestPayload): WrapTo
     const schema = (
       fn?.input_schema ||
       fn?.parameters ||
+      fn?.parametersJsonSchema ||
       fn?.inputSchema ||
       custom?.input_schema ||
       custom?.parameters ||
+      custom?.parametersJsonSchema ||
       tool.parameters ||
+      tool.parametersJsonSchema ||
       tool.input_schema ||
       tool.inputSchema ||
       { type: "OBJECT", properties: {} }
