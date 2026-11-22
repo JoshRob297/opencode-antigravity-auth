@@ -1521,7 +1521,7 @@ describe("transform/gemini", () => {
       const props = params.properties as Record<string, Record<string, unknown>>;
       expect(props["path"]).toEqual({ type: "STRING", description: "File path" });
       expect(props["offset"]).toEqual({ type: "INTEGER" });
-      expect(props["limit"]).toEqual({ type: "INTEGER" });
+      expect(props["limit"]).toEqual({ type: "INTEGER", nullable: true });
     });
 
     it("preserves parametersJsonSchema on standalone/function/custom tools", () => {
@@ -1559,6 +1559,199 @@ describe("transform/gemini", () => {
       expect(decls.map((d) => d.name)).toEqual(["glob", "grep"]);
       expect((decls[0]!.parameters as Record<string, unknown>).required).toEqual(["pattern"]);
       expect((decls[1]!.parameters as Record<string, unknown>).required).toEqual(["query"]);
+    });
+  });
+
+  describe("toGeminiSchema - strict allowlist & nullable unions (T-AGY-SCHEMA-297)", () => {
+    it("strips exclusiveMinimum, additionalProperties, $schema, patternProperties and other disallowed keys recursively on a tool while preserving description, type, properties and allowed fields", () => {
+      const payload: RequestPayload = {
+        contents: [],
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: "range_tool",
+                description: "Tool with strict JSON Schema 2020-12 constraints",
+                parametersJsonSchema: {
+                  $schema: "https://json-schema.org/draft/2020-12/schema",
+                  $id: "urn:tool:range",
+                  type: "object",
+                  description: "Root parameters",
+                  additionalProperties: false,
+                  patternProperties: { "^meta_": { type: "string" } },
+                  minProperties: 1,
+                  maxProperties: 5,
+                  propertyOrdering: ["count", "tags"],
+                  properties: {
+                    count: {
+                      type: "integer",
+                      description: "Positive count",
+                      exclusiveMinimum: 0,
+                      exclusiveMaximum: 100,
+                      multipleOf: 2,
+                      minimum: 1,
+                      maximum: 99,
+                      default: 1,
+                      example: 2,
+                      examples: [2, 4],
+                      deprecated: true,
+                      readOnly: true,
+                      writeOnly: false,
+                    },
+                    tags: {
+                      type: "array",
+                      description: "Nested items with disallowed keywords",
+                      minItems: 1,
+                      maxItems: 10,
+                      items: {
+                        type: "string",
+                        minLength: 2,
+                        maxLength: 32,
+                        pattern: "^[a-z]+$",
+                        format: "slug",
+                        title: "Tag",
+                        contentEncoding: "utf-8",
+                        contentMediaType: "text/plain",
+                      },
+                    },
+                    choice: {
+                      anyOf: [
+                        { type: "string", const: "auto", examples: ["auto"] },
+                        { type: "object", properties: { mode: { type: "string" } }, additionalProperties: false },
+                      ],
+                    },
+                  },
+                  required: ["count"],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      applyGeminiTransforms(payload, { model: "gemini-4-hydrogen-low" });
+
+      const tools = payload.tools as Array<Record<string, unknown>>;
+      const decls = tools[0]!.functionDeclarations as Array<Record<string, unknown>>;
+      const params = decls[0]!.parameters as Record<string, unknown>;
+
+      const forbiddenKeys = [
+        "$schema",
+        "$id",
+        "additionalProperties",
+        "patternProperties",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "examples",
+        "deprecated",
+        "readOnly",
+        "writeOnly",
+        "minLength",
+        "maxLength",
+        "contentEncoding",
+        "contentMediaType",
+        "const",
+      ];
+
+      const collectSchemaKeys = (node: unknown): string[] => {
+        if (!node || typeof node !== "object") return [];
+        if (Array.isArray(node)) return node.flatMap(collectSchemaKeys);
+        const rec = node as Record<string, unknown>;
+        const keys = Object.keys(rec);
+        for (const [k, v] of Object.entries(rec)) {
+          if (k === "properties" && v && typeof v === "object" && !Array.isArray(v)) {
+            for (const propSchema of Object.values(v as Record<string, unknown>)) {
+              keys.push(...collectSchemaKeys(propSchema));
+            }
+          } else if (k === "items" || k === "anyOf" || k === "allOf" || k === "oneOf") {
+            keys.push(...collectSchemaKeys(v));
+          }
+        }
+        return keys;
+      };
+
+      const allEmittedKeys = collectSchemaKeys(params);
+      for (const forbidden of forbiddenKeys) {
+        expect(allEmittedKeys).not.toContain(forbidden);
+      }
+
+      expect(params.type).toBe("OBJECT");
+      expect(params.description).toBe("Root parameters");
+      expect(params.minProperties).toBe(1);
+      expect(params.maxProperties).toBe(5);
+      expect(params.propertyOrdering).toEqual(["count", "tags"]);
+      expect(params.required).toEqual(["count"]);
+
+      const props = params.properties as Record<string, Record<string, unknown>>;
+      expect(props["count"]).toEqual({
+        type: "INTEGER",
+        description: "Positive count",
+        minimum: 1,
+        maximum: 99,
+        default: 1,
+        example: 2,
+      });
+      expect(props["tags"]).toEqual({
+        type: "ARRAY",
+        description: "Nested items with disallowed keywords",
+        minItems: 1,
+        maxItems: 10,
+        items: {
+          type: "STRING",
+          pattern: "^[a-z]+$",
+          format: "slug",
+          title: "Tag",
+        },
+      });
+      const choice = props["choice"]!.anyOf as Array<Record<string, unknown>>;
+      expect(choice[0]).toEqual({ type: "STRING" });
+      expect(choice[1]).toEqual({ type: "OBJECT", properties: { mode: { type: "STRING" } } });
+    });
+
+    it("translates union type arrays with null into type + nullable: true", () => {
+      const schema = {
+        type: "object",
+        properties: {
+          limit: { type: ["integer", "null"], description: "Max items" },
+          cursor: { type: ["null", "string"] },
+          nested: {
+            type: "array",
+            items: { type: ["number", "null"] },
+          },
+        },
+      };
+
+      const result = toGeminiSchema(schema) as Record<string, unknown>;
+      const props = result.properties as Record<string, Record<string, unknown>>;
+
+      expect(props["limit"]).toEqual({
+        type: "INTEGER",
+        nullable: true,
+        description: "Max items",
+      });
+      expect(props["cursor"]).toEqual({
+        type: "STRING",
+        nullable: true,
+      });
+      expect(props["nested"]).toEqual({
+        type: "ARRAY",
+        items: { type: "NUMBER", nullable: true },
+      });
+    });
+
+    it("defaults to type OBJECT when an object schema has no type after stripping unsupported keywords", () => {
+      expect(toGeminiSchema({ $schema: "https://json-schema.org/draft/2020-12/schema", additionalProperties: false })).toEqual({
+        type: "OBJECT",
+      });
+      expect(toGeminiSchema({ $ref: "#/$defs/Meta", description: "Opaque metadata" })).toEqual({
+        type: "OBJECT",
+        description: "Opaque metadata",
+      });
+      expect(toGeminiSchema({ properties: { ok: { type: "boolean" } } })).toEqual({
+        type: "OBJECT",
+        properties: { ok: { type: "BOOLEAN" } },
+      });
     });
   });
 });

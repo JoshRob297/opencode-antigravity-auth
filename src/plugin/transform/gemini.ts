@@ -15,41 +15,39 @@ const log = createLogger("gemini-transform");
 /**
  * Transform a JSON Schema to Gemini-compatible format.
  * Based on @google/genai SDK's processJsonSchema() function.
- * 
+ *
  * Key transformations:
- * - Converts type values to uppercase (object -> OBJECT)
- * - Removes unsupported fields like additionalProperties, $schema
- * - Recursively processes nested schemas (properties, items, anyOf, etc.)
- * 
+ * - Emits only the 22 fields accepted by Gemini's Protobuf Schema (allowlist)
+ * - Converts type values to uppercase (object -> OBJECT) and type unions with null to nullable: true
+ * - Defaults object schemas without a type (and not anyOf/oneOf/allOf/enum/nullable) to type: "OBJECT"
+ * - Recursively processes nested schemas (properties, items, anyOf, allOf, oneOf)
+ *
  * @param schema - A JSON Schema object or primitive value
  * @returns Gemini-compatible schema
- * 
- * Fields that Gemini API rejects and must be removed from schemas.
- * Antigravity uses strict protobuf-backed JSON validation.
  */
-const UNSUPPORTED_SCHEMA_FIELDS = new Set([
-  "additionalProperties",
-  "$schema",
-  "$id",
-  "$comment",
-  "$ref",
-  "$defs",
-  "definitions",
-  "const",
-  "contentMediaType",
-  "contentEncoding",
-  "if",
-  "then",
-  "else",
-  "not",
-  "patternProperties",
-  "unevaluatedProperties",
-  "unevaluatedItems",
-  "dependentRequired",
-  "dependentSchemas",
-  "propertyNames",
-  "minContains",
-  "maxContains",
+const ALLOWED_SCHEMA_FIELDS = new Set([
+  "properties",
+  "items",
+  "anyOf",
+  "allOf",
+  "oneOf",
+  "type",
+  "format",
+  "description",
+  "nullable",
+  "enum",
+  "required",
+  "minimum",
+  "maximum",
+  "minItems",
+  "maxItems",
+  "minProperties",
+  "maxProperties",
+  "pattern",
+  "title",
+  "default",
+  "example",
+  "propertyOrdering",
 ]);
 
 export function toGeminiSchema(schema: unknown): unknown {
@@ -60,66 +58,112 @@ export function toGeminiSchema(schema: unknown): unknown {
 
   const inputSchema = schema as Record<string, unknown>;
   const result: Record<string, unknown> = {};
+  let nullableFromType = false;
 
   // First pass: collect all property names for required validation
   const propertyNames = new Set<string>();
-  if (inputSchema.properties && typeof inputSchema.properties === "object") {
+  if (
+    inputSchema.properties &&
+    typeof inputSchema.properties === "object" &&
+    !Array.isArray(inputSchema.properties)
+  ) {
     for (const propName of Object.keys(inputSchema.properties as Record<string, unknown>)) {
       propertyNames.add(propName);
     }
   }
 
   for (const [key, value] of Object.entries(inputSchema)) {
-    // Skip unsupported fields that Gemini API rejects
-    if (UNSUPPORTED_SCHEMA_FIELDS.has(key)) {
+    // Drop any keyword not accepted by Gemini's Protobuf Schema
+    if (!ALLOWED_SCHEMA_FIELDS.has(key)) {
       continue;
     }
 
-    if (key === "type" && typeof value === "string") {
-      // Convert type to uppercase for Gemini API
-      result[key] = value.toUpperCase();
-    } else if (key === "type" && Array.isArray(value)) {
-      // JSON Schema 2020-12 (e.g. Zod .nullable()) emits type arrays like ["string", "null"];
-      // Gemini's Schema.type protobuf field only accepts a single Type enum string.
-      const nonNull = value.find((v) => typeof v === "string" && v !== "null");
-      if (typeof nonNull === "string") {
-        result[key] = nonNull.toUpperCase();
-      }
-    } else if (key === "properties" && typeof value === "object" && value !== null) {
-      // Recursively transform nested property schemas
-      const props: Record<string, unknown> = {};
-      for (const [propName, propSchema] of Object.entries(value as Record<string, unknown>)) {
-        props[propName] = toGeminiSchema(propSchema);
-      }
-      result[key] = props;
-    } else if (key === "items" && typeof value === "object") {
-      // Transform array items schema
-      result[key] = toGeminiSchema(value);
-    } else if ((key === "anyOf" || key === "oneOf" || key === "allOf") && Array.isArray(value)) {
-      // Transform union type schemas
-      result[key] = value.map((item) => toGeminiSchema(item));
-    } else if (key === "enum" && Array.isArray(value)) {
-      // Keep enum values as-is
-      result[key] = value;
-    } else if (key === "default" || key === "examples") {
-      // Keep default and examples as-is
-      result[key] = value;
-    } else if (key === "required" && Array.isArray(value)) {
-      // Filter required array to only include properties that exist
-      // This fixes: "parameters.required[X]: property is not defined"
-      if (propertyNames.size > 0) {
-        const validRequired = value.filter((prop) =>
-          typeof prop === "string" && propertyNames.has(prop)
-        );
-        if (validRequired.length > 0) {
-          result[key] = validRequired;
+    if (key === "type") {
+      if (typeof value === "string") {
+        if (value.toLowerCase() === "null") {
+          nullableFromType = true;
+        } else {
+          // Convert type to uppercase for Gemini API
+          result[key] = value.toUpperCase();
         }
-        // If no valid required properties, omit the required field entirely
+      } else if (Array.isArray(value)) {
+        // JSON Schema 2020-12 (e.g. Zod .nullable()) emits type arrays like ["integer", "null"];
+        // Gemini's Schema.type protobuf field only accepts a single Type enum string + nullable: true.
+        if (value.some((v) => typeof v === "string" && v.toLowerCase() === "null")) {
+          nullableFromType = true;
+        }
+        const nonNull = value.find((v) => typeof v === "string" && v.toLowerCase() !== "null");
+        if (typeof nonNull === "string") {
+          result[key] = nonNull.toUpperCase();
+        }
       }
-      // If there are no properties at all, omit required entirely to prevent API rejection
+    } else if (key === "nullable") {
+      if (typeof value === "boolean") {
+        result[key] = value;
+      }
+    } else if (key === "properties") {
+      if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+        // Recursively transform nested property schemas
+        const props: Record<string, unknown> = {};
+        for (const [propName, propSchema] of Object.entries(value as Record<string, unknown>)) {
+          props[propName] = toGeminiSchema(propSchema);
+        }
+        result[key] = props;
+      }
+    } else if (key === "items") {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        // Transform array items schema
+        result[key] = toGeminiSchema(value);
+      } else if (Array.isArray(value) && value.length > 0) {
+        const firstObject = value.find((item) => item && typeof item === "object" && !Array.isArray(item));
+        if (firstObject) {
+          result[key] = toGeminiSchema(firstObject);
+        }
+      }
+    } else if (key === "anyOf" || key === "oneOf" || key === "allOf") {
+      if (Array.isArray(value)) {
+        // Transform union / composition type schemas
+        result[key] = value.map((item) => toGeminiSchema(item));
+      }
+    } else if (key === "enum" || key === "propertyOrdering") {
+      if (Array.isArray(value)) {
+        result[key] = value;
+      }
+    } else if (key === "required") {
+      if (Array.isArray(value)) {
+        // Filter required array to only include properties that exist
+        // This fixes: "parameters.required[X]: property is not defined"
+        if (propertyNames.size > 0) {
+          const validRequired = value.filter((prop) =>
+            typeof prop === "string" && propertyNames.has(prop)
+          );
+          if (validRequired.length > 0) {
+            result[key] = validRequired;
+          }
+          // If no valid required properties, omit the required field entirely
+        }
+        // If there are no properties at all, omit required entirely to prevent API rejection
+      }
     } else {
       result[key] = value;
     }
+  }
+
+  if (nullableFromType) {
+    result.nullable = true;
+  }
+
+  // If an object schema has no explicit type after cleanup (and is not a composition/enum/null-only schema),
+  // default to OBJECT for Gemini Protobuf Schema compatibility.
+  if (
+    !result.type &&
+    !result.anyOf &&
+    !result.oneOf &&
+    !result.allOf &&
+    !result.enum &&
+    !result.nullable
+  ) {
+    result.type = "OBJECT";
   }
 
   // Issue #80: Ensure array schemas have an 'items' field

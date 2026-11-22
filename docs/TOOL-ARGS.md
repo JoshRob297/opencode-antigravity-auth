@@ -86,3 +86,22 @@ Tambien se observo directamente en la sesion de ejecucion (`antigravity-gemini-4
    npm test
    npm run build
    ```
+
+## Palabras clave aceptadas por el backend
+
+### Por que 2.9.6 devolvio HTTP 400 (`Unknown name "exclusiveMinimum"`)
+
+En 2.9.5, `wrapToolsAsFunctionDeclarations` ignoraba `parametersJsonSchema` y enviaba `{ type: "OBJECT", properties: {} }`, por lo que el esquema completo nunca llegaba al backend y la peticion respondia 200. Al corregir 2.9.6 para leer `parametersJsonSchema` y pasarlo por `toGeminiSchema`, los esquemas completos generados por OpenCode / Zod (JSON Schema 2020-12) comenzaron a enviarse a `v1internal`.
+
+`toGeminiSchema` usaba hasta entonces una lista negra (`UNSUPPORTED_SCHEMA_FIELDS`) y copiaba el resto de claves sin filtrar (`result[key] = value`), e incluso preservaba `examples` (plural). Cualquier palabra clave fuera de esa lista negra —en particular `exclusiveMinimum` (observado en `function_declarations[2]`, `[3]` y `[9]`), `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, `examples`, `deprecated`, `readOnly`, `writeOnly`, `discriminator`— pasaba intacta en `request.tools[0].function_declarations[*].parameters`, provocando el rechazo de Protobuf estricto en Cloud Code con HTTP 400 (`Cannot find field`).
+
+### Lista permitida (`ALLOWED_SCHEMA_FIELDS`)
+
+`toGeminiSchema` (`src/plugin/transform/gemini.ts`) aplica ahora una **lista blanca estricta** recursiva en todo el arbol (`properties`, `items`, `anyOf`, `allOf`, `oneOf`). Solo se emiten estas 22 palabras clave del mensaje Protobuf `Schema` de Gemini:
+
+- Estructura y composicion: `properties`, `items`, `anyOf`, `allOf`, `oneOf`
+- Tipo y nulabilidad: `type` (en mayusculas; uniones `["<T>", "null"]` se traducen a `type: "<T>"` + `nullable: true`; objetos sin `type` tras limpiar toman `type: "OBJECT"`), `nullable`
+- Metadatos y formato: `format`, `description`, `title`, `default`, `example` (singular; `examples` plural se descarta), `propertyOrdering`
+- Validacion de valores y estructura: `enum`, `required` (filtrado contra `properties` existentes), `minimum`, `maximum`, `minItems`, `maxItems`, `minProperties`, `maxProperties`, `pattern`
+
+Toda otra clave de JSON Schema (`$schema`, `$id`, `$ref`, `$defs`, `definitions`, `additionalProperties`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `patternProperties`, `propertyNames`, `const`, `examples`, `deprecated`, `readOnly`, `writeOnly`, `if`, `then`, `else`, `not`, `dependentRequired`, `dependentSchemas`, `unevaluatedProperties`, `contentEncoding`, `contentMediaType`, `discriminator`, `minLength`, `maxLength`, etc.) se descarta automaticamente.
