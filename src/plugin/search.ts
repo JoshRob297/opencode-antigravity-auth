@@ -7,11 +7,14 @@
  */
 
 import {
-  ANTIGRAVITY_ENDPOINT,
+  ANTIGRAVITY_ENDPOINT_FALLBACKS,
+  getAntigravityCliUserAgent,
   getAntigravityHeaders,
   SEARCH_MODEL,
   SEARCH_TIMEOUT_MS,
   SEARCH_SYSTEM_INSTRUCTION,
+  SEARCH_THINKING_BUDGET_DEEP,
+  SEARCH_THINKING_BUDGET_FAST,
 } from "../constants";
 import { createLogger } from "./logger";
 
@@ -220,12 +223,24 @@ function parseSearchResponse(data: AntigravitySearchResponse): SearchResult {
  * This makes a SEPARATE API call with only googleSearch/urlContext tools,
  * which is required because these tools cannot be combined with function declarations.
  */
-export async function executeSearch(
+export interface SearchAttemptResult {
+  ok: boolean;
+  formatted: string;
+  status?: number;
+  retryableAccount?: boolean;
+}
+
+export interface SearchCredentials {
+  accessToken: string;
+  projectId: string;
+}
+
+async function executeSearchAttempt(
   args: SearchArgs,
   accessToken: string,
   projectId: string,
   abortSignal?: AbortSignal,
-): Promise<string> {
+): Promise<SearchAttemptResult> {
   const { query, urls, thinking = true } = args;
 
   // Build prompt with optional URLs
@@ -242,6 +257,8 @@ export async function executeSearch(
     tools.push({ urlContext: {} });
   }
 
+  const thinkingBudget = thinking ? SEARCH_THINKING_BUDGET_DEEP : SEARCH_THINKING_BUDGET_FAST;
+
   const requestPayload = {
     systemInstruction: {
       parts: [{ text: SEARCH_SYSTEM_INSTRUCTION }],
@@ -256,6 +273,9 @@ export async function executeSearch(
     generationConfig: {
       temperature: 0,
       topP: 1,
+      thinkingConfig: {
+        thinkingBudget,
+      },
     },
   };
 
@@ -271,8 +291,12 @@ export async function executeSearch(
     },
   };
 
-  // Use non-streaming endpoint for search
-  const url = `${ANTIGRAVITY_ENDPOINT}/v1internal:generateContent`;
+  const headers = {
+    ...getAntigravityHeaders(),
+    "User-Agent": getAntigravityCliUserAgent(),
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  };
 
   log.debug("Executing search", {
     query,
@@ -280,34 +304,130 @@ export async function executeSearch(
     thinking,
   });
 
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        ...getAntigravityHeaders(),
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(wrappedBody),
-      signal: abortSignal ?? AbortSignal.timeout(SEARCH_TIMEOUT_MS),
-    });
+  let lastErrorText = "";
+  let lastStatus: number | undefined;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      log.debug("Search API error", { status: response.status, error: errorText });
-      return `## Search Error\n\nFailed to execute search: ${response.status} ${response.statusText}\n\n${errorText}\n\nPlease try again with a different query.`;
+  for (let i = 0; i < ANTIGRAVITY_ENDPOINT_FALLBACKS.length; i++) {
+    const endpoint = ANTIGRAVITY_ENDPOINT_FALLBACKS[i];
+    const url = `${endpoint}/v1internal:generateContent`;
+    const isLastEndpoint = i === ANTIGRAVITY_ENDPOINT_FALLBACKS.length - 1;
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(wrappedBody),
+        signal: abortSignal ?? AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        lastStatus = response.status;
+        lastErrorText = `Failed to execute search: ${response.status} ${response.statusText}\n\n${errorText}`;
+        log.debug("Search API error", { endpoint, status: response.status, error: errorText });
+
+        const isRetryableEndpoint =
+          response.status === 403 || response.status === 404 || response.status >= 500;
+        if (isRetryableEndpoint && !isLastEndpoint) {
+          continue;
+        }
+
+        const retryableAccount =
+          response.status === 429 || response.status === 401 || response.status === 403;
+        return {
+          ok: false,
+          status: response.status,
+          retryableAccount,
+          formatted: `## Search Error\n\n${lastErrorText}\n\nPlease try again with a different query.`,
+        };
+      }
+
+      const data = (await response.json()) as AntigravitySearchResponse;
+      log.debug("Search response received", { endpoint, hasResponse: !!data.response });
+
+      const result = parseSearchResponse(data);
+      const formatted = formatSearchResult(result);
+      log.debug("Search response formatted", { resultLength: formatted.length });
+      return { ok: true, formatted };
+    } catch (error) {
+      if (abortSignal?.aborted) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          ok: false,
+          retryableAccount: false,
+          formatted: `## Search Error\n\nFailed to execute search: ${message}. Please try again with a different query.`,
+        };
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      lastErrorText = `Failed to execute search: ${message}.`;
+      log.debug("Search execution error", { endpoint, error: message });
+      if (!isLastEndpoint) {
+        continue;
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    status: lastStatus,
+    retryableAccount: false,
+    formatted: `## Search Error\n\n${lastErrorText} Please try again with a different query.`,
+  };
+}
+
+export async function executeSearch(
+  args: SearchArgs,
+  accessToken: string,
+  projectId: string,
+  abortSignal?: AbortSignal,
+): Promise<string> {
+  const result = await executeSearchAttempt(args, accessToken, projectId, abortSignal);
+  return result.formatted;
+}
+
+export async function executeSearchWithRotation<T>(
+  args: SearchArgs,
+  accounts: readonly T[],
+  resolveCredentials: (account: T) => Promise<SearchCredentials | null>,
+  options?: {
+    abortSignal?: AbortSignal;
+    onAccountRateLimit?: (account: T, status?: number) => void;
+    onAccountSuccess?: (account: T) => void;
+  },
+): Promise<string> {
+  let lastErrorFormatted: string | null = null;
+
+  for (const account of accounts) {
+    if (options?.abortSignal?.aborted) {
+      break;
     }
 
-    const data = (await response.json()) as AntigravitySearchResponse;
-    log.debug("Search response received", { hasResponse: !!data.response });
+    const creds = await resolveCredentials(account);
+    if (!creds?.accessToken) {
+      continue;
+    }
 
-    const result = parseSearchResponse(data);
-    const formatted = formatSearchResult(result);
-    log.debug("Search response formatted", { resultLength: formatted.length });
-    return formatted;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    log.debug("Search execution error", { error: message });
-    return `## Search Error\n\nFailed to execute search: ${message}. Please try again with a different query.`;
+    const attempt = await executeSearchAttempt(
+      args,
+      creds.accessToken,
+      creds.projectId,
+      options?.abortSignal,
+    );
+
+    if (attempt.ok) {
+      options?.onAccountSuccess?.(account);
+      return attempt.formatted;
+    }
+
+    lastErrorFormatted = attempt.formatted;
+    if (!attempt.retryableAccount) {
+      return attempt.formatted;
+    }
+    options?.onAccountRateLimit?.(account, attempt.status);
   }
+
+  return (
+    lastErrorFormatted ??
+    "## Search Error\n\nNo valid Antigravity credentials available for search."
+  );
 }

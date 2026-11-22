@@ -12,6 +12,7 @@ import {
 } from "./quota";
 import type { AccountMetadataV3 } from "./storage";
 import type { PluginClient } from "./types";
+import { AccountManager } from "./accounts";
 
 vi.mock("./token", () => ({
   refreshAccessToken: vi.fn(),
@@ -498,6 +499,114 @@ describe("fetchAccountQuotaDetails", () => {
 
     expect(result.status).toBe("error");
     expect(result.error).toBe("String error occurred");
+  });
+
+  it("stores the minimum of fiveHour and weekly in cachedQuota so an account with weekly=0 is not re-selected (3.5)", async () => {
+    const accountA: AccountMetadataV3 = { ...baseAccount, email: "a@test.com", refreshToken: "tokA" };
+    const accountB: AccountMetadataV3 = { ...baseAccount, email: "b@test.com", refreshToken: "tokB" };
+
+    vi.mocked(refreshAccessToken).mockResolvedValueOnce({
+      type: "oauth",
+      access: "access-a",
+      refresh: "tokA|proj1|managed1",
+      expires: Date.now() + 3600000,
+    });
+    vi.mocked(ensureProjectContext).mockResolvedValueOnce({
+      auth: { type: "oauth", access: "access-a", refresh: "tokA|proj1|managed1" },
+      effectiveProjectId: "managed1",
+    });
+
+    const fiveHourReset = new Date(Date.now() + 2 * 3600_000).toISOString();
+    const weeklyReset = new Date(Date.now() + 5 * 86400_000).toISOString();
+
+    global.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          groups: [
+            {
+              displayName: "Gemini Models",
+              buckets: [
+                { window: "5h", remainingFraction: 0.9, resetTime: fiveHourReset },
+                { window: "weekly", remainingFraction: 0, resetTime: weeklyReset },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ) as unknown as typeof fetch;
+
+    const quotaResult = await fetchAccountQuotaDetails(accountA, 0, mockClient);
+    expect(quotaResult.cachedQuota?.["gemini-flash"]?.remainingFraction).toBe(0);
+    expect(quotaResult.cachedQuota?.["gemini-pro"]?.remainingFraction).toBe(0);
+    expect(quotaResult.cachedQuota?.["gemini-flash"]?.resetTime).toBe(weeklyReset);
+
+    const manager = new AccountManager(undefined, {
+      version: 4,
+      activeIndex: 0,
+      accounts: [accountA, accountB],
+    });
+    manager.updateQuotaCache(0, quotaResult.cachedQuota!);
+    manager.updateQuotaCache(1, {
+      "gemini-flash": { remainingFraction: 0.8, resetTime: weeklyReset },
+      "gemini-pro": { remainingFraction: 0.8, resetTime: weeklyReset },
+    });
+
+    // Simulate 429 on Account A; with cachedQuota=0 it must stay blocked and not be re-selected.
+    const accounts = manager.getAccounts();
+    manager.markRateLimited(accounts[0]!, 60_000, "gemini", "antigravity", "gemini-3.8-flash");
+
+    const next = manager.getCurrentOrNextForFamily("gemini", "gemini-3.8-flash", "sticky");
+    expect(next?.index).toBe(1);
+  });
+
+  it("includes 3.8 Flash, Argon, and Claude 5.5 in fetchAvailableModels fallback ALLOWED_PREFIXES (3.5)", async () => {
+    vi.mocked(refreshAccessToken).mockResolvedValueOnce({
+      type: "oauth",
+      access: "access",
+      refresh: "token123",
+      expires: Date.now() + 3600000,
+    });
+
+    vi.mocked(ensureProjectContext).mockResolvedValueOnce({
+      auth: { type: "oauth", access: "access", refresh: "token123" },
+      effectiveProjectId: "p1",
+    });
+
+    global.fetch = vi.fn(async (url: string) => {
+      if (url.includes("retrieveUserQuotaSummary")) {
+        return new Response("Not Found", { status: 404 });
+      }
+      if (url.includes("fetchAvailableModels")) {
+        return new Response(
+          JSON.stringify({
+            models: {
+              "gemini-3.8-flash-high": {
+                displayName: "Gemini 3.8 Flash (High)",
+                quotaInfo: { remainingFraction: 0.65 },
+              },
+              "gemini-4-argon-medium": {
+                displayName: "Gemini 4 Argon (Medium)",
+                quotaInfo: { remainingFraction: 0.45 },
+              },
+              "claude-sonnet-5-5-medium": {
+                displayName: "Claude Sonnet 5.5 (Medium)",
+                quotaInfo: { remainingFraction: 0.35 },
+              },
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const result = await fetchAccountQuotaDetails(baseAccount, 0, mockClient);
+
+    expect(result.status).toBe("ok");
+    expect(result.cachedQuota?.["gemini-flash"]?.remainingFraction).toBe(0.65);
+    expect(result.cachedQuota?.argon?.remainingFraction).toBe(0.45);
+    expect(result.cachedQuota?.claude?.remainingFraction).toBe(0.35);
   });
 });
 

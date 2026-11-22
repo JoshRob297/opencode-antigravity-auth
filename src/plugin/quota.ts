@@ -247,6 +247,17 @@ function applyAccountUpdates(account: AccountMetadataV3, auth: OAuthAuthDetails)
   return changed ? updated : undefined;
 }
 
+function selectLimitingBucket(
+  fiveHour?: BucketQuotaDisplay,
+  weekly?: BucketQuotaDisplay,
+): BucketQuotaDisplay | undefined {
+  if (!fiveHour) return weekly;
+  if (!weekly) return fiveHour;
+  if (weekly.remainingFraction < fiveHour.remainingFraction) return weekly;
+  if (fiveHour.remainingFraction < weekly.remainingFraction) return fiveHour;
+  return weekly.resetTime.getTime() >= fiveHour.resetTime.getTime() ? weekly : fiveHour;
+}
+
 export async function fetchAccountQuotaDetails(
   account: AccountMetadataV3,
   index: number,
@@ -319,7 +330,7 @@ export async function fetchAccountQuotaDetails(
         const cachedQuota: Partial<Record<QuotaGroup, QuotaGroupSummary>> = {};
         for (const g of groups) {
           const groupName = g.displayName.toLowerCase();
-          const bucket = g.fiveHour || g.weekly;
+          const bucket = selectLimitingBucket(g.fiveHour, g.weekly);
           if (bucket) {
             if (groupName.includes("claude") || groupName.includes("gpt")) {
               cachedQuota.claude = {
@@ -382,16 +393,22 @@ export async function fetchAccountQuotaDetails(
       if (!quotaInfo) continue;
 
       const label = info.displayName || modelKey;
-      const lowerLabel = label.toLowerCase();
+      const normalizedLabel = label.toLowerCase().replace(/[-_]/g, " ");
       const ALLOWED_PREFIXES = [
         "gemini 3.1 pro",
         "gemini 3.5 flash",
         "gemini 3.6 flash",
         "gemini 3.7 flash",
+        "gemini 3.8 flash",
+        "gemini 4 argon",
         "claude opus 4.6",
         "claude sonnet 4.6",
+        "claude opus 5.5",
+        "claude sonnet 5.5",
+        "claude opus 5 5",
+        "claude sonnet 5 5",
       ];
-      if (!ALLOWED_PREFIXES.some((p) => lowerLabel.startsWith(p))) {
+      if (!ALLOWED_PREFIXES.some((p) => normalizedLabel.startsWith(p))) {
         continue;
       }
 
@@ -470,28 +487,25 @@ export async function fetchAccountQuotaDetails(
     }
 
     const cachedQuota: Partial<Record<QuotaGroup, QuotaGroupSummary>> = {};
+    const assignMinQuota = (group: QuotaGroup, m: ModelQuotaDisplay) => {
+      const existing = cachedQuota[group];
+      if (!existing || (existing.remainingFraction ?? 1) > m.remainingFraction) {
+        cachedQuota[group] = {
+          remainingFraction: m.remainingFraction,
+          resetTime: m.resetTime.toISOString(),
+        };
+      }
+    };
     for (const m of models) {
       const lower = m.label.toLowerCase();
       if (lower.includes("claude")) {
-        cachedQuota.claude = {
-          remainingFraction: m.remainingFraction,
-          resetTime: m.resetTime.toISOString(),
-        };
+        assignMinQuota("claude", m);
       } else if (lower.includes("argon")) {
-        cachedQuota.argon = {
-          remainingFraction: m.remainingFraction,
-          resetTime: m.resetTime.toISOString(),
-        };
+        assignMinQuota("argon", m);
       } else if (lower.includes("pro")) {
-        cachedQuota["gemini-pro"] = {
-          remainingFraction: m.remainingFraction,
-          resetTime: m.resetTime.toISOString(),
-        };
+        assignMinQuota("gemini-pro", m);
       } else if (lower.includes("flash")) {
-        cachedQuota["gemini-flash"] = {
-          remainingFraction: m.remainingFraction,
-          resetTime: m.resetTime.toISOString(),
-        };
+        assignMinQuota("gemini-flash", m);
       }
     }
 

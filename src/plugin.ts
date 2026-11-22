@@ -3,8 +3,8 @@ import { tool } from "@opencode-ai/plugin";
 import {
   ANTIGRAVITY_DEFAULT_PROJECT_ID,
   ANTIGRAVITY_ENDPOINT_FALLBACKS,
-  ANTIGRAVITY_ENDPOINT_PROD,
   ANTIGRAVITY_PROVIDER_ID,
+  getAntigravityCliUserAgent,
   getAntigravityHeaders,
   type HeaderStyle,
 } from "./constants";
@@ -52,7 +52,7 @@ import { createProactiveRefreshQueue, type ProactiveRefreshQueue } from "./plugi
 import { initLogger, createLogger } from "./plugin/logger";
 import { initHealthTracker, getHealthTracker, initTokenTracker, getTokenTracker } from "./plugin/rotation";
 import { initAntigravityVersion, initAntigravityCliVersion } from "./plugin/version";
-import { executeSearch } from "./plugin/search";
+import { executeSearch, executeSearchWithRotation } from "./plugin/search";
 import type {
   GetAuth,
   LoaderResult,
@@ -446,7 +446,7 @@ function extractVerificationErrorDetails(bodyText: string): {
   };
 }
 
-async function verifyAccountAccess(
+export async function verifyAccountAccess(
   account: {
     refreshToken: string;
     email?: string;
@@ -495,17 +495,16 @@ async function verifyAccountAccess(
 
   const headers: Record<string, string> = {
     ...getAntigravityHeaders(),
+    "User-Agent": getAntigravityCliUserAgent(),
     Authorization: `Bearer ${refreshedAuth.access}`,
     "Content-Type": "application/json",
   };
-  if (projectId) {
-    headers["x-goog-user-project"] = projectId;
-  }
 
   const requestBody = {
-    model: "gemini-3-flash",
+    ...(projectId ? { project: projectId } : {}),
+    model: "gemini-3.8-flash-low",
+    userAgent: "antigravity",
     request: {
-      model: "gemini-3-flash",
       contents: [{ role: "user", parts: [{ text: "ping" }] }],
       generationConfig: { maxOutputTokens: 1, temperature: 0 },
     },
@@ -516,7 +515,7 @@ async function verifyAccountAccess(
 
   let response: Response;
   try {
-    response = await fetch(`${ANTIGRAVITY_ENDPOINT_PROD}/v1internal:streamGenerateContent?alt=sse`, {
+    response = await fetch(`${ANTIGRAVITY_ENDPOINT_FALLBACKS[0]}/v1internal:streamGenerateContent?alt=sse`, {
       method: "POST",
       headers,
       body: JSON.stringify(requestBody),
@@ -1099,9 +1098,6 @@ interface RateLimitState {
 // Key format: `${accountIndex}:${quotaKey}` for per-account-per-quota tracking
 const rateLimitStateByAccountQuota = new Map<string, RateLimitState>();
 
-// Track empty response retry attempts (ported from LLM-API-Key-Proxy)
-const emptyResponseAttempts = new Map<string, number>();
-
 /**
  * Get rate limit backoff with time-window deduplication.
  * 
@@ -1378,17 +1374,58 @@ export const createAntigravityPlugin = (providerId: string) => async (
     async execute(args, ctx) {
       log.debug("Google Search tool called", { query: args.query, urlCount: args.urls?.length ?? 0 });
 
-      // Get current auth context
+      const storage = await loadAccounts();
+      if (storage && storage.accounts.length > 0) {
+        const startIdx = Math.max(0, storage.activeIndex ?? 0) % storage.accounts.length;
+        const rotated = [
+          ...storage.accounts.slice(startIdx),
+          ...storage.accounts.slice(0, startIdx),
+        ].filter((acc) => acc.enabled !== false && !acc.verificationRequired && !!acc.refreshToken);
+
+        if (rotated.length > 0) {
+          return executeSearchWithRotation(
+            {
+              query: args.query,
+              urls: args.urls,
+              thinking: args.thinking,
+            },
+            rotated,
+            async (acc) => {
+              const accountAuth = {
+                type: "oauth" as const,
+                refresh: formatRefreshParts({
+                  refreshToken: acc.refreshToken,
+                  projectId: acc.projectId,
+                  managedProjectId: acc.managedProjectId,
+                }),
+                access: "",
+                expires: 0,
+              };
+              try {
+                const refreshed = await refreshAccessToken(accountAuth, client, providerId);
+                if (!refreshed?.access) return null;
+                return {
+                  accessToken: refreshed.access,
+                  projectId: acc.managedProjectId || acc.projectId || ANTIGRAVITY_DEFAULT_PROJECT_ID,
+                };
+              } catch {
+                return null;
+              }
+            },
+            { abortSignal: ctx.abort },
+          );
+        }
+      }
+
+      // Fallback to single cached auth context when account storage is empty
       const auth = cachedGetAuth ? await cachedGetAuth() : null;
       if (!auth || !isOAuthAuth(auth)) {
         return "Error: Not authenticated with Antigravity. Please run `opencode auth login` to authenticate.";
       }
 
-      // Get access token and project ID
       const parts = parseRefreshParts(auth.refresh);
-      const projectId = parts.managedProjectId || parts.projectId || "unknown";
+      const projectId = parts.managedProjectId || parts.projectId || ANTIGRAVITY_DEFAULT_PROJECT_ID;
 
-      // Ensure we have a valid access token
       let accessToken = auth.access;
       if (!accessToken || accessTokenExpired(auth)) {
         try {
@@ -1548,6 +1585,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
 
           let lastFailure: FailureContext | null = null;
           let lastError: Error | null = null;
+          let emptyResponseAttemptCount = 0;
           const abortSignal = init?.signal ?? undefined;
 
           // Helper to check if request was aborted
@@ -2398,34 +2436,29 @@ export const createAntigravityPlugin = (providerId: string) => async (
                   const bodyText = await clonedForCheck.text();
                   
                   if (isEmptyResponseBody(bodyText)) {
-                    // Track empty response attempts per request
-                    const emptyAttemptKey = `${prepared.sessionId ?? "none"}:${prepared.effectiveModel ?? "unknown"}`;
-                    const currentAttempts = (emptyResponseAttempts.get(emptyAttemptKey) ?? 0) + 1;
-                    emptyResponseAttempts.set(emptyAttemptKey, currentAttempts);
-                    
-                    pushDebug(`empty-response: attempt ${currentAttempts}/${maxAttempts}`);
-                    
-                    if (currentAttempts < maxAttempts) {
+                    emptyResponseAttemptCount += 1;
+
+                    pushDebug(`empty-response: attempt ${emptyResponseAttemptCount}/${maxAttempts}`);
+
+                    if (emptyResponseAttemptCount < maxAttempts) {
                       await showToast(
-                        `Empty response received. Retrying (${currentAttempts}/${maxAttempts})...`,
+                        `Empty response received. Retrying (${emptyResponseAttemptCount}/${maxAttempts})...`,
                         "warning"
                       );
                       await sleep(retryDelayMs, abortSignal);
-                      continue; // Retry the endpoint loop
+                      i -= 1;
+                      continue; // Retry the same endpoint
                     }
-                    
-                    // Clean up and throw after max attempts
-                    emptyResponseAttempts.delete(emptyAttemptKey);
+
                     throw new EmptyResponseError(
                       "antigravity",
                       prepared.effectiveModel ?? "unknown",
-                      currentAttempts,
+                      emptyResponseAttemptCount,
                     );
                   }
-                  
-                  // Clean up successful attempt tracking
-                  const emptyAttemptKeyClean = `${prepared.sessionId ?? "none"}:${prepared.effectiveModel ?? "unknown"}`;
-                  emptyResponseAttempts.delete(emptyAttemptKeyClean);
+
+                  // Reset successful attempt tracking
+                  emptyResponseAttemptCount = 0;
                 }
                 
                 const handleSafetyRatings = async (ratings: import("./plugin/core/streaming/types").SafetyRating[]) => {
@@ -2504,6 +2537,10 @@ export const createAntigravityPlugin = (providerId: string) => async (
                   tokenConsumed = false;
                 }
 
+                if (error instanceof EmptyResponseError) {
+                  throw error;
+                }
+
                 // Handle recoverable thinking errors - retry with forced recovery
                 if (error instanceof Error && error.message === "THINKING_RECOVERY_NEEDED") {
                   // Only retry once with forced recovery to avoid infinite loops
@@ -2579,8 +2616,11 @@ export const createAntigravityPlugin = (providerId: string) => async (
                 break;
               }
             }
+            if (!shouldSwitchAccount) {
+              break;
+            }
             } // end headerStyleLoop
-            
+
             if (shouldSwitchAccount) {
               // Avoid tight retry loops when there's only one account.
               if (accountCount <= 1) {

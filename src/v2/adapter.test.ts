@@ -82,6 +82,10 @@ describe("OpenCode v2 Adapter", () => {
     const searchTool = registeredTools.find((t) => t.id === "google_search");
     expect(searchTool).toBeDefined();
     expect(searchTool?.description).toContain("Google Search");
+    expect(searchTool?.input?.properties?.thinking).toEqual({
+      type: "boolean",
+      description: expect.any(String),
+    });
 
     // Verify tools return structured content { content: ... }
     expect(quotaTool?.input).toBeDefined();
