@@ -61,6 +61,7 @@ import {
   needsThinkingRecovery,
 } from "./thinking-recovery";
 import { sanitizeCrossModelPayloadInPlace } from "./transform/cross-model-sanitizer";
+import { GEMINI_XHIGH_THINKING_BUDGET } from "./config/models";
 import { isGemini3Model, isImageGenerationModel, buildImageGenerationConfig, applyGeminiTransforms } from "./transform";
 import {
   resolveModelWithTier,
@@ -1021,9 +1022,16 @@ export function prepareAntigravityRequest(
         } else if (isTieredFamilyModel) {
           // Budgets are only a fallback for callers that still send them; the
           // tier they encode is the only thing this family understands.
-          tierSuffixLevel = earlyVariantConfig.thinkingBudget <= 8192 ? "low"
-            : earlyVariantConfig.thinkingBudget <= 16384 ? "medium"
-            : earlyVariantConfig.thinkingBudget <= 24576 ? "high" : "max";
+          tierSuffixLevel =
+            earlyVariantConfig.thinkingBudget === GEMINI_XHIGH_THINKING_BUDGET
+              ? "xhigh"
+              : earlyVariantConfig.thinkingBudget <= 8192
+                ? "low"
+                : earlyVariantConfig.thinkingBudget <= 16384
+                  ? "medium"
+                  : earlyVariantConfig.thinkingBudget <= 24576
+                    ? "high"
+                    : "max";
           tierThinkingBudget = undefined;
         } else {
           tierThinkingBudget = earlyVariantConfig.thinkingBudget;
@@ -1067,7 +1075,7 @@ export function prepareAntigravityRequest(
         const conversationKey = resolveConversationKeyFromRequests(requestObjects);
         // Strip tier suffix from model for cache key to prevent cache misses on tier change
         // e.g., "claude-opus-4-6-thinking-high" -> "claude-opus-4-6-thinking"
-        const modelForCacheKey = effectiveModel.replace(/-(minimal|low|medium|high)$/i, "");
+        const modelForCacheKey = effectiveModel.replace(/-(minimal|low|medium|high|xhigh|max)$/i, "");
         signatureSessionKey = buildSignatureSessionKey(PLUGIN_SESSION_ID, modelForCacheKey, conversationKey, resolveProjectKey(parsedBody.project));
 
         if (requestObjects.length > 0) {

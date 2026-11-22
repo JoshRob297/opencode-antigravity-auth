@@ -22,12 +22,25 @@ describe("TieredFamilies.groupTieredFamilies", () => {
     const grouped = groupTieredFamilies(["claude-opus-4-6-thinking", "gemini-3-flash"])
     expect(grouped.size).toBe(0)
   })
+
+  test("collapses -tiered before and after tier without merging distinct sibling models", () => {
+    const grouped = groupTieredFamilies([
+      "gemini-4-hydrogen-low",
+      "gemini-4-hydrogen-high",
+      "gemini-4-hydrogen-tiered-high",
+      "gemini-4-hydrogen-tiered-xhigh",
+      "gemini-4-hydrogen-medium-tiered",
+      "gemini-4-hydrogen-sonar",
+    ])
+    expect(grouped.get("gemini-4-hydrogen")).toEqual(["low", "medium", "high", "xhigh"])
+    expect(grouped.has("gemini-4-hydrogen-tiered")).toBe(false)
+  })
 })
 
 describe("TieredFamilies.compareTiers", () => {
-  test("orders known tiers and keeps unknown ones after them", () => {
-    const tiers = ["high", "ultra", "minimal", "low"].sort(compareTiers)
-    expect(tiers).toEqual(["minimal", "low", "high", "ultra"])
+  test("orders known tiers including xhigh above high and keeps unknown ones after them", () => {
+    const tiers = ["max", "high", "ultra", "minimal", "xhigh", "low"].sort(compareTiers)
+    expect(tiers).toEqual(["minimal", "low", "high", "xhigh", "max", "ultra"])
   })
 })
 

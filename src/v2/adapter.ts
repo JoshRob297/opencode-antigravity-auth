@@ -26,7 +26,7 @@ import {
   transformAntigravityResponse,
   isGenerativeLanguageRequest,
 } from "../plugin/request";
-import { OPENCODE_MODEL_DEFINITIONS, type OpencodeModelDefinitions } from "../plugin/config/models";
+import { GEMINI_XHIGH_THINKING_BUDGET, OPENCODE_MODEL_DEFINITIONS, type OpencodeModelDefinitions } from "../plugin/config/models";
 import { collectDiscoveredModelsFromPool } from "../plugin/config/model-discovery";
 import { buildAccountModelCatalog } from "../plugin/model-entitlements";
 import { updateOpencodeConfig } from "../plugin/config/updater";
@@ -600,7 +600,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
     // `generationConfig.thinkingConfig` at all. The session `context` hook still
     // exposes `model.variant`, and `options` set there are lowered into provider
     // options, so the tier is injected here.
-    const TIER_VARIANTS = new Set(["low", "medium", "high", "max"]);
+    const TIER_VARIANTS = new Set(["low", "medium", "high", "xhigh", "max"]);
     const CLAUDE_BUDGETS: Record<string, number> = {
       low: 8192,
       medium: 16384,
@@ -621,6 +621,12 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
           // Claude with a thinking budget in its id (`-thinking`): the variant is
           // a budget, not a tier suffix.
           event.options.thinkingConfig = { thinkingBudget: CLAUDE_BUDGETS[variant] };
+          return;
+        }
+        if (variant === "xhigh") {
+          // OpenCode's ModelThinkingLevel cannot express `xhigh`, so carry it
+          // via a dedicated budget that the request transform maps back to `-xhigh`.
+          event.options.thinkingConfig = { thinkingBudget: GEMINI_XHIGH_THINKING_BUDGET };
           return;
         }
         // Gemini 3.8 Flash and every tiered family pick the tier from the model

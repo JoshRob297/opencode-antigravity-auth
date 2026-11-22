@@ -95,6 +95,11 @@ never collapse into one model with `flash` and `pro` variants.
 
 > **Gemini 4 ("Argon") needs no plugin release.** Its ids are `gemini-4-argon-{low,medium,high}` and the grant is **per account** (measured 2026-10-31: a `free-tier` account had it, other accounts only received the `gemini-4-argon-disabled` placeholder). It is deliberately not in the curated catalog: enable [`model_discovery`](CONFIGURATION.md#model-discovery) and one `antigravity-gemini-4-argon` entry with `low`/`medium`/`high` variants is registered for the accounts that have it. Requests must carry the CLI User-Agent, which the plugin sets automatically.
 
+### Canonical id vs `-tiered` and `xhigh` round-trip
+
+- **Canonical name wins over `-tiered`:** when the backend lists both `family-<tier>` and `family-tiered-<tier>` (or `family-<tier>-tiered`, such as `gemini-4-hydrogen-high` alongside `gemini-4-hydrogen-tiered-high`), `familyIdOf` and `isCoveredByCuratedCatalog` strip `-tiered` and tier suffixes to a fixed point regardless of suffix order so discovery produces a single entry (`antigravity-gemini-4-hydrogen`) instead of a duplicate `-tiered` row. On the request path, the plain canonical id without `-tiered` (`gemini-4-hydrogen-<tier>`) is preferred over the `-tiered` deployment.
+- **`xhigh` uses a dedicated `thinkingBudget` round-trip:** OpenCode's `ModelThinkingLevel` cannot express `xhigh`, so Gemini families that advertise `-xhigh` declare that variant as `thinkingConfig: { thinkingBudget: 28672 }` (`GEMINI_XHIGH_THINKING_BUDGET`, distinct from `high` = `24576` and Claude `max` = `32768`), ordered directly above `high`, and the request resolver maps `28672` unambiguously back to `-xhigh`.
+
 ---
 
 ## Claude Thinking Budget

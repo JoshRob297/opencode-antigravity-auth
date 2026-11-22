@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.9.8
+
+### Fixed
+
+- **Hydrogen aparecia dos veces en el selector.** `familyIdOf` normalizaba los sufijos en orden
+  fijo, asi que `gemini-4-hydrogen-tiered-high` perdia el nivel y conservaba `-tiered`, entraba como
+  familia propia y se ofrecia como segunda fila. La normalizacion ahora itera hasta punto fijo y
+  `isCoveredByCuratedCatalog` la reutiliza en vez de duplicarla.
+
+### Added
+
+- **`xhigh` como cuarta variante del selector**, arriba de `high`. OpenCode no puede expresarlo como
+  `thinkingLevel`, asi que viaja como `thinkingConfig.thinkingBudget` (28672) y el resolutor lo
+  devuelve al sufijo `-xhigh`, igual que hace el `max` de Claude. `#xhigh` ya no responde
+  "Variant unavailable".
+
 ## 2.9.6
 
 ### Fixed

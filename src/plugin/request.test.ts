@@ -7,6 +7,9 @@ import {
   __testExports,
 } from "./request";
 import { DEFAULT_CONFIG } from "./config";
+import { GEMINI_XHIGH_THINKING_BUDGET } from "./config/models";
+import { buildDiscoveredModels } from "./config/model-discovery";
+import { forgetTieredFamilies } from "./config/tiered-families";
 import { initializeDebug } from "./debug";
 import { SKIP_THOUGHT_SIGNATURE, getAntigravityCliVersion, setAntigravityCliVersion } from "../constants";
 import * as config from "./config";
@@ -1314,6 +1317,43 @@ describe("tiered families from discovery (Gemini 4 Argon / Claude 5.5)", () => {
     const result = prepare("gemini-4-argon", "medium");
     const headers = new Headers(result.init.headers as HeadersInit);
     expect(headers.get("User-Agent")).toMatch(/^antigravity\/cli\//);
+  });
+
+  it("maps GEMINI_XHIGH_THINKING_BUDGET back to the canonical -xhigh backend id", () => {
+    buildDiscoveredModels([
+      "gemini-4-hydrogen-low",
+      "gemini-4-hydrogen-medium",
+      "gemini-4-hydrogen-high",
+      "gemini-4-hydrogen-xhigh",
+      "gemini-4-hydrogen-tiered-high",
+      "gemini-4-hydrogen-tiered-xhigh",
+    ]);
+    try {
+      const wrappedWithBudget = (model: string, thinkingBudget: number) =>
+        prepareAntigravityRequest(
+          `https://generativelanguage.googleapis.com/v1beta/models/antigravity-${model}:streamGenerateContent`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              project,
+              request: {
+                contents: [{ role: "user", parts: [{ text: "hi" }] }],
+                generationConfig: { thinkingConfig: { thinkingBudget } },
+              },
+            }),
+          },
+          token,
+          project,
+        );
+
+      expect(wrappedWithBudget("gemini-4-hydrogen", GEMINI_XHIGH_THINKING_BUDGET).effectiveModel).toBe(
+        "gemini-4-hydrogen-xhigh",
+      );
+      expect(wrappedWithBudget("gemini-4-hydrogen", 24576).effectiveModel).toBe("gemini-4-hydrogen-high");
+      expect(wrappedWithBudget("claude-opus-5-5", 32768).effectiveModel).toBe("claude-opus-5-5-max");
+    } finally {
+      forgetTieredFamilies();
+    }
   });
 });
 

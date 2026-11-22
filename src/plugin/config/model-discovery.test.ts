@@ -6,12 +6,14 @@ vi.mock("../quota", () => ({
 }));
 
 import { fetchAvailableModels } from "../quota";
+import { GEMINI_XHIGH_THINKING_BUDGET } from "./models";
 import {
   DISCOVERY_GEMINI_FLASH_FLOOR,
   buildDiscoveredModelDefinition,
   buildDiscoveredModels,
   collectDiscoveredModels,
   displayNameForModelId,
+  familyIdOf,
   isCoveredByCuratedCatalog,
   isDiscoverableModelId,
 } from "./model-discovery";
@@ -71,26 +73,75 @@ describe("model discovery is forward-only", () => {
     expect(buildDiscoveredModels(["gemini-4-argon"])["antigravity-gemini-4-argon"]).toBeDefined();
   });
 
-  it("groups the Gemini 4 Hydrogen family and keeps xhigh out of the picker", () => {
+  it("groups the Gemini 4 Hydrogen family and exposes xhigh above high", () => {
     // The official CLI ships Hydrogen as Low|Medium|High|XHigh. OpenCode's
-    // ModelThinkingLevel has no `xhigh`, so the tier is still recognized and
-    // stripped from the family id, but it is not offered as a variant.
+    // ModelThinkingLevel has no `xhigh`, so xhigh is declared via a dedicated
+    // thinkingBudget and mapped back to `-xhigh` in the request resolver.
     expect(isDiscoverableModelId("gemini-4-hydrogen-xhigh")).toBe(true);
     expect(isDiscoverableModelId("gemini-4-carbon-high")).toBe(true);
 
+    const discovered = buildDiscoveredModels([
+      "gemini-4-hydrogen-xhigh",
+      "gemini-4-hydrogen-low",
+      "gemini-4-hydrogen-medium",
+      "gemini-4-hydrogen-high",
+    ]);
+
+    expect(Object.keys(discovered)).toEqual(["antigravity-gemini-4-hydrogen"]);
+    const variants = discovered["antigravity-gemini-4-hydrogen"]!.variants!;
+    expect(Object.keys(variants)).toEqual(["low", "medium", "high", "xhigh"]);
+    expect(variants.xhigh).toEqual({
+      thinkingConfig: { thinkingBudget: GEMINI_XHIGH_THINKING_BUDGET },
+    });
+  });
+
+  it("normalizes -tiered to a fixed point regardless of suffix order", () => {
+    // -tiered alone
+    expect(familyIdOf("gemini-4-argon-tiered")).toBe("gemini-4-argon");
+    expect(familyIdOf("gemini-3.8-flash-tiered")).toBe("gemini-3.8-flash");
+    // -tiered before tier
+    expect(familyIdOf("gemini-4-hydrogen-tiered-high")).toBe("gemini-4-hydrogen");
+    expect(familyIdOf("gemini-4-hydrogen-tiered-xhigh")).toBe("gemini-4-hydrogen");
+    // -tiered after tier
+    expect(familyIdOf("gemini-4-hydrogen-high-tiered")).toBe("gemini-4-hydrogen");
+    expect(familyIdOf("gemini-3.8-flash-high-tiered")).toBe("gemini-3.8-flash");
+
+    // Curated catalog check shares the exact same normalizer
+    expect(isCoveredByCuratedCatalog("gemini-3.8-flash-tiered")).toBe(true);
+    expect(isCoveredByCuratedCatalog("gemini-3.8-flash-tiered-high")).toBe(true);
+    expect(isCoveredByCuratedCatalog("gemini-3.8-flash-high-tiered")).toBe(true);
+    expect(isCoveredByCuratedCatalog("gpt-oss-120b-medium")).toBe(true);
+    expect(isCoveredByCuratedCatalog("gemini-4-hydrogen-tiered-high")).toBe(false);
+  });
+
+  it("collapses -tiered variants into a single Hydrogen entry without duplicating -tiered", () => {
     const discovered = buildDiscoveredModels([
       "gemini-4-hydrogen-low",
       "gemini-4-hydrogen-medium",
       "gemini-4-hydrogen-high",
       "gemini-4-hydrogen-xhigh",
+      "gemini-4-hydrogen-tiered-high",
+      "gemini-4-hydrogen-tiered-xhigh",
+      "gemini-4-hydrogen-high-tiered",
+      "gemini-4-hydrogen-sonar",
+      "gemini-3.8-flash-tiered",
+      "gemini-3.8-flash-tiered-high",
     ]);
 
-    expect(Object.keys(discovered)).toEqual(["antigravity-gemini-4-hydrogen"]);
-    expect(Object.keys(discovered["antigravity-gemini-4-hydrogen"]!.variants!).sort()).toEqual([
-      "high",
+    expect(discovered["antigravity-gemini-4-hydrogen-tiered"]).toBeUndefined();
+    expect(discovered["antigravity-gemini-3.8-flash"]).toBeUndefined();
+    expect(discovered["antigravity-gemini-3.8-flash-tiered"]).toBeUndefined();
+    expect(Object.keys(discovered).sort()).toEqual([
+      "antigravity-gemini-4-hydrogen",
+      "antigravity-gemini-4-hydrogen-sonar",
+    ]);
+    expect(Object.keys(discovered["antigravity-gemini-4-hydrogen"]!.variants!)).toEqual([
       "low",
       "medium",
+      "high",
+      "xhigh",
     ]);
+    forgetTieredFamilies();
   });
 
   it("surfaces Claude generations newer than the curated floor", () => {

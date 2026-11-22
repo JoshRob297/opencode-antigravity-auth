@@ -399,6 +399,11 @@ describe("resolveAntigravityTieredFamilyBackendModel", () => {
     expect(resolveAntigravityTieredFamilyBackendModel("claude-sonnet-5-5-medium")).toBe("claude-sonnet-5-5-medium");
   });
 
+  it("appends the selected tier to the Gemini 4 Hydrogen family including xhigh", () => {
+    expect(resolveAntigravityTieredFamilyBackendModel("antigravity-gemini-4-hydrogen", "high")).toBe("gemini-4-hydrogen-high");
+    expect(resolveAntigravityTieredFamilyBackendModel("antigravity-gemini-4-hydrogen", "xhigh")).toBe("gemini-4-hydrogen-xhigh");
+  });
+
   it("ignores everything else", () => {
     expect(resolveAntigravityTieredFamilyBackendModel("antigravity-gemini-3.8-flash", "high")).toBeUndefined();
     expect(resolveAntigravityTieredFamilyBackendModel("claude-sonnet-4-6", "high")).toBeUndefined();
