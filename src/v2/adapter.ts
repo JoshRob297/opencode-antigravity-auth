@@ -554,6 +554,10 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
     accountIndex?: number;
     /** Model requested by this call, used to keep rotation entitlement-aware. */
     modelName?: string;
+    /** URL the request entered `http.request` with (generativelanguage). */
+    url?: string;
+    /** URL we rewrote it to (`<endpoint>/v1internal:<action>`). */
+    rewrittenUrl?: string;
     createdAt: number;
   }
   const pendingBySession = new Map<string, PendingEntry[]>();
@@ -584,10 +588,53 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
   const peekPending = (sessionID: string): PendingEntry | undefined =>
     pendingBySession.get(sessionID)?.[0];
 
-  const dequeuePending = (sessionID: string): PendingEntry | undefined => {
+  /** URL a prepared payload will actually be sent to, when it is known. */
+  const pendingRequestUrl = (prepared: any): string | undefined => {
+    const request = prepared?.request;
+    if (typeof request === "string") return request;
+    if (request && typeof request.url === "string") return request.url;
+    return undefined;
+  };
+
+  /**
+   * `new Request(...)` normalizes its URL, so compare normalized forms on both
+   * sides instead of raw strings.
+   */
+  const normalizePendingUrl = (value: string): string => {
+    try {
+      return new URL(value).href;
+    } catch {
+      return value;
+    }
+  };
+
+  const describePendingUrls = (entry: PendingEntry): string[] =>
+    [entry.url, entry.rewrittenUrl]
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
+      .map(normalizePendingUrl);
+
+  /**
+   * Dequeues the pending entry that belongs to `url`.
+   *
+   * A session can have several requests in flight at once (parallel tool calls,
+   * subagents sharing the session), so blind FIFO dequeuing handed one
+   * response another request's prepared payload: the model, the account and the
+   * recorded usage all came from the wrong call. When the response tells us
+   * which URL it answers, only that entry is consumed; a URL matching nothing
+   * leaves the queue untouched instead of stealing somebody else's metadata.
+   * Without a URL (the retry hook has none) the oldest entry is still used.
+   */
+  const dequeuePending = (sessionID: string, url?: string): PendingEntry | undefined => {
     const queue = pendingBySession.get(sessionID);
     if (!queue || queue.length === 0) return undefined;
-    const entry = queue.shift();
+    let index = 0;
+    if (url) {
+      const wanted = normalizePendingUrl(url);
+      const found = queue.findIndex((entry) => describePendingUrls(entry).includes(wanted));
+      if (found === -1) return undefined;
+      index = found;
+    }
+    const [entry] = queue.splice(index, 1);
     if (queue.length === 0) {
       pendingBySession.delete(sessionID);
     }
@@ -701,6 +748,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
             log.warn(`[v2 routing] No account in the pool is entitled to ${modelName}. Early terminating.`);
             enqueuePending(event.sessionID ?? "default", {
               prepared: { blockedEarly: true, userMessage },
+              url,
               createdAt: Date.now(),
             });
             return;
@@ -730,6 +778,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
               blockedEarly: true,
               userMessage,
             },
+            url,
             createdAt: Date.now(),
           });
           return;
@@ -793,6 +842,8 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         family,
         accountIndex: activeIndex,
         modelName: modelName || prepared.effectiveModel || prepared.requestedModel,
+        url,
+        rewrittenUrl: pendingRequestUrl(prepared),
         createdAt: Date.now(),
       });
       lastAttemptBySession.set(event.sessionID ?? "default", { email: account?.email, accountIndex: activeIndex });
@@ -811,7 +862,12 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
     // Transform inbound SSE responses and extract thinking tokens
     await context.session.hook("http.response", async (event: any) => {
       const sessionKey = event.sessionID ?? "default";
-      const entry = dequeuePending(sessionKey);
+      // The response may or may not carry the request it answers. When it does,
+      // consume exactly that request's entry: several requests can share one
+      // session and a blind FIFO dequeue gave each of them somebody else's
+      // model, account and usage metadata.
+      const responseUrl = typeof event.request?.url === "string" ? event.request.url : undefined;
+      const entry = dequeuePending(sessionKey, responseUrl);
       // Recorded before the `!entry` early return: after a 429 rotation the queue
       // is empty for the attempt that finally succeeds, and that success is
       // exactly the one worth counting.

@@ -43,8 +43,15 @@ describe("OPENCODE_MODEL_DEFINITIONS", () => {
     });
   });
 
-  it("defines (inert) thinking tiers for Claude Sonnet to mirror config intent", () => {
-    expect(getModel("antigravity-claude-sonnet-4-6").variants).toEqual({
+  it("advertises no thinking tiers for Claude Sonnet 4.6, which cannot think", () => {
+    // Sonnet 4.6 is non-thinking for this backend, so the request path discards any
+    // thinkingConfig sent for it. Offering tiers used to put four inert entries in
+    // the picker; they are gone rather than silently ignored (4.1).
+    expect(getModel("antigravity-claude-sonnet-4-6").variants).toBeUndefined();
+  });
+
+  it("still gives the thinking Claude model its four budget tiers", () => {
+    expect(getModel("antigravity-claude-opus-4-6-thinking").variants).toEqual({
       low: { thinkingConfig: { thinkingBudget: 8192 } },
       medium: { thinkingConfig: { thinkingBudget: 16384 } },
       high: { thinkingConfig: { thinkingBudget: 24576 } },

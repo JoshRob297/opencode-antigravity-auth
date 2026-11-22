@@ -72,7 +72,7 @@ function getCapacityBackoffDelay(consecutiveFailures: number): number {
   const index = Math.min(consecutiveFailures, CAPACITY_BACKOFF_TIERS_MS.length - 1);
   return CAPACITY_BACKOFF_TIERS_MS[Math.max(0, index)] ?? 5000;
 }
-const warmupAttemptedSessionIds = new Set<string>();
+const warmupAttemptedSessionIds = new Map<string, number>();
 const warmupSucceededSessionIds = new Set<string>();
 
 // Track if this plugin instance is running in a child session (subagent, background task)
@@ -175,7 +175,7 @@ function trackWarmupAttempt(sessionId: string): boolean {
     return false;
   }
   if (warmupAttemptedSessionIds.size >= MAX_WARMUP_SESSIONS) {
-    const first = warmupAttemptedSessionIds.values().next().value;
+    const first = warmupAttemptedSessionIds.keys().next().value;
     if (first) {
       warmupAttemptedSessionIds.delete(first);
       warmupSucceededSessionIds.delete(first);
@@ -185,12 +185,12 @@ function trackWarmupAttempt(sessionId: string): boolean {
   if (attempts >= MAX_WARMUP_RETRIES) {
     return false;
   }
-  warmupAttemptedSessionIds.add(sessionId);
+  warmupAttemptedSessionIds.set(sessionId, attempts + 1);
   return true;
 }
 
 function getWarmupAttemptCount(sessionId: string): number {
-  return warmupAttemptedSessionIds.has(sessionId) ? 1 : 0;
+  return warmupAttemptedSessionIds.get(sessionId) ?? 0;
 }
 
 function markWarmupSuccess(sessionId: string): void {
@@ -3568,4 +3568,9 @@ export const __testExports = {
   getHeaderStyleFromUrl,
   resolveHeaderRoutingDecision,
   resolveQuotaFallbackHeaderStyle,
+  MAX_WARMUP_RETRIES,
+  trackWarmupAttempt,
+  getWarmupAttemptCount,
+  markWarmupSuccess,
+  clearWarmupAttempt,
 };

@@ -194,7 +194,7 @@ complaint, which is why it stays documented for setups that ship a working one.
 | Model | Variants | Description |
 |---|---|---|
 | `antigravity-gemini-3.8-flash` | `low`, `medium`, `high` | **Gemini 3.8 Flash** — the default; 1M context |
-| `antigravity-claude-sonnet-4-6` | `low`, `medium`, `high`, `max` | Claude Sonnet 4.6 — retiring; grant accounts already get "switch to Claude Sonnet 5.5" |
+| `antigravity-claude-sonnet-4-6` | — | Claude Sonnet 4.6 — retiring; grant accounts already get "switch to Claude Sonnet 5.5". Non-thinking: it has no tiers |
 | `antigravity-claude-opus-4-6-thinking` | `low`, `medium`, `high`, `max` | Claude Opus 4.6 with extended thinking; 200k context |
 | `antigravity-gpt-oss-120b-medium` | `low`, `medium`, `high` | GPT-OSS 120B, open weights |
 | `antigravity-gemini-4-argon` | `low`, `medium`, `high` | **Gemini 4 Argon** — registered by `model_discovery` when the account holds the grant |

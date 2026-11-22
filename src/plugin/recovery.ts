@@ -97,7 +97,16 @@ export function detectErrorType(error: unknown): RecoveryErrorType {
   // model_turn_end: Gemini rejects histories that end with a model turn holding
   // a functionCall without a functionResponse (400 "Requests ending with a model
   // turn are not supported"). Recovered by sanitizing the payload before retry.
-  if (message.includes("ending with a model turn") || message.includes("model turn")) {
+  //
+  // Match only the wording the backend actually rejects with. A bare "model
+  // turn" substring matched any unrelated failure that happens to mention it
+  // (timeouts, rate limits), which aborted the live session and showed a
+  // recovery toast for a payload that was never going to be sanitized.
+  if (
+    message.includes("ending with a model turn") ||
+    message.includes("ends with a model turn") ||
+    message.includes("end with a model turn")
+  ) {
     return "model_turn_end";
   }
 

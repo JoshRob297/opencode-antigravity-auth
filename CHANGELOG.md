@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.9.10
+
+### Fixed
+
+- **`claude-sonnet-4-6` ofrecia cuatro niveles de pensamiento inertes.** Es un modelo sin thinking en
+  este backend (solo los ids con `thinking` reciben presupuesto) y el camino de request descarta
+  cualquier `thinkingConfig` del cliente, asi que las cuatro variantes no hacian nada. Se quitaron en
+  vez de dejarlas mintiendo; volver a ponerlas exige un id que piense de verdad.
+- **Cualquier error que mencionara "model turn" abortaba la sesion.** La deteccion usaba un
+  `includes("model turn")` suelto, asi que un timeout o un 429 con esa frase mataba la sesion y
+  mostraba el aviso de recuperacion sin recuperar nada. Ahora solo matchea la redaccion real del
+  backend.
+- **`http.response` en v2 desencolaba la entrada de otra peticion.** El desencolado no filtraba por
+  URL ni provider, asi que otra llamada HTTP de la misma sesion se llevaba el trabajo pendiente de
+  Antigravity. Ahora se compara la URL normalizada en ambos lados.
+- **`MAX_WARMUP_RETRIES` no limitaba nada** porque el contador solo devolvia 0 o 1; el tope nunca se
+  alcanzaba.
+- **Claves de cache de firmas** no cubrian `gemini-4` ni los niveles `-xhigh` / `-max`, y el borrado
+  de `cachedContent` se llevaba por delante el legitimo.
+
+Dieciseis pruebas nuevas. Suite: 49 archivos, 1238 pruebas.
+
 ## 2.9.9
 
 ### Fixed
