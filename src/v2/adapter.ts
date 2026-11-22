@@ -15,7 +15,7 @@ import { formatRefreshParts, parseRefreshParts, accessTokenExpired } from "../pl
 import { persistAccountPool } from "../plugin";
 import { authorizeAntigravity, exchangeAntigravity, type AntigravityTokenExchangeResult } from "../antigravity/oauth";
 import { resolveCachedAuth } from "../plugin/cache";
-import { executeSearch } from "../plugin/search";
+import { executeSearchWithRotation } from "../plugin/search";
 import { createLogger } from "../plugin/logger";
 import { writeRequestAudit } from "../plugin/debug";
 import { aggregateUsage, buildUsageEntry, estimateCapacity, formatUsageReport, readQuotaSnapshots, readUsage, recordUsage } from "../plugin/usage-ledger";
@@ -471,24 +471,30 @@ async function performSearch(
     return "Error: No Antigravity accounts configured. Please log in first.";
   }
 
-  const activeIndex = storage.activeIndex ?? 0;
-  const primary = storage.accounts[activeIndex] || storage.accounts[0];
-  if (!primary || !primary.refreshToken) {
+  const total = storage.accounts.length;
+  const activeIndex = ((storage.activeIndex ?? 0) % total + total) % total;
+  const rotated = [
+    ...storage.accounts.slice(activeIndex),
+    ...storage.accounts.slice(0, activeIndex),
+  ].filter((acc) => acc.enabled !== false && !acc.verificationRequired && !!acc.refreshToken);
+
+  if (rotated.length === 0) {
     return "Error: Selected account has no valid credentials.";
   }
 
-  const projectId = primary.managedProjectId || primary.projectId || "default-cli-project";
-
   try {
-    const accessToken = await getAccessToken(primary);
-    if (!accessToken) {
-      return "Error: Failed to obtain access token for search.";
-    }
-    return await executeSearch(
+    return await executeSearchWithRotation(
       { query, urls, thinking },
-      accessToken,
-      projectId,
-      signal,
+      rotated,
+      async (account) => {
+        const accessToken = await getAccessToken(account);
+        if (!accessToken) return null;
+        return {
+          accessToken,
+          projectId: account.managedProjectId || account.projectId || "default-cli-project",
+        };
+      },
+      { abortSignal: signal },
     );
   } catch (error) {
     return `Search error: ${error instanceof Error ? error.message : String(error)}`;
@@ -1334,6 +1340,10 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
               type: "array",
               items: { type: "string" },
               description: "List of specific URLs to fetch and analyze",
+            },
+            thinking: {
+              type: "boolean",
+              description: "Enable deep thinking for more thorough analysis (default: true)",
             },
           },
           required: ["query"],

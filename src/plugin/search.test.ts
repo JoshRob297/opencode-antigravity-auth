@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { executeSearch } from "./search";
+import {
+  ANTIGRAVITY_ENDPOINT_FALLBACKS,
+  ANTIGRAVITY_ENDPOINT_DAILY,
+  SEARCH_THINKING_BUDGET_DEEP,
+  SEARCH_THINKING_BUDGET_FAST,
+  getAntigravityCliUserAgent,
+} from "../constants";
+import { executeSearch, executeSearchWithRotation } from "./search";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -134,5 +141,90 @@ describe("executeSearch", () => {
     expect((init.headers as Record<string, string>)["Authorization"]).toBe(
       "Bearer bearer-token-xyz",
     );
+  });
+
+  it("uses ANTIGRAVITY_ENDPOINT_FALLBACKS[0] (not sandbox) and CLI User-Agent (3.4)", async () => {
+    const spy = mockFetch(makeResponse("ok"));
+    vi.stubGlobal("fetch", spy);
+    await executeSearch({ query: "q" }, "tok", "proj");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${ANTIGRAVITY_ENDPOINT_FALLBACKS[0]}/v1internal:generateContent`);
+    expect(url).not.toContain(ANTIGRAVITY_ENDPOINT_DAILY);
+    expect((init.headers as Record<string, string>)["User-Agent"]).toBe(getAntigravityCliUserAgent());
+  });
+
+  it("applies thinkingConfig budgets based on thinking parameter (3.4)", async () => {
+    const spy = mockFetch(makeResponse("ok"));
+    vi.stubGlobal("fetch", spy);
+
+    await executeSearch({ query: "deep", thinking: true }, "tok", "proj");
+    const deepBody = JSON.parse((spy.mock.calls[0]![1] as RequestInit).body as string);
+    expect(deepBody.request.generationConfig.thinkingConfig).toEqual({
+      thinkingBudget: SEARCH_THINKING_BUDGET_DEEP,
+    });
+
+    await executeSearch({ query: "fast", thinking: false }, "tok", "proj");
+    const fastBody = JSON.parse((spy.mock.calls[1]![1] as RequestInit).body as string);
+    expect(fastBody.request.generationConfig.thinkingConfig).toEqual({
+      thinkingBudget: SEARCH_THINKING_BUDGET_FAST,
+    });
+  });
+
+  it("falls back to secondary endpoints on 5xx/404 responses (3.4)", async () => {
+    const spy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+        text: () => Promise.resolve("busy"),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(makeResponse("from fallback")),
+      });
+    vi.stubGlobal("fetch", spy);
+
+    const result = await executeSearch({ query: "q" }, "tok", "proj");
+    expect(result).toContain("from fallback");
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy.mock.calls[0]![0]).toBe(`${ANTIGRAVITY_ENDPOINT_FALLBACKS[0]}/v1internal:generateContent`);
+    expect(spy.mock.calls[1]![0]).toBe(`${ANTIGRAVITY_ENDPOINT_FALLBACKS[1]}/v1internal:generateContent`);
+  });
+
+  it("rotates accounts when primary account returns 429 (3.4)", async () => {
+    const spy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: "Too Many Requests",
+        text: () => Promise.resolve("rate limited"),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(makeResponse("from second account")),
+      });
+    vi.stubGlobal("fetch", spy);
+
+    const accounts = [
+      { email: "a1@test.com", token: "tok-1", projectId: "proj-1" },
+      { email: "a2@test.com", token: "tok-2", projectId: "proj-2" },
+    ];
+
+    const result = await executeSearchWithRotation(
+      { query: "q" },
+      accounts,
+      async (acc) => ({ accessToken: acc.token, projectId: acc.projectId }),
+    );
+
+    expect(result).toContain("from second account");
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect((spy.mock.calls[0]![1]!.headers as Record<string, string>)["Authorization"]).toBe("Bearer tok-1");
+    expect((spy.mock.calls[1]![1]!.headers as Record<string, string>)["Authorization"]).toBe("Bearer tok-2");
   });
 });

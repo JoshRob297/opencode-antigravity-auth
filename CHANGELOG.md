@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.9.9
+
+### Fixed
+
+- **Cuota semanal en cero oculta por la de cinco horas.** `fetchAccountQuotaDetails` guardaba solo
+  la ventana corta, asi que una cuenta con `weekly` agotada y `fiveHour` con saldo se elegia en
+  bucle: 429, marca en `rateLimitResetTimes`, y otra vez la misma cuenta en la peticion siguiente.
+  Ahora se guarda el minimo de las dos ventanas y `ALLOWED_PREFIXES` cubre 3.8 Flash, Argon y
+  Claude 5.5.
+- **`All Antigravity accounts failed` con tres respuestas vacias seguidas.** El `continue` del
+  bucle recorria los tres endpoints sin reintentar, y el contador global contaminaba la peticion
+  siguiente de la sesion. Ahora reintenta el mismo endpoint, el contador vive por peticion y
+  `EmptyResponseError` se propaga.
+- **"Verify account" fallaba en cuentas sanas.** Apuntaba a PROD (429), con el User-Agent de
+  Electron retirado y un modelo que ya no existe.
+- **`google_search`** usa el endpoint con fallback, el User-Agent del CLI, respeta `thinking` y
+  rota cuentas.
+- **`usageMetadata` sintetico** salia envuelto en `{ response: ... }` y el SDK lo descartaba.
+
+Once nuevas pruebas cubren cada caso, incluida la de una cuenta con `weekly` en cero que no debe
+volver a ser elegida.
+
 ## 2.9.8
 
 ### Fixed

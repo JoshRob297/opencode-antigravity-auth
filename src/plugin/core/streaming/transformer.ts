@@ -540,13 +540,11 @@ export function createStreamingTransformer(
       // Inject synthetic usage metadata if missing (fixes "Context % used: 0%" issue)
       if (!hasSeenUsageMetadata) {
         const syntheticUsage = {
-          response: {
-            usageMetadata: {
-              promptTokenCount: 0,
-              candidatesTokenCount: 0,
-              totalTokenCount: 0,
-            }
-          }
+          usageMetadata: {
+            promptTokenCount: 0,
+            candidatesTokenCount: 0,
+            totalTokenCount: 0,
+          },
         };
         controller.enqueue(encoder.encode(`\ndata: ${JSON.stringify(syntheticUsage)}\n\n`));
       }

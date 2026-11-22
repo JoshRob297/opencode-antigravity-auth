@@ -531,6 +531,53 @@ describe("request.ts", () => {
       const output = outputChunks.map(chunk => decoder.decode(chunk)).join("");
       expect(output).toContain("[DONE]");
     });
+
+    it("emits unwrapped synthetic usageMetadata on flush when stream had none (3.9)", async () => {
+      const store = createMockSignatureStore();
+      const transformer = createStreamingTransformer(store, defaultCallbacks);
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+
+      const chunk = JSON.stringify({
+        response: {
+          candidates: [{ content: { role: "model", parts: [{ text: "hello" }] }, finishReason: "STOP" }],
+        },
+      });
+      const input = encoder.encode(`data: ${chunk}\n\n`);
+      const outputChunks: Uint8Array[] = [];
+
+      const writer = transformer.writable.getWriter();
+      const reader = transformer.readable.getReader();
+
+      const readPromise = (async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) outputChunks.push(value);
+        }
+      })();
+
+      await writer.write(input);
+      await writer.close();
+      await readPromise;
+
+      const output = outputChunks.map(c => decoder.decode(c)).join("");
+      const dataPayloads = output
+        .split("\n")
+        .filter((line) => line.startsWith("data: "))
+        .map((line) => JSON.parse(line.slice(6)));
+
+      const usageChunk = dataPayloads.find((p) => "usageMetadata" in p || "response" in p && p.response?.usageMetadata);
+      expect(usageChunk).toBeDefined();
+      expect(usageChunk.response).toBeUndefined();
+      expect(usageChunk).toEqual({
+        usageMetadata: {
+          promptTokenCount: 0,
+          candidatesTokenCount: 0,
+          totalTokenCount: 0,
+        },
+      });
+    });
   });
 
   describe("prepareAntigravityRequest", () => {
