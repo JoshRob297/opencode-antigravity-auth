@@ -13,7 +13,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
-import { tmpdir } from "node:os";
 import type { SignatureCacheConfig } from "../config";
 import { ensureGitignoreSync } from "../storage";
 import { EngineStatsManager } from "../stats";
@@ -90,6 +89,10 @@ function getCacheFilePath(): string {
 export class SignatureCache {
   // In-memory cache: key -> entry with signature and optional thinking text
   private cache: Map<string, CacheEntry> = new Map();
+
+  // Keys restored from disk but not yet served, so diskHits measures real
+  // disk-sourced retrievals instead of always reporting a memory hit.
+  private loadedFromDisk: Set<string> = new Set();
   
   // Configuration
   private memoryTtlMs: number;
@@ -145,6 +148,7 @@ export class SignatureCache {
       value: signature,
       timestamp: Date.now(),
     });
+    this.loadedFromDisk.delete(key);
     this.dirty = true;
   }
 
@@ -159,11 +163,16 @@ export class SignatureCache {
     if (entry) {
       const age = Date.now() - entry.timestamp;
       if (age <= this.memoryTtlMs) {
-        this.stats.memoryHits++;
+        if (this.loadedFromDisk.delete(key)) {
+          this.stats.diskHits++;
+        } else {
+          this.stats.memoryHits++;
+        }
         return entry.value;
       }
       // Expired from memory, remove it
       this.cache.delete(key);
+      this.loadedFromDisk.delete(key);
     }
 
     this.stats.misses++;
@@ -208,6 +217,7 @@ export class SignatureCache {
       textPreview: thinkingText.slice(0, 100),
       toolIds,
     });
+    this.loadedFromDisk.delete(key);
     this.dirty = true;
   }
 
@@ -224,10 +234,15 @@ export class SignatureCache {
     const age = Date.now() - entry.timestamp;
     if (age > this.memoryTtlMs) {
       this.cache.delete(key);
+      this.loadedFromDisk.delete(key);
       return null;
     }
 
-    this.stats.memoryHits++;
+    if (this.loadedFromDisk.delete(key)) {
+      this.stats.diskHits++;
+    } else {
+      this.stats.memoryHits++;
+    }
     return {
       text: entry.thinkingText,
       signature: entry.value,
@@ -320,10 +335,21 @@ export class SignatureCache {
       for (const [key, entry] of Object.entries(data.entries)) {
         const age = now - entry.timestamp;
         if (age <= this.diskTtlMs) {
-          this.cache.set(key, {
+          const restored: CacheEntry = {
             value: entry.value,
             timestamp: entry.timestamp,
-          });
+          };
+          if (typeof entry.thinkingText === "string") {
+            restored.thinkingText = entry.thinkingText;
+          }
+          if (typeof entry.textPreview === "string") {
+            restored.textPreview = entry.textPreview;
+          }
+          if (Array.isArray(entry.toolIds)) {
+            restored.toolIds = entry.toolIds;
+          }
+          this.cache.set(key, restored);
+          this.loadedFromDisk.add(key);
           loaded++;
         } else {
           expired++;
@@ -376,10 +402,9 @@ export class SignatureCache {
       // Step 3: Merge - memory entries take precedence
       const mergedEntries: Record<string, CacheEntry> = { ...validDiskEntries };
       for (const [key, entry] of this.cache.entries()) {
-        mergedEntries[key] = {
-          value: entry.value,
-          timestamp: entry.timestamp,
-        };
+        // Keep the optional thinking payload; dropping it here would erase it
+        // on every background save even when load restored it.
+        mergedEntries[key] = { ...entry };
       }
 
       // Step 4: Build cache data
@@ -398,7 +423,9 @@ export class SignatureCache {
       };
 
       // Step 5: Atomic write (temp file + rename)
-      const tmpPath = join(tmpdir(), `antigravity-cache-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`);
+      // Keep the temp file in the destination directory so the rename is
+      // atomic and cannot fail with EXDEV across filesystems.
+      const tmpPath = join(dir, `antigravity-cache-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`);
       writeFileSync(tmpPath, JSON.stringify(cacheData, null, 2), "utf-8");
 
       try {

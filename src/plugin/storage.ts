@@ -617,8 +617,7 @@ export async function loadAccounts(): Promise<AccountStorageV4 | null> {
     const data = JSON.parse(content) as AnyAccountStorage;
 
     if (!Array.isArray(data.accounts)) {
-      log.warn("Invalid storage format, ignoring");
-      return null;
+      throw new Error(`Invalid account storage format at ${path}: accounts is not an array`);
     }
 
     let storage: AccountStorageV4;
@@ -662,10 +661,9 @@ export async function loadAccounts(): Promise<AccountStorageV4 | null> {
     } else if (data.version === 4) {
       storage = data;
     } else {
-      log.warn("Unknown storage version, ignoring", {
-        version: (data as { version?: unknown }).version,
-      });
-      return null;
+      throw new Error(
+        `Unsupported account storage version at ${getStoragePath()}: ${String((data as { version?: unknown }).version)}`,
+      );
     }
 
     // Validate accounts have required fields
@@ -707,7 +705,25 @@ export async function loadAccounts(): Promise<AccountStorageV4 | null> {
       return null;
     }
     log.error("Failed to load account storage", { error: String(error) });
-    return null;
+    throw error;
+  }
+}
+
+async function writeStorageFile(path: string, storage: AccountStorageV4): Promise<void> {
+  const tempPath = `${path}.${randomBytes(6).toString("hex")}.tmp`;
+  const content = JSON.stringify(storage, null, 2);
+
+  try {
+    await fs.writeFile(tempPath, content, { encoding: "utf-8", mode: 0o600 });
+    await fs.rename(tempPath, path);
+  } catch (error) {
+    // Clean up temp file on failure to prevent accumulation
+    try {
+      await fs.unlink(tempPath);
+    } catch {
+      // Ignore cleanup errors (file may not exist)
+    }
+    throw error;
   }
 }
 
@@ -720,22 +736,7 @@ export async function saveAccounts(storage: AccountStorageV4): Promise<void> {
   await withFileLock(path, async () => {
     const existing = await loadAccountsUnsafe();
     const merged = existing ? mergeAccountStorage(existing, storage) : storage;
-
-    const tempPath = `${path}.${randomBytes(6).toString("hex")}.tmp`;
-    const content = JSON.stringify(merged, null, 2);
-
-    try {
-      await fs.writeFile(tempPath, content, { encoding: "utf-8", mode: 0o600 });
-      await fs.rename(tempPath, path);
-    } catch (error) {
-      // Clean up temp file on failure to prevent accumulation
-      try {
-        await fs.unlink(tempPath);
-      } catch {
-        // Ignore cleanup errors (file may not exist)
-      }
-      throw error;
-    }
+    await writeStorageFile(path, merged);
   });
 }
 
@@ -751,20 +752,39 @@ export async function saveAccountsReplace(storage: AccountStorageV4): Promise<vo
   await ensureGitignore(configDir);
 
   await withFileLock(path, async () => {
-    const tempPath = `${path}.${randomBytes(6).toString("hex")}.tmp`;
-    const content = JSON.stringify(storage, null, 2);
+    await writeStorageFile(path, storage);
+  });
+}
 
-    try {
-      await fs.writeFile(tempPath, content, { encoding: "utf-8", mode: 0o600 });
-      await fs.rename(tempPath, path);
-    } catch (error) {
-      try {
-        await fs.unlink(tempPath);
-      } catch {
-        // Ignore cleanup errors
-      }
-      throw error;
+/**
+ * Read-modify-write the storage file under the same lock used by saves.
+ *
+ * A caller that loads with `loadAccounts()` and later saves can overwrite a
+ * concurrent update (rate-limit timestamps, model catalog, rotated tokens)
+ * between its read and its write. This helper keeps the read and the write in
+ * one critical section and replaces the file so clearing a field is real.
+ *
+ * Returns false when there is no storage file to update.
+ */
+export async function updateAccountsStorage(
+  mutate: (storage: AccountStorageV4) => void | Promise<void>,
+): Promise<boolean> {
+  const path = getStoragePath();
+  if (!existsSync(path)) {
+    return false;
+  }
+  const configDir = dirname(path);
+  await fs.mkdir(configDir, { recursive: true });
+  await ensureGitignore(configDir);
+
+  return withFileLock(path, async () => {
+    const existing = await loadAccountsUnsafe();
+    if (!existing) {
+      return false;
     }
+    await mutate(existing);
+    await writeStorageFile(path, existing);
+    return true;
   });
 }
 
@@ -775,7 +795,11 @@ async function loadAccountsUnsafe(): Promise<AccountStorageV4 | null> {
     await ensureSecurePermissions(path);
 
     const content = await fs.readFile(path, "utf-8");
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(content) as AnyAccountStorage;
+
+    if (!Array.isArray(parsed.accounts)) {
+      throw new Error(`Invalid account storage format at ${path}: accounts is not an array`);
+    }
 
     if (parsed.version === 1) {
       return migrateV3ToV4(migrateV2ToV3(migrateV1ToV2(parsed)));
@@ -785,6 +809,11 @@ async function loadAccountsUnsafe(): Promise<AccountStorageV4 | null> {
     }
     if (parsed.version === 3) {
       return migrateV3ToV4(parsed);
+    }
+    if (parsed.version !== 4) {
+      throw new Error(
+        `Unsupported account storage version at ${path}: ${String((parsed as { version?: unknown }).version)}`,
+      );
     }
 
     return {
@@ -796,7 +825,7 @@ async function loadAccountsUnsafe(): Promise<AccountStorageV4 | null> {
     if (code === "ENOENT") {
       return null;
     }
-    return null;
+    throw error;
   }
 }
 

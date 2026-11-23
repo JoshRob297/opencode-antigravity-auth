@@ -1,5 +1,5 @@
 import { formatRefreshParts, parseRefreshParts } from "./auth";
-import { loadAccounts, saveAccounts, type AccountStorageV4, type AccountMetadataV3, type RateLimitStateV3, type ModelFamily, type HeaderStyle, type CooldownReason, type AccountModelCatalog } from "./storage";
+import { loadAccounts, saveAccountsReplace, type AccountStorageV4, type AccountMetadataV3, type RateLimitStateV3, type ModelFamily, type HeaderStyle, type CooldownReason, type AccountModelCatalog } from "./storage";
 import type { OAuthAuthDetails, RefreshParts } from "./types";
 import type { AccountSelectionStrategy } from "./config/schema";
 import { getHealthTracker, getTokenTracker, selectHybridAccount, type AccountWithMetrics } from "./rotation";
@@ -1279,7 +1279,7 @@ export class AccountManager {
       },
     };
 
-    await saveAccounts(storage);
+    await saveAccountsReplace(storage);
   }
 
   requestSaveToDisk(): void {
@@ -1423,8 +1423,15 @@ export class AccountManager {
   /** Stores the measured per-account model catalog used to steer rotation. */
   updateModelCatalog(accountIndex: number, catalog: AccountModelCatalog | undefined): void {
     const account = this.accounts[accountIndex];
-    if (account && catalog) {
+    if (!account) {
+      return;
+    }
+    // `undefined` is meaningful here: a 404 invalidates the measured catalog
+    // so the next refresh re-measures instead of trusting a stale entry.
+    if (catalog) {
       account.modelCatalog = catalog;
+    } else {
+      delete account.modelCatalog;
     }
   }
 

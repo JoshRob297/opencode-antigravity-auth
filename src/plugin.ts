@@ -40,7 +40,7 @@ import {
 import { EmptyResponseError } from "./plugin/errors";
 import { AntigravityTokenRefreshError, refreshAccessToken } from "./plugin/token";
 import { startOAuthListener, type OAuthListener } from "./plugin/server";
-import { clearAccounts, loadAccounts, saveAccounts, saveAccountsReplace } from "./plugin/storage";
+import { clearAccounts, loadAccounts, saveAccounts, saveAccountsReplace, updateAccountsStorage } from "./plugin/storage";
 import { AccountManager, type ModelFamily, parseRateLimitReason, calculateBackoffMs, computeSoftQuotaCacheTtlMs } from "./plugin/accounts";
 import { createAutoUpdateCheckerHook } from "./hooks/auto-update-checker";
 import { loadConfig, initRuntimeConfig, type AntigravityConfig } from "./plugin/config";
@@ -856,15 +856,22 @@ export async function persistAccountPool(
     ? 0 
     : (typeof stored?.activeIndex === "number" && Number.isFinite(stored.activeIndex) ? stored.activeIndex : 0);
 
-  await saveAccounts({
-    version: 4,
+  const payload = {
+    version: 4 as const,
     accounts,
     activeIndex: clampInt(activeIndex, 0, accounts.length - 1),
     activeIndexByFamily: {
       claude: clampInt(activeIndex, 0, accounts.length - 1),
       gemini: clampInt(activeIndex, 0, accounts.length - 1),
     },
-  });
+  };
+  if (replaceAll) {
+    // A fresh login replaces the pool; merging here would resurrect accounts
+    // the user just replaced.
+    await saveAccountsReplace(payload);
+  } else {
+    await saveAccounts(payload);
+  }
 }
 
 function buildAuthSuccessFromStoredAccount(account: {
@@ -3218,32 +3225,37 @@ export const createAntigravityPlugin = (providerId: string) => async (
 
               try {
                 if (refreshAccountIndex !== undefined) {
-                  const currentStorage = await loadAccounts();
-                  if (currentStorage) {
-                    const updatedAccounts = [...currentStorage.accounts];
-                    const parts = parseRefreshParts(result.refresh);
-                    if (parts.refreshToken) {
-                      updatedAccounts[refreshAccountIndex] = {
-                        email: result.email ?? updatedAccounts[refreshAccountIndex]?.email,
+                  const parts = parseRefreshParts(result.refresh);
+                  if (parts.refreshToken) {
+                    // Mutate in place under the storage lock: a concurrent request
+                    // may have updated rate limits or activeIndex since login began.
+                    await updateAccountsStorage((currentStorage) => {
+                      const existing = currentStorage.accounts[refreshAccountIndex];
+                      currentStorage.accounts[refreshAccountIndex] = {
+                        // Preserve enabled/fingerprint/quota/catalog/verification
+                        // state: re-authenticating one account must not erase it.
+                        ...existing,
+                        email: result.email ?? existing?.email,
                         refreshToken: parts.refreshToken,
-                        projectId: parts.projectId ?? updatedAccounts[refreshAccountIndex]?.projectId,
-                        managedProjectId: parts.managedProjectId ?? updatedAccounts[refreshAccountIndex]?.managedProjectId,
-                        addedAt: updatedAccounts[refreshAccountIndex]?.addedAt ?? Date.now(),
+                        projectId: parts.projectId ?? existing?.projectId,
+                        managedProjectId: parts.managedProjectId ?? existing?.managedProjectId,
+                        addedAt: existing?.addedAt ?? Date.now(),
                         lastUsed: Date.now(),
                       };
-                      await saveAccounts({
-                        version: 4,
-                        accounts: updatedAccounts,
-                        activeIndex: currentStorage.activeIndex,
-                        activeIndexByFamily: currentStorage.activeIndexByFamily,
-                      });
-                    }
+                    });
                   }
                 } else {
                   const isFirstAccount = accounts.length === 1;
                   await persistAccountPool([result], isFirstAccount && startFresh);
                 }
-              } catch {
+              } catch (error) {
+                // The login itself succeeded; surface persistence failures
+                // instead of pretending the account was saved.
+                console.warn(
+                  `[opencode-antigravity-auth] Failed to persist authenticated account: ${
+                    error instanceof Error ? error.message : String(error)
+                  }`,
+                );
               }
 
               if (refreshAccountIndex !== undefined) {
