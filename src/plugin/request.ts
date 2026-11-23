@@ -1794,7 +1794,10 @@ export function prepareAntigravityRequest(
   // This enables real-time streaming of thinking tokens
   if (isClaudeThinking) {
     const existing = headers.get("anthropic-beta");
-    const interleavedHeader = "interleaved-thinking-2025-05-14";
+    // Value the CLI sends for the same capability. The previous literal
+    // (interleaved-thinking-2025-05-14) was a different beta gate than the one
+    // the client this plugin imitates actually requests.
+    const interleavedHeader = "thinking-binding-controls-2026-08-01";
 
     if (existing) {
       if (!existing.includes(interleavedHeader)) {

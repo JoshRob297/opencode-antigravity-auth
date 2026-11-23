@@ -124,9 +124,9 @@ describe("Antigravity CLI version", () => {
 
   it("locks after the first set, like the IDE version", async () => {
     const { setAntigravityCliVersion, getAntigravityCliVersion } = await import("../constants.ts")
-    setAntigravityCliVersion("1.4.2")
+    setAntigravityCliVersion("1.5.8")
     setAntigravityCliVersion("9.9.9")
-    expect(getAntigravityCliVersion()).toBe("1.4.2")
+    expect(getAntigravityCliVersion()).toBe("1.5.8")
   })
 })
 
@@ -138,14 +138,14 @@ describe("initAntigravityCliVersion", () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       text: async () =>
-        "Antigravity CLI auto updater is running! Stable Version: 1.4.2. Rolled out to 100%",
+        "Antigravity CLI auto updater is running! Stable Version: 1.5.8. Rolled out to 100%",
     })
     vi.stubGlobal("fetch", fetchMock)
 
     await initAntigravityCliVersion()
 
     expect(fetchMock).toHaveBeenCalledWith(CLI_VERSION_URL, expect.anything())
-    expect(getAntigravityCliVersion()).toBe("1.4.2")
+    expect(getAntigravityCliVersion()).toBe("1.5.8")
   })
 
   it("keeps the fallback when the endpoint fails", async () => {

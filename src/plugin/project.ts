@@ -129,8 +129,6 @@ export async function loadManagedProject(
     "Content-Type": "application/json",
     Authorization: `Bearer ${accessToken}`,
     "User-Agent": "antigravity",
-    "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
-    "Client-Metadata": getAntigravityHeaders()["Client-Metadata"],
   };
 
   const loadEndpoints = Array.from(
