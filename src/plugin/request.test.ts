@@ -1361,8 +1361,8 @@ describe("CLI client signature User-Agent", () => {
   const genlang = (model: string) =>
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent`;
 
-  it("carries the runtime-resolved CLI version, not a hardcoded one", () => {
-    setAntigravityCliVersion("7.7.7");
+  it("carries the runtime-resolved CLI version with the build id that belongs to it", () => {
+    setAntigravityCliVersion("1.5.8");
     const result = prepareAntigravityRequest(
       genlang("antigravity-gemini-3.8-flash"),
       { method: "POST", body: JSON.stringify({ contents: [] }) },
@@ -1371,10 +1371,26 @@ describe("CLI client signature User-Agent", () => {
     );
     const headers = new Headers(result.init.headers as HeadersInit);
     expect(headers.get("User-Agent")).toBe(
-      "antigravity/cli/7.7.7 (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)",
+      "antigravity/cli/1.5.8 (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)",
     );
     // Sanity: the value came from the constants module, not from the test literal.
-    expect(getAntigravityCliVersion()).toBe("7.7.7");
+    expect(getAntigravityCliVersion()).toBe("1.5.8");
+  });
+
+  it("keeps the coherent version and build id when the runtime version is unknown", () => {
+    // A version we have no build id for would be emitted next to our cl, which is
+    // a signature no client produces. Coherent but stale is the lesser evil.
+    setAntigravityCliVersion("7.7.7");
+    const result = prepareAntigravityRequest(
+      genlang("antigravity-gemini-3.8-flash"),
+      { method: "POST", body: JSON.stringify({ contents: [] }) },
+      "token",
+      "project",
+    );
+    const headers = new Headers(result.init.headers as HeadersInit);
+    const ua = headers.get("User-Agent") ?? "";
+    expect(ua).not.toContain("7.7.7");
+    expect(ua).toMatch(/antigravity\/cli\/\d+\.\d+\.\d+ .* cl=\d+;/);
   });
 
   it("sends the CLI UA for every model, not only the Gemini 3.x/4 line", () => {

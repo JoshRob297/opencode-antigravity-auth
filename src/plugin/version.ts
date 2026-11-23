@@ -17,6 +17,7 @@ import {
   setAntigravityVersion,
   getAntigravityCliVersion,
   setAntigravityCliVersion,
+  isKnownCliVersion,
 } from "../constants";
 import { createLogger } from "./logger";
 
@@ -108,6 +109,11 @@ export async function initAntigravityCliVersion(): Promise<void> {
   const version = await tryFetchVersion(CLI_VERSION_URL);
   if (!version) {
     log.info("cli-version-fetch-failed", { fallback });
+    return;
+  }
+
+  if (!isKnownCliVersion(version)) {
+    log.info("cli-version-unknown-kept", { version, kept: fallback });
     return;
   }
 

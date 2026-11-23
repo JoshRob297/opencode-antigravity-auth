@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.9.12
+
+### Fixed
+
+- **La version del CLI y su `cl` viajaban separados.** El User-Agent llevaba la version resuelta en
+  runtime junto a un `cl` fijo, asi que cualquier version nueva producia un par que ningun cliente
+  real emite: la 1.5.14 anunciaba el `cl` de la 1.5.8. Ahora ambos salen de una tabla unica, y una
+  version desconocida se ignora a proposito —stale pero coherente— en vez de inventar la pareja.
+  Verificado con una peticion viva contra `gemini-3.8-flash`.
+- **`loadCodeAssist` mandaba dos cabeceras que el CLI no manda.** `X-Goog-Api-Client` con un
+  `google-cloud-sdk vscode_*` y un `Client-Metadata` que declaraba MACOS desde Linux. Se quitaron.
+
+### Changed
+
+- **`anthropic-beta` usa el valor del CLI** (`thinking-binding-controls-2026-08-01`) en vez de
+  `interleaved-thinking-2025-05-14`. **Sin verificar en vivo**: la cuenta disponible hoy no sirve la
+  familia Claude, asi que el cambio queda ejercitado solo por pruebas unitarias. Se anota aqui para
+  que nadie lo tome por medido.
+
 ## 2.9.11
 
 ### Fixed

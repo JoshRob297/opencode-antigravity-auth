@@ -90,22 +90,54 @@ export function setAntigravityVersion(version: string): void {
  * signature that the backend requires for Gemini 3.7/3.8 Flash. Kept current by
  * `initAntigravityCliVersion()`; see docs/ANTIGRAVITY_API_SPEC.md.
  */
-export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.5.8";
+export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.5.14";
+
+/**
+ * Build id (`cl`) reported by each CLI version in its client signature.
+ *
+ * The version and the build id are one value in two halves: a real client never
+ * reports a version with another release's build id. Keeping them in the same
+ * table is what stops the pair from drifting when the updater hands us a newer
+ * version than the one this plugin was written against.
+ */
+const ANTIGRAVITY_CLI_BUILDS: Record<string, string> = {
+  "1.5.14": "1027820220",
+  "1.5.8": "962369648",
+};
+
+const ANTIGRAVITY_CLI_BUILD_FALLBACK = ANTIGRAVITY_CLI_BUILDS[ANTIGRAVITY_CLI_VERSION_FALLBACK]!;
+
 let antigravityCliVersion = ANTIGRAVITY_CLI_VERSION_FALLBACK;
+let antigravityCliBuild = ANTIGRAVITY_CLI_BUILD_FALLBACK;
 let cliVersionLocked = false;
 
 export function getAntigravityCliVersion(): string { return antigravityCliVersion; }
 
+/** Build id that pairs with the current CLI version. */
+export function getAntigravityCliBuild(): string { return antigravityCliBuild; }
+
+/** Whether the plugin knows the build id for a given CLI version. */
+export function isKnownCliVersion(version: string): boolean {
+  return Object.prototype.hasOwnProperty.call(ANTIGRAVITY_CLI_BUILDS, version);
+}
+
 export function getAntigravityCliUserAgent(): string {
-  return `antigravity/cli/${getAntigravityCliVersion()} (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)`;
+  return `antigravity/cli/${getAntigravityCliVersion()} (aidev_client; os_type=linux; arch=amd64; cl=${getAntigravityCliBuild()}; auth_method=consumer)`;
 }
 
 /**
  * Set the runtime Antigravity CLI version. Can only be called once (at startup).
+ *
+ * An unknown version is ignored on purpose: accepting it would emit its version
+ * next to our build id, which is a signature no client ever sends. Stale but
+ * coherent beats current and impossible; the caller logs the mismatch.
  */
 export function setAntigravityCliVersion(version: string): void {
   if (cliVersionLocked) return;
+  const build = ANTIGRAVITY_CLI_BUILDS[version];
+  if (!build) return;
   antigravityCliVersion = version;
+  antigravityCliBuild = build;
   cliVersionLocked = true;
 }
 
