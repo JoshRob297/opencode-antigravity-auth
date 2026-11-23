@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.9.11
+
+### Fixed
+
+- **Las cuentas revocadas o borradas reaparecian.** `saveAccounts` leia siempre del disco y fusionaba
+  por `refreshToken`, asi que `invalid_grant`, `fresh start` y la re-autenticacion devolvian al
+  archivo las cuentas que se acababan de quitar. Las tres rutas ahora reemplazan en vez de fusionar, y
+  la re-autenticacion conserva `enabled`, `fingerprint`, `cachedQuota`, `modelCatalog` y
+  `verificationRequired`.
+- **Un JSON truncado borraba todas las cuentas.** `loadAccounts` devolvia `null` ante cualquier
+  excepcion, no solo `ENOENT`, y el guardado lo interpretaba como "no habia archivo". Ahora distingue
+  los dos casos y no escribe encima de un archivo ilegible.
+- **El uso se acreditaba a la cuenta equivocada** cuando dos peticiones de la misma sesion corrian a
+  la vez en v2: el adaptador recargaba el estado y solo persistia `activeIndex` y
+  `cachedQuotaUpdatedAt`, y la entrada pendiente guardaba un escalar por sesion. Ahora se persisten
+  `rateLimitResetTimes` y `modelCatalog`, y cada peticion lleva la cuenta que la atendio.
+- **`keep_thinking` se perdia al reiniciar.** `SignatureCache` guardaba `thinkingText`, `textPreview`
+  y `toolIds` en memoria pero al disco solo `{value, timestamp}`, y el temporal se creaba en otro
+  filesystem, asi que la escritura dejaba de ser atomica.
+
+Ocho pruebas nuevas, incluida una de dos peticiones concurrentes que deben acreditarse a cuentas
+distintas. Suite: 1246 pruebas.
+
 ## 2.9.10
 
 ### Fixed

@@ -8,7 +8,7 @@
 import { checkAccountsQuota, formatQuotaReportMarkdown, fetchAvailableModels, type QuotaGroup, type QuotaGroupSummary } from "../plugin/quota";
 import { EngineStatsManager } from "../plugin/stats";
 import { loadConfig, initRuntimeConfig } from "../plugin/config";
-import { loadAccounts, saveAccounts, type ModelFamily } from "../plugin/storage";
+import { loadAccounts, updateAccountsStorage, type ModelFamily } from "../plugin/storage";
 import { AccountManager, computeSoftQuotaCacheTtlMs, resolveQuotaGroup } from "../plugin/accounts";
 import { refreshAccessToken } from "../plugin/token";
 import { formatRefreshParts, parseRefreshParts, accessTokenExpired } from "../plugin/auth";
@@ -210,22 +210,23 @@ async function refreshQuotaCacheForFamily(manager: AccountManager, family: Model
     }
 
     // Persist the refreshed cache to disk surgically so future restarts benefit.
+    // The read and write share one lock: a concurrent request rotating
+    // activeIndex or rate limits must not be overwritten by this snapshot.
     try {
-      const storage = await loadAccounts();
-      if (!storage) return;
       const updatedSnapshot = manager.getAccountsSnapshot();
-      for (const r of results) {
-        if (!r) continue;
-        const stored = storage.accounts[r.index];
-        const snap = updatedSnapshot[r.index];
-        if (stored && snap) {
-          stored.cachedQuota = snap.cachedQuota;
-          stored.cachedQuotaUpdatedAt = snap.cachedQuotaUpdatedAt;
-          stored.modelCatalog = snap.modelCatalog;
-        }
-      }
       if (!process.env.VITEST) {
-        await saveAccounts(storage);
+        await updateAccountsStorage((storage) => {
+          for (const r of results) {
+            if (!r) continue;
+            const stored = storage.accounts[r.index];
+            const snap = updatedSnapshot[r.index];
+            if (stored && snap) {
+              stored.cachedQuota = snap.cachedQuota;
+              stored.cachedQuotaUpdatedAt = snap.cachedQuotaUpdatedAt;
+              stored.modelCatalog = snap.modelCatalog;
+            }
+          }
+        });
       }
       log.info("[v2 routing] Quota cache refreshed from live fetchAvailableModels");
     } catch (e) {
@@ -558,14 +559,15 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
     url?: string;
     /** URL we rewrote it to (`<endpoint>/v1internal:<action>`). */
     rewrittenUrl?: string;
+    /** Account that served this exact request; never a session-wide "latest". */
+    email?: string;
     createdAt: number;
   }
   const pendingBySession = new Map<string, PendingEntry[]>();
-  const lastFailedMetaBySession = new Map<string, { family: ModelFamily; accountIndex: number; modelName?: string }>();
-  // Last attempt per session, used for engine stats. The pending queue cannot be
-  // used for this: the retry hook also dequeues, so a successful attempt after
-  // failures finds the queue empty and its success is never counted.
-  const lastAttemptBySession = new Map<string, { email?: string; accountIndex: number }>();
+  const lastFailedMetaBySession = new Map<
+    string,
+    { family: ModelFamily; accountIndex: number; modelName?: string; email?: string }
+  >();
   const transportFailureCountBySession = new Map<string, number>();
   const entitlementFailureCountBySession = new Map<string, number>();
   const MAX_CONSECUTIVE_TRANSPORT_FAILURES = 3;
@@ -801,8 +803,9 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
 
       // Keep storage activeIndex in sync for stats & CLI views
       if (storage.activeIndex !== activeIndex) {
-        storage.activeIndex = activeIndex;
-        await saveAccounts(storage).catch(() => {});
+        await updateAccountsStorage((current) => {
+          current.activeIndex = activeIndex;
+        }).catch(() => {});
       }
 
       log.info(`[v2 routing] Selected account idx=${activeIndex} (${account.email || "unknown"}) for family=${family} model=${modelName || "default"}`);
@@ -844,9 +847,9 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         modelName: modelName || prepared.effectiveModel || prepared.requestedModel,
         url,
         rewrittenUrl: pendingRequestUrl(prepared),
+        email: account?.email,
         createdAt: Date.now(),
       });
-      lastAttemptBySession.set(event.sessionID ?? "default", { email: account?.email, accountIndex: activeIndex });
 
       // Audit dump of the exact body the backend receives, for
       // `antigravity-preflight --capture`. Header names only, never values.
@@ -872,18 +875,17 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
       // is empty for the attempt that finally succeeds, and that success is
       // exactly the one worth counting.
       if (!(entry?.prepared as { blockedEarly?: boolean } | undefined)?.blockedEarly) {
-        const attempt = lastAttemptBySession.get(sessionKey);
-        if (attempt?.email) {
+        if (entry?.email) {
           const stats = EngineStatsManager.getInstance();
           const status = event.response?.status;
           if (event.response?.ok) {
-            stats.recordSuccess(attempt.email);
+            stats.recordSuccess(entry.email);
           } else if (status === 429 || status === 403) {
-            stats.recordRateLimit(attempt.email);
+            stats.recordRateLimit(entry.email);
           } else if (status !== 404) {
             // A 404 entitlement miss is a capability mismatch, not account
             // health: charging it as an error would penalise a healthy account.
-            stats.recordError(attempt.email);
+            stats.recordError(entry.email);
           }
         }
       }
@@ -953,16 +955,19 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
             }
             // Advance activeIndex immediately in storage
             if (!process.env.VITEST) {
-              const storage = await loadAccounts();
-              if (storage && storage.accounts.length > 1) {
-                const nextIdx = (meta.accountIndex + 1) % storage.accounts.length;
-                storage.activeIndex = nextIdx;
-                const failedAccount = storage.accounts[meta.accountIndex];
+              let switchedTo: number | null = null;
+              await updateAccountsStorage((current) => {
+                if (current.accounts.length <= 1) return;
+                const nextIdx = (meta.accountIndex + 1) % current.accounts.length;
+                current.activeIndex = nextIdx;
+                const failedAccount = current.accounts[meta.accountIndex];
                 if (failedAccount) {
                   failedAccount.cachedQuotaUpdatedAt = 0;
                 }
-                await saveAccounts(storage).catch(() => {});
-                log.warn(`[v2 routing] Account idx=${meta.accountIndex} encountered status=${event.response.status}. Switched activeIndex -> ${nextIdx}`);
+                switchedTo = nextIdx;
+              }).catch(() => {});
+              if (switchedTo !== null) {
+                log.warn(`[v2 routing] Account idx=${meta.accountIndex} encountered status=${event.response.status}. Switched activeIndex -> ${switchedTo}`);
               }
             }
           }
@@ -1002,10 +1007,11 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
               const storage = await loadAccounts();
               if (storage && storage.accounts.length > 1) {
                 const nextIndex = ((storage.activeIndex ?? 0) + 1) % storage.accounts.length;
-                storage.activeIndex = nextIndex;
                 if (!process.env.VITEST) {
-        await saveAccounts(storage);
-      }
+                  await updateAccountsStorage((current) => {
+                    current.activeIndex = nextIndex % Math.max(current.accounts.length, 1);
+                  });
+                }
                 log.warn(`[Safety Shield] High risk threshold reached. Preventive rotation to account index ${nextIndex}`);
               }
             }
@@ -1015,7 +1021,10 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
             // allowance, so this is the only way to measure what a bucket holds.
             recordUsage(
               buildUsageEntry(usage, {
-                account: lastAttemptBySession.get(sessionKey)?.email,
+                // Attribute to the account carried by this request's queue
+                // entry, so concurrent requests are not credited to whichever
+                // account happened to be selected last.
+                account: entry.email,
                 model: prepared.effectiveModel,
                 session: sessionKey,
               }),
@@ -1038,7 +1047,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         log.warn(`Response transform error in v2 adapter: ${error}`);
       } finally {
         if (!event.response?.ok && meta) {
-          lastFailedMetaBySession.set(sessionKey, meta);
+          lastFailedMetaBySession.set(sessionKey, { ...meta, email: entry.email });
         }
       }
     });
@@ -1070,7 +1079,12 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
       if (!meta) {
         const pending = dequeuePending(sessionKey);
         if (pending?.family !== undefined && pending?.accountIndex !== undefined) {
-          meta = { family: pending.family, accountIndex: pending.accountIndex, modelName: pending.modelName };
+          meta = {
+            family: pending.family,
+            accountIndex: pending.accountIndex,
+            modelName: pending.modelName,
+            email: pending.email,
+          };
         }
       }
 
@@ -1100,7 +1114,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
       const storage = await loadAccounts();
       // A transport drop that never produced a response is the only case the
       // response hook cannot see; HTTP 429/403 are already counted there.
-      const failedEmail = status === undefined ? lastAttemptBySession.get(sessionKey)?.email : undefined;
+      const failedEmail = status === undefined ? meta?.email : undefined;
       if (isTransportFailure && failedEmail) {
         EngineStatsManager.getInstance().recordError(failedEmail);
       }
@@ -1130,13 +1144,11 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
       const prevIndex = meta?.accountIndex ?? storage.activeIndex ?? 0;
       const nextIndex = (prevIndex + 1) % storage.accounts.length;
 
-      storage.activeIndex = nextIndex;
-      await saveAccounts(storage).catch(() => {});
-
+      let mgr: AccountManager | undefined;
       try {
         // Advance the shared manager's cursor for this family so the next
         // request for the same model family lands on the healthy account.
-        const mgr = await getSharedAccountManager();
+        mgr = await getSharedAccountManager();
         if (status === 429 || status === 403) {
           // Put the failed account on a temporary cooldown for this model only
           mgr.markRateLimitedByIndex(prevIndex, 60_000, family, "antigravity", meta?.modelName);
@@ -1145,10 +1157,6 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
           // A 404 is proof that the measured catalog was stale for this model;
           // forget it so the account is re-measured instead of trusted blindly.
           mgr.updateModelCatalog(prevIndex, undefined);
-          const snap = mgr.getAccounts()[prevIndex];
-          if (snap) {
-            snap.modelCatalog = undefined;
-          }
         }
         mgr.getCurrentOrNextForFamily(
           family,
@@ -1159,7 +1167,29 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
           100,
         );
       } catch {
-        // Manager resync failure is non-fatal; storage.activeIndex already moved
+        // Manager resync failure is non-fatal; storage still moves below.
+      }
+
+      // Persist the rotation and the fields this path used to drop (rate-limit
+      // windows, model catalog) in one locked read-modify-write, so a concurrent
+      // request cannot clobber them and they survive a restart.
+      if (!process.env.VITEST) {
+        await updateAccountsStorage((current) => {
+          current.activeIndex = nextIndex % Math.max(current.accounts.length, 1);
+          const stored =
+            (meta?.email ? current.accounts.find((account) => account.email === meta.email) : undefined) ??
+            current.accounts[prevIndex];
+          const snap = stored ? mgr?.getAccounts().find((account) => account.email === stored.email) : undefined;
+          if (stored && snap) {
+            stored.rateLimitResetTimes =
+              Object.keys(snap.rateLimitResetTimes).length > 0 ? snap.rateLimitResetTimes : undefined;
+            stored.cachedQuota = snap.cachedQuota;
+            stored.cachedQuotaUpdatedAt = snap.cachedQuotaUpdatedAt;
+            stored.modelCatalog = snap.modelCatalog;
+          }
+        }).catch((error) => {
+          log.warn(`[v2 routing] Failed to persist failover state: ${error instanceof Error ? error.message : String(error)}`);
+        });
       }
 
       log.info(`[v2 routing] Failover rotate idx ${prevIndex} -> ${nextIndex} for family=${family} model=${meta?.modelName ?? "default"} (status=${status ?? "transport"}, 404=${isNotFound})`);
@@ -1544,7 +1574,6 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
   return () => {
     pendingBySession.clear();
     lastFailedMetaBySession.clear();
-    lastAttemptBySession.clear();
     log.info("Cleaning up opencode-antigravity-auth v2 adapter");
   };
 }

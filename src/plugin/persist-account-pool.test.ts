@@ -114,46 +114,36 @@ describe("loadAccounts", () => {
     });
   });
 
-  describe("error handling - THE BUG (Issue #89)", () => {
+  describe("error handling (Issue #89)", () => {
     /**
-     * THIS IS THE BUG: loadAccounts returns null for ANY error, not just ENOENT.
-     * The caller (persistAccountPool) cannot distinguish between:
-     * - File doesn't exist (safe to create new)
-     * - File exists but couldn't be read (DANGEROUS - would overwrite!)
+     * Only ENOENT may resolve to null. Any other failure must reject so the
+     * caller cannot mistake "unreadable" for "empty" and overwrite accounts.
      */
 
-    it("returns null on permission denied (EACCES)", async () => {
+    it("rejects on permission denied (EACCES)", async () => {
       const error = new Error("EACCES") as NodeJS.ErrnoException;
       error.code = "EACCES";
       vi.mocked(fs.readFile).mockRejectedValue(error);
 
-      const result = await storageModule.loadAccounts();
-
-      expect(result).toBeNull();
+      await expect(storageModule.loadAccounts()).rejects.toMatchObject({ code: "EACCES" });
     });
 
-    it("returns null on JSON parse error", async () => {
+    it("rejects on JSON parse error", async () => {
       vi.mocked(fs.readFile).mockResolvedValue("{ invalid json }}}");
 
-      const result = await storageModule.loadAccounts();
-
-      expect(result).toBeNull();
+      await expect(storageModule.loadAccounts()).rejects.toBeInstanceOf(SyntaxError);
     });
 
-    it("returns null on invalid storage format", async () => {
+    it("rejects on invalid storage format", async () => {
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ version: 4, notAccounts: [] }));
 
-      const result = await storageModule.loadAccounts();
-
-      expect(result).toBeNull();
+      await expect(storageModule.loadAccounts()).rejects.toThrow(/accounts is not an array/);
     });
 
-    it("returns null on unknown version", async () => {
+    it("rejects on unknown version", async () => {
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ version: 999, accounts: [] }));
 
-      const result = await storageModule.loadAccounts();
-
-      expect(result).toBeNull();
+      await expect(storageModule.loadAccounts()).rejects.toThrow(/Unsupported account storage version/);
     });
   });
 
@@ -187,16 +177,20 @@ describe("saveAccounts", () => {
   });
 
   it("saves valid storage to disk", async () => {
+    const enoent = new Error("ENOENT") as NodeJS.ErrnoException;
+    enoent.code = "ENOENT";
+    vi.mocked(fs.readFile).mockRejectedValue(enoent);
     vi.mocked(fs.writeFile).mockResolvedValue(undefined);
     vi.mocked(fs.mkdir).mockResolvedValue(undefined);
 
     const storage = createMockStorage([createMockAccount()]);
     await storageModule.saveAccounts(storage);
 
-    expect(fs.writeFile).toHaveBeenCalledTimes(1);
-    const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]?.[1];
-    expect(writtenContent).toBeDefined();
-    const parsed = JSON.parse(writtenContent as string);
+    const storageWrite = vi
+      .mocked(fs.writeFile)
+      .mock.calls.find(([, content]) => typeof content === "string" && content.includes('"version": 4'));
+    expect(storageWrite).toBeDefined();
+    const parsed = JSON.parse(storageWrite![1] as string);
     expect(parsed.version).toBe(4);
     expect(parsed.accounts).toHaveLength(1);
   });
