@@ -468,7 +468,10 @@ export class AccountManager {
             },
             access: matchesFallback ? authFallback?.access : undefined,
             expires: matchesFallback ? authFallback?.expires : undefined,
-            enabled: acc.enabled !== false,
+            // A ToS suspension is permanent until the user lifts it explicitly;
+            // a stale `enabled: true` on disk must not put the account back in
+            // rotation.
+            enabled: acc.enabled !== false && acc.suspended !== true,
             rateLimitResetTimes: acc.rateLimitResetTimes ?? {},
             lastSwitchReason: acc.lastSwitchReason,
             coolingDownUntil: acc.coolingDownUntil,
@@ -1534,6 +1537,7 @@ export class AccountManager {
       addedAt: a.addedAt,
       lastUsed: a.lastUsed,
       enabled: a.enabled,
+      suspended: a.suspended,
     }));
   }
 

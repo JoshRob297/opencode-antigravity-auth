@@ -2,7 +2,7 @@ import { ANSI } from './ansi';
 import { select, type MenuItem } from './select';
 import { confirm } from './confirm';
 
-export type AccountStatus = 'active' | 'rate-limited' | 'expired' | 'verification-required' | 'unknown';
+export type AccountStatus = 'active' | 'rate-limited' | 'expired' | 'verification-required' | 'suspended' | 'unknown';
 
 export interface AccountInfo {
   email?: string;
@@ -12,6 +12,8 @@ export interface AccountInfo {
   status?: AccountStatus;
   isCurrentAccount?: boolean;
   enabled?: boolean;
+  suspended?: boolean;
+  suspendedReason?: string;
 }
 
 export type AuthMenuAction =
@@ -47,6 +49,7 @@ function getStatusBadge(status: AccountStatus | undefined): string {
     case 'rate-limited': return `${ANSI.yellow}[rate-limited]${ANSI.reset}`;
     case 'expired': return `${ANSI.red}[expired]${ANSI.reset}`;
     case 'verification-required': return `${ANSI.red}[needs verification]${ANSI.reset}`;
+    case 'suspended': return `${ANSI.red}[suspended: ToS]${ANSI.reset}`;
     default: return '';
   }
 }
@@ -67,7 +70,9 @@ export async function showAuthMenu(accounts: AccountInfo[]): Promise<AuthMenuAct
     ...accounts.map(account => {
       const statusBadge = getStatusBadge(account.status);
       const currentBadge = account.isCurrentAccount ? ` ${ANSI.cyan}[current]${ANSI.reset}` : '';
-      const disabledBadge = account.enabled === false ? ` ${ANSI.red}[disabled]${ANSI.reset}` : '';
+      const disabledBadge = account.enabled === false && !account.suspended
+        ? ` ${ANSI.red}[disabled]${ANSI.reset}`
+        : '';
       const baseLabel = account.email || `Account ${account.index + 1}`;
       const numbered = `${account.index + 1}. ${baseLabel}`;
       const fullLabel = `${numbered}${currentBadge}${statusBadge ? ' ' + statusBadge : ''}${disabledBadge}`;

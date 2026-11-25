@@ -2082,6 +2082,21 @@ describe("AccountManager", () => {
       expect(reasons[0]?.waitMs).toBeNull();
     });
 
+    it("keeps a suspended account out of rotation even if the file says enabled", () => {
+      const stored: AccountStorageV4 = {
+        version: 4,
+        accounts: [
+          { email: "banned@example.com", refreshToken: "rb", addedAt: 1, lastUsed: 0, enabled: true, suspended: true },
+          { email: "healthy@example.com", refreshToken: "rh", addedAt: 1, lastUsed: 0 },
+        ],
+        activeIndex: 0,
+      };
+
+      const manager = new AccountManager(undefined, stored);
+      expect(manager.getAccounts()[0]?.enabled).toBe(false);
+      expect(manager.getNextForFamily("gemini")?.index).toBe(1);
+    });
+
     it("takes a suspended account out of rotation and restores it on explicit enable", () => {
       const stored: AccountStorageV4 = {
         version: 4,

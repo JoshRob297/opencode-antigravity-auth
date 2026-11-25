@@ -2794,9 +2794,11 @@ export const createAntigravityPlugin = (providerId: string) => async (
           while (true) {
                 const now = Date.now();
                 const existingAccounts = existingStorage.accounts.map((acc, idx) => {
-                  let status: 'active' | 'rate-limited' | 'expired' | 'verification-required' | 'unknown' = 'unknown';
+                  let status: 'active' | 'rate-limited' | 'expired' | 'verification-required' | 'suspended' | 'unknown' = 'unknown';
 
-                  if (acc.verificationRequired) {
+                  if (acc.suspended) {
+                    status = 'suspended';
+                  } else if (acc.verificationRequired) {
                     status = 'verification-required';
                   } else {
                     const rateLimits = acc.rateLimitResetTimes;
@@ -2826,6 +2828,8 @@ export const createAntigravityPlugin = (providerId: string) => async (
                     status,
                     isCurrentAccount: idx === (existingStorage.activeIndex ?? 0),
                     enabled: acc.enabled !== false,
+                    suspended: acc.suspended === true,
+                    suspendedReason: acc.suspendedReason,
                   };
                 });
                 
@@ -2838,7 +2842,11 @@ export const createAntigravityPlugin = (providerId: string) => async (
                   
                   for (const res of results) {
                     const label = res.email || `Account ${res.index + 1}`;
-                    const disabledStr = res.disabled ? " (disabled)" : "";
+                    const disabledStr = res.suspended
+                      ? " (suspended: Terms of Service)"
+                      : res.disabled
+                        ? " (disabled)"
+                        : "";
                     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
                     console.log(`  ${label}${disabledStr}`);
                     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
