@@ -221,6 +221,14 @@ export interface AccountMetadataV3 {
   verificationRequiredAt?: number;
   verificationRequiredReason?: string;
   verificationUrl?: string;
+  /**
+   * Set when the backend answers 403 "disabled in this account for violation of
+   * Terms of Service". This is not a rate limit: retrying only burns attempts,
+   * so the account is taken out of rotation until the user re-enables it.
+   */
+  suspended?: boolean;
+  suspendedAt?: number;
+  suspendedReason?: string;
   /** Cached soft quota data */
   cachedQuota?: Partial<Record<string, { remainingFraction?: number; resetTime?: string; modelCount?: number }>>;
   cachedQuotaUpdatedAt?: number;

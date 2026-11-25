@@ -1475,7 +1475,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
           try {
             const storage = await loadAccounts();
             const activeAcc = storage?.accounts?.[storage.activeIndex]?.email;
-            const report = EngineStatsManager.getInstance().formatStatsReport(activeAcc);
+            const report = EngineStatsManager.getInstance().formatStatsReport(activeAcc, storage?.accounts);
             return { content: report };
           } catch (error) {
             return { content: `Error retrieving Antigravity stats: ${error instanceof Error ? error.message : String(error)}` };

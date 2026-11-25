@@ -2065,6 +2065,65 @@ describe("AccountManager", () => {
       vi.useRealTimers();
     });
 
+    it("reports a Terms of Service suspension instead of a plain disable", () => {
+      const stored: AccountStorageV4 = {
+        version: 4,
+        accounts: [
+          { email: "banned@example.com", refreshToken: "rb", addedAt: 1, lastUsed: 0, enabled: false, suspended: true, suspendedReason: "violation of Terms of Service" },
+        ],
+        activeIndex: 0,
+      };
+
+      const manager = new AccountManager(undefined, stored);
+      const reasons = manager.getAllBlockedReasons("gemini");
+
+      expect(reasons[0]?.reason).toContain("suspended");
+      expect(reasons[0]?.reason).toContain("violation of Terms of Service");
+      expect(reasons[0]?.waitMs).toBeNull();
+    });
+
+    it("keeps a suspended account out of rotation even if the file says enabled", () => {
+      const stored: AccountStorageV4 = {
+        version: 4,
+        accounts: [
+          { email: "banned@example.com", refreshToken: "rb", addedAt: 1, lastUsed: 0, enabled: true, suspended: true },
+          { email: "healthy@example.com", refreshToken: "rh", addedAt: 1, lastUsed: 0 },
+        ],
+        activeIndex: 0,
+      };
+
+      const manager = new AccountManager(undefined, stored);
+      expect(manager.getAccounts()[0]?.enabled).toBe(false);
+      expect(manager.getNextForFamily("gemini")?.index).toBe(1);
+    });
+
+    it("takes a suspended account out of rotation and restores it on explicit enable", () => {
+      const stored: AccountStorageV4 = {
+        version: 4,
+        accounts: [
+          { email: "banned@example.com", refreshToken: "rb", addedAt: 1, lastUsed: 0 },
+          { email: "healthy@example.com", refreshToken: "rh", addedAt: 1, lastUsed: 0 },
+        ],
+        activeIndex: 0,
+      };
+
+      const manager = new AccountManager(undefined, stored);
+      expect(manager.markAccountSuspended(0, "violation of Terms of Service")).toBe(true);
+
+      const suspended = manager.getAccounts()[0];
+      expect(suspended?.enabled).toBe(false);
+      expect(suspended?.suspended).toBe(true);
+      expect(suspended?.suspendedReason).toBe("violation of Terms of Service");
+
+      const next = manager.getNextForFamily("gemini");
+      expect(next?.index).toBe(1);
+
+      expect(manager.setAccountEnabled(0, true)).toBe(true);
+      const restored = manager.getAccounts()[0];
+      expect(restored?.enabled).toBe(true);
+      expect(restored?.suspended).toBe(false);
+    });
+
     it("names the cause when only the model-less family key was marked", () => {
       vi.useFakeTimers();
       vi.setSystemTime(10_000);

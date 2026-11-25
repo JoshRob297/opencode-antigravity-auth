@@ -126,7 +126,7 @@ vi.mock("./plugin/stats", () => ({
   },
 }));
 
-import { createAntigravityPlugin, verifyAccountAccess } from "./plugin";
+import { createAntigravityPlugin, verifyAccountAccess, extractToSSuspensionReason } from "./plugin";
 
 function createMockClient() {
   return {
@@ -251,6 +251,38 @@ describe("v1 plugin empty response retry (2.3)", () => {
 
     expect(res2.ok).toBe(true);
     expect(fetchSpy2).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("extractToSSuspensionReason", () => {
+  it("recognizes the account-level Terms of Service suspension", () => {
+    const body = JSON.stringify({
+      error: {
+        code: 403,
+        message: "This service has been disabled in this account for violation of Terms of Service. Please submit an appeal to continue using this product.",
+        status: "PERMISSION_DENIED",
+      },
+    });
+
+    const reason = extractToSSuspensionReason(body);
+    expect(reason).toContain("violation of Terms of Service");
+  });
+
+  it("does not treat a validation_required 403 as a suspension", () => {
+    const body = JSON.stringify({
+      error: {
+        code: 403,
+        message: "Validation Required",
+        details: [{ reason: "VALIDATION_REQUIRED", metadata: { validation_url: "https://accounts.google.com/verify" } }],
+      },
+    });
+
+    expect(extractToSSuspensionReason(body)).toBeUndefined();
+  });
+
+  it("ignores rate-limit and quota bodies", () => {
+    const body = JSON.stringify({ error: { code: 429, message: "Individual quota reached" } });
+    expect(extractToSSuspensionReason(body)).toBeUndefined();
   });
 });
 
