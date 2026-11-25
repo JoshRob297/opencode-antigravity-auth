@@ -336,6 +336,25 @@ If you're seeing unusual rate limit behavior, please share in a [GitHub issue](h
 
 ---
 
+## 403 "This service has been disabled in this account for violation of Terms of Service"
+
+This is not a rate limit and not the `validation_required` flow. Google disabled
+the account itself, so retrying changes nothing: the backend answers the same
+403 for every model.
+
+Since 2.9.13 the plugin detects it, removes the account from rotation, persists
+`suspended: true` plus `suspendedReason`, and reports it as `SUSPENDED` in
+`antigravity_stats`, as `(suspended)` in `antigravity_quota`, and as
+`[suspended: ToS]` in the account menu.
+
+What to do:
+1. Appeal with the link/instructions Google includes in the error, if any.
+2. Keep using another account in the meantime; the suspended one is skipped.
+3. If Google reinstates it, re-enable the account (menu or `enabled: true`
+   without `suspended`); the plugin clears the mark and tries it again.
+
+---
+
 ## Infinite `.tmp` Files Created
 
 **Cause:** When account is rate-limited and plugin retries infinitely, it creates many temp files.

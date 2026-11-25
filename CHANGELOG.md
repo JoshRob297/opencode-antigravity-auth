@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.9.13
+
+### Fixed
+
+- **Un 403 por suspension de cuenta contaba como un fallo reintentable.** Cuando Google responde
+  `This service has been disabled in this account for violation of Terms of Service`, el plugin
+  reintentaba el mismo modelo, dejaba la cuenta en la rotacion y seguia intentando en cada request.
+  Ahora el 403 se reconoce como suspension permanente: la cuenta se deshabilita, se sale de la
+  rotacion y ya no se reintenta. El estado (`suspended`, `suspendedAt`, `suspendedReason`) se
+  persiste, y una cuenta suspendida sigue fuera aunque el archivo diga `enabled: true`. Re-habilitarla
+  a mano limpia la marca.
+- **La suspension no se veia en ningun reporte.** `antigravity_stats` muestra `SUSPENDED`,
+  `antigravity_quota` muestra `(suspended)` y `USABLE no`, y el menu la marca `[suspended: ToS]`.
+  Antes la cuenta suspendida seguia apareciendo con 100% de salud y `USABLE yes`, porque el resumen de
+  cuota responde igual para una cuenta bloqueada.
+- **La firma de cliente del CLI estaba desactualizada.** Se actualizo la pareja version/build a la que
+  publica agy 1.5.17 (`cl=4823843970351104`, tomado del artefacto
+  `antigravity-cli/1.5.17-4823843970351104/linux-x64/cli_linux_x64.tar.gz`).
+
+### Verified
+
+- Peticiones vivas con la firma nueva: `gemini-3.8-flash-low`, `gemini-3.8-flash-high` y
+  `claude-sonnet-4-6` devuelven HTTP 200 con `modelVersion` correcto en dos cuentas.
+- Una cuenta que solo fallaba con `Requested entity was not found` volvio a servir trafico normal: el
+  404 era del modelo pedido, no del proyecto.
+
 ## 2.9.12
 
 ### Fixed
