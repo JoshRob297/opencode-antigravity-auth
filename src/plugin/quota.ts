@@ -64,6 +64,8 @@ export interface AccountQuotaResult {
   status: AccountQuotaStatus;
   error?: string;
   disabled?: boolean;
+  /** 403 Terms of Service suspension: the account cannot serve inference at all. */
+  suspended?: boolean;
   groups?: GroupQuotaDisplay[];
   models?: ModelQuotaDisplay[];
   cachedQuota?: Partial<Record<QuotaGroup, QuotaGroupSummary>>;
@@ -265,6 +267,7 @@ export async function fetchAccountQuotaDetails(
   providerId = ANTIGRAVITY_PROVIDER_ID,
 ): Promise<AccountQuotaResult> {
   const disabled = account.enabled === false;
+  const suspended = account.suspended === true;
   let auth = buildAuthFromAccount(account);
   const now = Date.now();
 
@@ -363,6 +366,7 @@ export async function fetchAccountQuotaDetails(
           email: account.email,
           status: disabled ? "disabled" : "ok",
           disabled,
+          suspended,
           groups,
           cachedQuota,
           modelCatalog: account.modelCatalog,
@@ -381,6 +385,7 @@ export async function fetchAccountQuotaDetails(
         email: account.email,
         status: disabled ? "disabled" : "ok",
         disabled,
+        suspended,
         models: [],
         modelCatalog: account.modelCatalog,
         updatedAccount,
@@ -514,6 +519,7 @@ export async function fetchAccountQuotaDetails(
       email: account.email,
       status: disabled ? "disabled" : "ok",
       disabled,
+      suspended,
       groups: groups.length > 0 ? groups : undefined,
       models,
       cachedQuota,
@@ -731,8 +737,11 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
           const email = result.email || `account-${result.index + 1}`;
           const five = formatBucketCells(group?.fiveHour);
           const week = formatBucketCells(group?.weekly);
-          const usability = formatUsabilityCells(group);
-          const name = `${shortEmail(email)}${result.disabled ? " (disabled)" : ""}`;
+          const usability = result.suspended
+            ? { usable: "no · suspended".padEnd(16, " "), sortKey: 0 }
+            : formatUsabilityCells(group);
+          const suffix = result.suspended ? " (suspended)" : result.disabled ? " (disabled)" : "";
+          const name = `${shortEmail(email)}${suffix}`;
           let line = "";
           if (showFiveHour) line += `${five.quota}${five.reset}`;
           if (showWeekly) line += `${week.quota}${week.reset}`;
@@ -746,7 +755,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
     }
   } else {
     // Fallback model list format (accounts whose summary endpoint is unavailable).
-    const familyMap = new Map<string, Map<string, { percentage: number; resetIn: string; disabled?: boolean }>>();
+    const familyMap = new Map<string, Map<string, { percentage: number; resetIn: string; disabled?: boolean; suspended?: boolean }>>();
 
     for (const result of results) {
       if (result.status === "error" || !result.models) {
@@ -773,6 +782,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
             percentage: model.remainingPercentage,
             resetIn: model.timeUntilResetFormatted,
             disabled: result.disabled,
+            suspended: result.suspended,
           });
         }
       }
@@ -785,7 +795,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
 
       const accountsList = Array.from(accountMap.entries()).map(([email, info]) => ({ email, ...info }));
       for (const acc of accountsList.sort((a, b) => b.percentage - a.percentage)) {
-        output += `${progressBar(acc.percentage).padEnd(18, " ")}${acc.resetIn.padEnd(15, " ")}${shortEmail(acc.email)}${acc.disabled ? " (disabled)" : ""}\n`;
+        output += `${progressBar(acc.percentage).padEnd(18, " ")}${acc.resetIn.padEnd(15, " ")}${shortEmail(acc.email)}${acc.suspended ? " (suspended)" : acc.disabled ? " (disabled)" : ""}\n`;
       }
       output += "```\n";
     }

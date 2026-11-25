@@ -446,6 +446,31 @@ function extractVerificationErrorDetails(bodyText: string): {
   };
 }
 
+/**
+ * 403 signature for an account-level Terms of Service suspension.
+ *
+ * Distinct from `validation_required`: there is no verification URL, and no
+ * amount of retrying clears it. The backend answers this for every model on the
+ * account, so the account has to leave rotation instead of being retried.
+ */
+export function extractToSSuspensionReason(bodyText: string): string | undefined {
+  if (!bodyText) {
+    return undefined;
+  }
+  const decoded = decodeEscapedText(bodyText);
+  const match = decoded
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) =>
+      /violation of terms of service/i.test(line) ||
+      /service has been disabled in this account/i.test(line),
+    );
+  if (!match) {
+    return undefined;
+  }
+  return match.slice(0, 300);
+}
+
 export async function verifyAccountAccess(
   account: {
     refreshToken: string;
@@ -605,7 +630,39 @@ type VerificationStoredAccount = {
   verificationRequiredAt?: number;
   verificationRequiredReason?: string;
   verificationUrl?: string;
+  suspended?: boolean;
+  suspendedAt?: number;
+  suspendedReason?: string;
 };
+
+/**
+ * Persists a ToS suspension in the raw storage record. Mirrors
+ * `markStoredAccountVerificationRequired` so a crash right after the 403 does
+ * not put the suspended account back in rotation on the next start.
+ */
+function markStoredAccountSuspended(account: VerificationStoredAccount, reason: string): boolean {
+  let changed = false;
+  const normalizedReason = reason.trim();
+
+  if (account.suspended !== true) {
+    account.suspended = true;
+    changed = true;
+  }
+  if (account.suspendedAt === undefined) {
+    account.suspendedAt = Date.now();
+    changed = true;
+  }
+  if (normalizedReason && account.suspendedReason !== normalizedReason) {
+    account.suspendedReason = normalizedReason;
+    changed = true;
+  }
+  if (account.enabled !== false) {
+    account.enabled = false;
+    changed = true;
+  }
+
+  return changed;
+}
 
 function markStoredAccountVerificationRequired(
   account: VerificationStoredAccount,
@@ -2308,6 +2365,37 @@ export const createAntigravityPlugin = (providerId: string) => async (
 
                 if (response.status === 403) {
                   const errorBodyText = await response.clone().text().catch(() => "");
+                  const suspensionReason = extractToSSuspensionReason(errorBodyText);
+
+                  if (suspensionReason) {
+                    accountManager.markAccountSuspended(account.index, suspensionReason);
+                    try {
+                      const stored = await loadAccounts();
+                      const target = stored?.accounts[account.index];
+                      if (stored && target && markStoredAccountSuspended(target, suspensionReason)) {
+                        await saveAccounts(stored);
+                      }
+                    } catch (persistError) {
+                      pushDebug(`suspension persist failed: ${String(persistError)}`);
+                    }
+
+                    const label = account.email || `Account ${account.index + 1}`;
+                    if (accountManager.shouldShowAccountToast(account.index, 60000)) {
+                      await showToast(
+                        `[WARN] ${label} is suspended (Terms of Service). Removed from rotation; appeal at support.google.com.`,
+                        "warning",
+                      );
+                      accountManager.markToastShown(account.index);
+                    }
+
+                    pushDebug(`tos-suspension: disabled account ${account.index} (${suspensionReason})`);
+                    getHealthTracker().recordFailure(account.index);
+
+                    lastFailure = createFailureContext(response);
+                    shouldSwitchAccount = true;
+                    break;
+                  }
+
                   const extracted = extractVerificationErrorDetails(errorBodyText);
 
                   if (extracted.validationRequired) {

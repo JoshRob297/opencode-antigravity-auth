@@ -215,10 +215,20 @@ export class EngineStatsManager {
     return this.data;
   }
 
-  public formatStatsReport(activeEmail?: string): string {
+  public formatStatsReport(
+    activeEmail?: string,
+    accountStates?: Array<{ email?: string; enabled?: boolean; suspended?: boolean }>,
+  ): string {
     this.refreshFromDisk();
     const data = this.data;
     const lines: string[] = [];
+
+    const stateByEmail = new Map<string, { enabled?: boolean; suspended?: boolean }>();
+    for (const state of accountStates ?? []) {
+      if (state.email) {
+        stateByEmail.set(state.email.toLowerCase(), state);
+      }
+    }
 
     lines.push("==================== ANTIGRAVITY ENGINE STATS ====================");
     lines.push("");
@@ -240,7 +250,14 @@ export class EngineStatsManager {
         const health = `${acc.healthScore ?? 100}%`.padEnd(10);
         const reqs = `${acc.requestsSuccess}/${acc.rateLimits429}/${acc.errorsOther}`.padEnd(20);
         const isActive = activeEmail && acc.email.toLowerCase() === activeEmail.toLowerCase();
-        const status = isActive ? "ACTIVE" : "STANDBY";
+        const state = stateByEmail.get(acc.email.toLowerCase());
+        const status = state?.suspended
+          ? "SUSPENDED"
+          : state?.enabled === false
+            ? "DISABLED"
+            : isActive
+              ? "ACTIVE"
+              : "STANDBY";
         lines.push(`${userPart}  ${health}${reqs}${status}`);
       }
     }

@@ -198,6 +198,10 @@ export interface ManagedAccount {
   verificationRequiredAt?: number;
   verificationRequiredReason?: string;
   verificationUrl?: string;
+  /** 403 ToS suspension: permanent for this process until the user re-enables it. */
+  suspended?: boolean;
+  suspendedAt?: number;
+  suspendedReason?: string;
   /** Counter of consecutive high safety risk evaluations (Account Shield) */
   consecutiveHighRiskTriggers?: number;
 }
@@ -479,6 +483,9 @@ export class AccountManager {
             verificationRequiredAt: acc.verificationRequiredAt,
             verificationRequiredReason: acc.verificationRequiredReason,
             verificationUrl: acc.verificationUrl,
+            suspended: acc.suspended,
+            suspendedAt: acc.suspendedAt,
+            suspendedReason: acc.suspendedReason,
           };
         })
         .filter((a): a is ManagedAccount => a !== null);
@@ -965,6 +972,12 @@ export class AccountManager {
     }
     account.enabled = enabled;
 
+    // Re-enabling is the user's explicit "try this account again": drop the
+    // suspension mark so the quota report stops calling it suspended.
+    if (enabled && account.suspended) {
+      this.clearAccountSuspension(accountIndex, false);
+    }
+
     if (!enabled) {
       for (const family of Object.keys(this.currentAccountIndexByFamily) as ModelFamily[]) {
         if (this.currentAccountIndexByFamily[family] === accountIndex) {
@@ -1023,6 +1036,53 @@ export class AccountManager {
     if (enableAccount && wasVerificationRequired && account.enabled === false) {
       this.setAccountEnabled(accountIndex, true);
     } else if (wasVerificationRequired || hadMetadata) {
+      this.requestSaveToDisk();
+    }
+
+    return true;
+  }
+
+  /**
+   * Takes an account out of rotation after a 403 "violation of Terms of Service".
+   * The backend answers that for every model on the account, so retrying costs a
+   * wasted attempt per request until the user appeals or re-enables it.
+   */
+  markAccountSuspended(accountIndex: number, reason?: string): boolean {
+    const account = this.accounts[accountIndex];
+    if (!account) {
+      return false;
+    }
+
+    account.suspended = true;
+    account.suspendedAt = nowMs();
+    const normalizedReason = reason?.trim();
+    account.suspendedReason = normalizedReason || undefined;
+
+    if (account.enabled !== false) {
+      this.setAccountEnabled(accountIndex, false);
+    } else {
+      this.requestSaveToDisk();
+    }
+
+    return true;
+  }
+
+  clearAccountSuspension(accountIndex: number, enableAccount = true): boolean {
+    const account = this.accounts[accountIndex];
+    if (!account) {
+      return false;
+    }
+
+    const wasSuspended = account.suspended === true;
+    const hadMetadata = account.suspendedAt !== undefined || account.suspendedReason !== undefined;
+
+    account.suspended = false;
+    account.suspendedAt = undefined;
+    account.suspendedReason = undefined;
+
+    if (enableAccount && wasSuspended && account.enabled === false) {
+      this.setAccountEnabled(accountIndex, true);
+    } else if (wasSuspended || hadMetadata) {
       this.requestSaveToDisk();
     }
 
@@ -1165,9 +1225,11 @@ export class AccountManager {
     return this.accounts.map((a, idx) => {
       const label = a.email || `Account ${idx + 1}`;
       if (a.enabled === false) {
-        const reasonStr = a.verificationRequired
-          ? `verification required (${a.verificationRequiredReason || "visit accounts.google.com"})`
-          : "account disabled";
+        const reasonStr = a.suspended
+          ? `suspended (${a.suspendedReason || "terms of service violation"})`
+          : a.verificationRequired
+            ? `verification required (${a.verificationRequiredReason || "visit accounts.google.com"})`
+            : "account disabled";
         return { email: label, reason: reasonStr, waitMs: null };
       }
 
@@ -1271,6 +1333,9 @@ export class AccountManager {
         verificationRequiredAt: a.verificationRequiredAt,
         verificationRequiredReason: a.verificationRequiredReason,
         verificationUrl: a.verificationUrl,
+        suspended: a.suspended,
+        suspendedAt: a.suspendedAt,
+        suspendedReason: a.suspendedReason,
       })),
       activeIndex: claudeIndex,
       activeIndexByFamily: {
