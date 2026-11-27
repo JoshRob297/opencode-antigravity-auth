@@ -25,7 +25,7 @@
 
 - **OpenCode v1 and v2 in one entrypoint.** A callable v1 factory plus native v2 `.setup()`, with models, variants, tools and slash commands registered through the v2 registries.
 - **Real Antigravity model catalog.** The curated core is Gemini 3.8 Flash, the Claude 4.6 pair and GPT-OSS 120B; anything newer that your account is granted (Gemini 4 Argon/Hydrogen, Claude 5.5) is registered by `model_discovery` from the backend catalog, one selector entry per family with `low`/`medium`/`high` variants.
-- **Official CLI client signature.** Requests present `antigravity/cli/<version> (aidev_client; ...)`, resolved at startup from the CLI auto-updater. Without it the backend answers `404 NOT_FOUND` for the newer Gemini lines - which is also why a stale signature used to look like "preview access not enabled". Version and build id come from one table (`1.5.18` / `cl=1030252320` today); a version whose build id is unknown is ignored instead of pairing a new version with an old `cl`.
+- **Official CLI client signature.** Requests present `antigravity/cli/<version> (aidev_client; ...)`, resolved at startup from the CLI auto-updater. Without it the backend answers `404 NOT_FOUND` for the newer Gemini lines - which is also why a stale signature used to look like "preview access not enabled". Version and build id come from one table (`1.5.18` / `cl=1030252320` today); a version whose build id is unknown is ignored instead of pairing a new version with an old `cl`, and `/antigravity-stats` warns when the table is behind the CLI.
 - **Multi-account pool with entitlement-aware rotation.** Per-account quota, health and measured model catalog; failover on `429`, `403`, transport drops and `404` misses; account cooldowns and circuit breakers so a bad account cannot poison the pool.
 - **Account-level suspension handling.** A `403 violation of Terms of Service` is not retried: the account is disabled, persisted as `suspended`, excluded from rotation, and reported as `SUSPENDED` / `(suspended)` instead of a healthy 100%.
 - **Dual-window quota reporting.** `antigravity_quota` and `/antigravity-quota` show 5h and weekly windows per model family (Gemini, Claude/GPT, Gemini 4 Argon), short reset countdowns, a truthful `USABLE` flag and the measured capabilities of each account.
@@ -145,6 +145,13 @@ OpenCode **v1 reads `plugin`, v2 reads `plugins`** — the installer detects whi
 ```bash
 git clone https://github.com/JoshRob297/opencode-antigravity-auth.git /path/to/plugin
 cd /path/to/plugin && npm install && npm run build
+```
+
+Live smoke test (manual, uses your OAuth accounts, never CI):
+
+```bash
+npm run verify:live                      # first enabled account, 3 models
+npm run verify:live -- --all --model gemini-3.8-flash-high
 ```
 
 ```json

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { join } from "node:path";
 import { env } from "node:process";
 import { getOpencodeConfigDir } from "./config/updater";
+import { getCliVersionStatus } from "../constants";
 import { createLogger } from "./logger";
 import { shortEmail } from "./quota";
 
@@ -217,13 +218,21 @@ export class EngineStatsManager {
 
   public formatStatsReport(
     activeEmail?: string,
-    accountStates?: Array<{ email?: string; enabled?: boolean; suspended?: boolean }>,
+    accountStates?: Array<{
+      email?: string;
+      enabled?: boolean;
+      suspended?: boolean;
+      suspendedFamilies?: Array<"claude" | "gemini">;
+    }>,
   ): string {
     this.refreshFromDisk();
     const data = this.data;
     const lines: string[] = [];
 
-    const stateByEmail = new Map<string, { enabled?: boolean; suspended?: boolean }>();
+    const stateByEmail = new Map<
+      string,
+      { enabled?: boolean; suspended?: boolean; suspendedFamilies?: Array<"claude" | "gemini"> }
+    >();
     for (const state of accountStates ?? []) {
       if (state.email) {
         stateByEmail.set(state.email.toLowerCase(), state);
@@ -253,14 +262,23 @@ export class EngineStatsManager {
         const state = stateByEmail.get(acc.email.toLowerCase());
         const status = state?.suspended
           ? "SUSPENDED"
-          : state?.enabled === false
-            ? "DISABLED"
-            : isActive
-              ? "ACTIVE"
-              : "STANDBY";
+          : state?.suspendedFamilies?.length
+            ? `SUSPENDED:${state.suspendedFamilies.join("+")}`
+            : state?.enabled === false
+              ? "DISABLED"
+              : isActive
+                ? "ACTIVE"
+                : "STANDBY";
         lines.push(`${userPart}  ${health}${reqs}${status}`);
       }
     }
+
+    lines.push("");
+    const cli = getCliVersionStatus();
+    const driftNote = cli.drift
+      ? `  <- updater reports ${cli.reportedVersion}; add its build id to ANTIGRAVITY_CLI_BUILDS`
+      : "";
+    lines.push(`CLI SIGNATURE: ${cli.version} | cl=${cli.build}${driftNote}`);
 
     lines.push("");
     lines.push("SIGNATURE CACHE (THINKING)");

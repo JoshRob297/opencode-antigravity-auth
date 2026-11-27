@@ -229,6 +229,11 @@ export interface AccountMetadataV3 {
   suspended?: boolean;
   suspendedAt?: number;
   suspendedReason?: string;
+  /**
+   * Families blocked by a model-scoped suspension while the account itself still
+   * serves the rest. Account-level suspensions use `suspended` instead.
+   */
+  suspendedFamilies?: Array<"claude" | "gemini">;
   /** Cached soft quota data */
   cachedQuota?: Partial<Record<string, { remainingFraction?: number; resetTime?: string; modelCount?: number }>>;
   cachedQuotaUpdatedAt?: number;

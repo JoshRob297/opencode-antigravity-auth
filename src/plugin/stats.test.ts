@@ -51,6 +51,7 @@ describe("EngineStatsManager", () => {
     expect(report).not.toContain("Sin actividad registrada aun");
     expect(report).toContain("1/1/0");
     expect(report).toContain("ACTIVE");
+    expect(report).toContain("CLI SIGNATURE:");
   });
 
   it("picks up counters written by another process", async () => {

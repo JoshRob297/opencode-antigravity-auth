@@ -202,3 +202,19 @@ Diferencias que siguen existiendo, ninguna con efecto medido sobre el status:
   (`modelVersion: gemini-3.8-flash-n`), `gemini-4-hydrogen-high` → `200`
   (`modelVersion: gemini-4-hydrogen`), `claude-sonnet-4-6` → `200`.
 - `requestId` emitido con la forma del CLI y aceptado por el backend.
+
+## 7. Verificación viva reproducible
+
+`script/verify-live.ts` hace la comprobación manual contra el backend con la
+firma y el endpoint actuales:
+
+```bash
+npx --yes tsx script/verify-live.ts
+npx --yes tsx script/verify-live.ts --all --model gemini-3.8-flash-high
+```
+
+Lee las cuentas reales, refresca el token, resuelve el proyecto y manda
+`gemini-3.8-flash-high`, `gemini-4-hydrogen-high` y `claude-sonnet-4-6`. Un `404`
+se reporta como "no entitled" (esperado sin grant) y no falla la ejecución; un
+`401`/`403`/`5xx` sí. No debe correr en CI.
+

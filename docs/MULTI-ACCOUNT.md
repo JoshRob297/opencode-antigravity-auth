@@ -88,6 +88,11 @@ shows as `SUSPENDED` in `antigravity_stats`, `(suspended)` / `USABLE no` in
 `antigravity_quota`, and `[suspended: ToS]` in the menu. Re-enabling the account
 clears the mark, so only do it after an appeal succeeds.
 
+If the message names a single family ("Claude models are suspended"), the block is
+scoped instead: `suspendedFamilies` records it, only that family leaves rotation,
+and the account keeps serving the other one. An unqualified message is treated as
+account-wide.
+
 Useful when:
 - An account is temporarily banned or rate-limited for an extended period
 - You want to reserve certain accounts for specific use cases
@@ -152,6 +157,7 @@ Accounts are stored in `~/.config/opencode/antigravity-accounts.json`:
 | `suspended` | Set by the plugin after a 403 Terms of Service response. A suspended account stays out of rotation even if `enabled` is `true`; enabling it explicitly clears the mark. |
 | `suspendedAt` | Timestamp of the suspension. |
 | `suspendedReason` | Message the backend returned with the suspension. |
+| `suspendedFamilies` | Families blocked by a model-scoped suspension (`claude`, `gemini`). The account stays enabled for the rest. |
 | `activeIndex` | Currently active account index |
 | `activeIndexByFamily` | Per-model-family active account (claude/gemini tracked separately) |
 

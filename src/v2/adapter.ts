@@ -12,14 +12,15 @@ import { loadAccounts, updateAccountsStorage, type ModelFamily } from "../plugin
 import { AccountManager, computeSoftQuotaCacheTtlMs, resolveQuotaGroup } from "../plugin/accounts";
 import { refreshAccessToken } from "../plugin/token";
 import { formatRefreshParts, parseRefreshParts, accessTokenExpired } from "../plugin/auth";
-import { persistAccountPool } from "../plugin";
+import { persistAccountPool, extractToSSuspensionReason, extractSuspendedFamily } from "../plugin";
 import { authorizeAntigravity, exchangeAntigravity, type AntigravityTokenExchangeResult } from "../antigravity/oauth";
+import { ensureProjectContext } from "../plugin/project";
 import { resolveCachedAuth } from "../plugin/cache";
 import { executeSearchWithRotation } from "../plugin/search";
 import { createLogger } from "../plugin/logger";
 import { writeRequestAudit } from "../plugin/debug";
 import { aggregateUsage, buildUsageEntry, estimateCapacity, formatUsageReport, readQuotaSnapshots, readUsage, recordUsage } from "../plugin/usage-ledger";
-import { ANTIGRAVITY_ENDPOINT_FALLBACKS, ANTIGRAVITY_PROVIDER_ID } from "../constants";
+import { ANTIGRAVITY_DEFAULT_PROJECT_ID, ANTIGRAVITY_ENDPOINT_FALLBACKS, ANTIGRAVITY_PROVIDER_ID } from "../constants";
 import type { OAuthAuthDetails } from "../plugin/types";
 import {
   prepareAntigravityRequest,
@@ -477,7 +478,7 @@ async function performSearch(
   const rotated = [
     ...storage.accounts.slice(activeIndex),
     ...storage.accounts.slice(0, activeIndex),
-  ].filter((acc) => acc.enabled !== false && !acc.verificationRequired && !!acc.refreshToken);
+  ].filter((acc) => acc.enabled !== false && acc.suspended !== true && !acc.suspendedFamilies?.includes("gemini") && !acc.verificationRequired && !!acc.refreshToken);
 
   if (rotated.length === 0) {
     return "Error: Selected account has no valid credentials.";
@@ -517,6 +518,39 @@ async function performSearch(
  *
  * Fail-open: an editor without `list`, or any throw, leaves the list untouched.
  */
+/**
+ * Persists a ToS suspension detected on the v2 response path, mirroring what the
+ * v1 handler writes so both entrypoints share one on-disk state.
+ */
+async function persistSuspension(
+  accountIndex: number,
+  reason: string,
+  family?: "claude" | "gemini",
+): Promise<void> {
+  await updateAccountsStorage((current) => {
+    const target = current.accounts[accountIndex];
+    if (!target) return;
+    const normalized = reason.trim();
+    if (target.suspendedAt === undefined) {
+      target.suspendedAt = Date.now();
+    }
+    if (normalized) {
+      target.suspendedReason = normalized;
+    }
+    if (family) {
+      target.suspendedFamilies = Array.from(
+        new Set([...(target.suspendedFamilies ?? []), family]),
+      );
+    } else {
+      target.suspended = true;
+      target.enabled = false;
+      target.suspendedFamilies = undefined;
+    }
+  }).catch((error) => {
+    log.warn(`[v2 routing] Could not persist suspension: ${String(error)}`);
+  });
+}
+
 export function hideForeignModels(
   editor: any,
   providerID: string,
@@ -822,6 +856,39 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         headers.set("Authorization", `Bearer ${accessToken}`);
       }
 
+      // Resolve the managed project the same way the v1 path does, and persist
+      // it so later sessions skip loadCodeAssist. The shared fallback id is
+      // never written as if it belonged to the account.
+      let resolvedProjectId = account.managedProjectId || account.projectId || "";
+      if (accessToken) {
+        try {
+          const context = await ensureProjectContext({
+            type: "oauth",
+            refresh: formatRefreshParts({
+              refreshToken: account.refreshToken,
+              projectId: account.projectId,
+              managedProjectId: account.managedProjectId,
+            }),
+            access: accessToken,
+            expires: Date.now() + 60_000,
+          });
+          if (context.effectiveProjectId) {
+            resolvedProjectId = context.effectiveProjectId;
+          }
+          if (
+            accountManager &&
+            context.effectiveProjectId &&
+            context.effectiveProjectId !== ANTIGRAVITY_DEFAULT_PROJECT_ID &&
+            context.effectiveProjectId !== account.managedProjectId &&
+            accountManager.setManagedProjectId(activeIndex, context.effectiveProjectId)
+          ) {
+            await accountManager.saveToDisk().catch(() => {});
+          }
+        } catch (error) {
+          log.warn(`[v2 routing] Project resolution failed: ${String(error)}`);
+        }
+      }
+
       const prepared = prepareAntigravityRequest(
         url,
         {
@@ -830,7 +897,7 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
           body: bodyText,
         },
         accessToken,
-        account.managedProjectId || account.projectId || "default-cli-project",
+        resolvedProjectId || "default-cli-project",
         // This hook rewrites the request itself, so it must apply the same
         // preferred host as the v1 fallback loop. Left unspecified,
         // prepareAntigravityRequest defaults to the legacy sandbox host, which
@@ -871,6 +938,24 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
       // model, account and usage metadata.
       const responseUrl = typeof event.request?.url === "string" ? event.request.url : undefined;
       const entry = dequeuePending(sessionKey, responseUrl);
+
+      // A 403 Terms of Service is not a rate limit: retrying it only burns an
+      // attempt per request. Read the body once, here, where the response is
+      // still a clone away from the stream.
+      let suspension: { reason: string; family?: "claude" | "gemini" } | null = null;
+      if (event.response?.status === 403) {
+        let errorText = "";
+        try {
+          errorText = await event.response.clone().text();
+        } catch {
+          errorText = "";
+        }
+        const reason = extractToSSuspensionReason(errorText);
+        if (reason) {
+          suspension = { reason, family: extractSuspendedFamily(errorText) };
+        }
+      }
+
       // Recorded before the `!entry` early return: after a 429 rotation the queue
       // is empty for the attempt that finally succeeds, and that success is
       // exactly the one worth counting.
@@ -880,6 +965,8 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
           const status = event.response?.status;
           if (event.response?.ok) {
             stats.recordSuccess(entry.email);
+          } else if (suspension) {
+            stats.recordError(entry.email);
           } else if (status === 429 || status === 403) {
             stats.recordRateLimit(entry.email);
           } else if (status !== 404) {
@@ -921,7 +1008,8 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
         entry.family !== undefined && entry.accountIndex !== undefined
           ? { family: entry.family, accountIndex: entry.accountIndex, modelName: entry.modelName }
           : undefined;
-      const isRateLimitedOrQuota = event.response && (event.response.status === 429 || event.response.status === 403);
+      const isRateLimitedOrQuota =
+        event.response && (event.response.status === 429 || event.response.status === 403) && !suspension;
       // A 404 on a model the pool *does* serve elsewhere is an entitlement miss,
       // not a quota event: rotate the account without putting it on cooldown.
       const isEntitlementMiss =
@@ -942,6 +1030,28 @@ export async function setupV2(context: V2Context): Promise<CleanupFunction | voi
               if (snap) {
                 snap.modelCatalog = undefined;
               }
+            }
+          } else if (suspension) {
+            mgr.markAccountSuspended(
+              meta.accountIndex,
+              suspension.reason,
+              suspension.family,
+            );
+            await persistSuspension(
+              meta.accountIndex,
+              suspension.reason,
+              suspension.family,
+            );
+            log.warn(
+              `[v2 routing] Suspension detected on idx=${meta.accountIndex}` +
+                (suspension.family ? ` for ${suspension.family}` : " (account-wide)"),
+            );
+            if (!process.env.VITEST) {
+              await updateAccountsStorage((current) => {
+                if (current.accounts.length <= 1) return;
+                const nextIdx = (meta.accountIndex + 1) % current.accounts.length;
+                current.activeIndex = nextIdx;
+              }).catch(() => {});
             }
           } else if (isRateLimitedOrQuota) {
             // Immediately mark failed account as limited in shared AccountManager & disk cache

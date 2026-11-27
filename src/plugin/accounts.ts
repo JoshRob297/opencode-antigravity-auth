@@ -202,12 +202,19 @@ export interface ManagedAccount {
   suspended?: boolean;
   suspendedAt?: number;
   suspendedReason?: string;
+  /** Model families blocked when the suspension only covers part of the account. */
+  suspendedFamilies?: ModelFamily[];
   /** Counter of consecutive high safety risk evaluations (Account Shield) */
   consecutiveHighRiskTriggers?: number;
 }
 
 function nowMs(): number {
   return Date.now();
+}
+
+/** Account-level suspension or a suspension that names this model family. */
+function isSuspendedForFamily(account: ManagedAccount, family: ModelFamily): boolean {
+  return account.suspended === true || Boolean(account.suspendedFamilies?.includes(family));
 }
 
 function clampNonNegativeInt(value: unknown, fallback: number): number {
@@ -489,6 +496,7 @@ export class AccountManager {
             suspended: acc.suspended,
             suspendedAt: acc.suspendedAt,
             suspendedReason: acc.suspendedReason,
+            suspendedFamilies: acc.suspendedFamilies,
           };
         })
         .filter((a): a is ManagedAccount => a !== null);
@@ -595,8 +603,8 @@ export class AccountManager {
     const currentIndex = this.currentAccountIndexByFamily[family];
     if (currentIndex >= 0 && currentIndex < this.accounts.length) {
       const account = this.accounts[currentIndex] ?? null;
-      // Only return account if it's enabled - disabled accounts should not be selected
-      if (account && account.enabled !== false) {
+      // Only return account if it's enabled and not suspended for this family
+      if (account && account.enabled !== false && !isSuspendedForFamily(account, family)) {
         return account;
       }
     }
@@ -650,7 +658,7 @@ export class AccountManager {
       const tokenTracker = getTokenTracker();
       
       const accountsWithMetrics: AccountWithMetrics[] = this.accounts
-        .filter(acc => acc.enabled !== false)
+        .filter(acc => acc.enabled !== false && !isSuspendedForFamily(acc, family))
         .filter(acc => !accountLacksModel(acc, model, softQuotaCacheTtlMs))
         .map(acc => {
           clearExpiredRateLimits(acc);
@@ -716,7 +724,7 @@ export class AccountManager {
   getNextForFamily(family: ModelFamily, model?: string | null, headerStyle: HeaderStyle = "antigravity", softQuotaThresholdPercent: number = 100, softQuotaCacheTtlMs: number = 10 * 60 * 1000): ManagedAccount | null {
     const available = this.accounts.filter((a) => {
       clearExpiredRateLimits(a);
-      return a.enabled !== false && 
+      return a.enabled !== false && !isSuspendedForFamily(a, family) &&
              !isRateLimitedForHeaderStyle(a, family, headerStyle, model, softQuotaCacheTtlMs) && 
              !isOverSoftQuotaThreshold(a, family, softQuotaThresholdPercent, softQuotaCacheTtlMs, model) &&
              !this.isAccountCoolingDown(a) &&
@@ -868,7 +876,7 @@ export class AccountManager {
     const current = this.getCurrentAccountForFamily(family);
     const available = this.accounts.filter((a) => {
       clearExpiredRateLimits(a);
-      return a.enabled !== false && 
+      return a.enabled !== false && !isSuspendedForFamily(a, family) &&
              !isRateLimitedForHeaderStyle(a, family, "antigravity", model) && 
              !this.isAccountCoolingDown(a);
     });
@@ -911,7 +919,7 @@ export class AccountManager {
   getFreshAccountsForQuota(quotaKey: string, family: ModelFamily, model?: string | null): ManagedAccount[] {
     return this.accounts.filter(acc => {
       clearExpiredRateLimits(acc);
-      return acc.enabled !== false &&
+      return acc.enabled !== false && !isSuspendedForFamily(acc, family) &&
              this.isFreshForQuota(acc, quotaKey) && 
              !isRateLimitedForFamily(acc, family, model) && 
              !this.isAccountCoolingDown(acc);
@@ -929,6 +937,9 @@ export class AccountManager {
 
   getAvailableHeaderStyle(account: ManagedAccount, family: ModelFamily, model?: string | null): HeaderStyle | null {
     clearExpiredRateLimits(account);
+    if (isSuspendedForFamily(account, family)) {
+      return null;
+    }
     if (!isRateLimitedForHeaderStyle(account, family, "antigravity", model)) {
       return "antigravity";
     }
@@ -977,7 +988,7 @@ export class AccountManager {
 
     // Re-enabling is the user's explicit "try this account again": drop the
     // suspension mark so the quota report stops calling it suspended.
-    if (enabled && account.suspended) {
+    if (enabled && (account.suspended || account.suspendedFamilies?.length)) {
       this.clearAccountSuspension(accountIndex, false);
     }
 
@@ -1050,15 +1061,29 @@ export class AccountManager {
    * The backend answers that for every model on the account, so retrying costs a
    * wasted attempt per request until the user appeals or re-enables it.
    */
-  markAccountSuspended(accountIndex: number, reason?: string): boolean {
+  markAccountSuspended(accountIndex: number, reason?: string, family?: ModelFamily): boolean {
     const account = this.accounts[accountIndex];
     if (!account) {
       return false;
     }
 
+    const normalizedReason = reason?.trim();
+
+    // A suspension that names one family only removes that family from the
+    // account's rotation; the account keeps serving the others. Without an
+    // explicit family the safest reading is the whole account.
+    if (family) {
+      const families = new Set(account.suspendedFamilies ?? []);
+      families.add(family);
+      account.suspendedFamilies = [...families];
+      account.suspendedAt = nowMs();
+      account.suspendedReason = normalizedReason || undefined;
+      this.requestSaveToDisk();
+      return true;
+    }
+
     account.suspended = true;
     account.suspendedAt = nowMs();
-    const normalizedReason = reason?.trim();
     account.suspendedReason = normalizedReason || undefined;
 
     if (account.enabled !== false) {
@@ -1076,12 +1101,13 @@ export class AccountManager {
       return false;
     }
 
-    const wasSuspended = account.suspended === true;
+    const wasSuspended = account.suspended === true || Boolean(account.suspendedFamilies?.length);
     const hadMetadata = account.suspendedAt !== undefined || account.suspendedReason !== undefined;
 
     account.suspended = false;
     account.suspendedAt = undefined;
     account.suspendedReason = undefined;
+    account.suspendedFamilies = undefined;
 
     if (enableAccount && wasSuspended && account.enabled === false) {
       this.setAccountEnabled(accountIndex, true);
@@ -1148,6 +1174,25 @@ export class AccountManager {
     };
     account.access = auth.access;
     account.expires = auth.expires;
+  }
+
+  /**
+   * Persists the managed project resolved by `loadCodeAssist`/onboarding so the
+   * next session does not have to resolve it again. Only call this with a real
+   * managed project id, never with the hardcoded fallback.
+   */
+  setManagedProjectId(accountIndex: number, managedProjectId: string): boolean {
+    const account = this.accounts.find((a) => a.index === accountIndex);
+    const normalized = managedProjectId.trim();
+    if (!account || !normalized) {
+      return false;
+    }
+    if (account.parts.managedProjectId === normalized) {
+      return false;
+    }
+    account.parts.managedProjectId = normalized;
+    this.requestSaveToDisk();
+    return true;
   }
 
   toAuthDetails(account: ManagedAccount): OAuthAuthDetails {
@@ -1234,6 +1279,14 @@ export class AccountManager {
             ? `verification required (${a.verificationRequiredReason || "visit accounts.google.com"})`
             : "account disabled";
         return { email: label, reason: reasonStr, waitMs: null };
+      }
+
+      if (isSuspendedForFamily(a, family)) {
+        return {
+          email: label,
+          reason: `suspended for ${family} (${a.suspendedReason || "terms of service violation"})`,
+          waitMs: null,
+        };
       }
 
       if (this.isAccountCoolingDown(a)) {
@@ -1339,6 +1392,7 @@ export class AccountManager {
         suspended: a.suspended,
         suspendedAt: a.suspendedAt,
         suspendedReason: a.suspendedReason,
+        suspendedFamilies: a.suspendedFamilies?.length ? a.suspendedFamilies : undefined,
       })),
       activeIndex: claudeIndex,
       activeIndexByFamily: {
@@ -1538,6 +1592,7 @@ export class AccountManager {
       lastUsed: a.lastUsed,
       enabled: a.enabled,
       suspended: a.suspended,
+      suspendedFamilies: a.suspendedFamilies,
     }));
   }
 

@@ -8,6 +8,8 @@ import {
   ANTIGRAVITY_CLI_VERSION_FALLBACK,
   getAntigravityCliUserAgent,
   getAntigravityCliBuild,
+  getCliVersionStatus,
+  setAntigravityCliReportedVersion,
   type HeaderSet,
 } from "./constants.ts";
 
@@ -18,6 +20,17 @@ describe("CLI client signature", () => {
     expect(getAntigravityCliUserAgent()).toBe(
       "antigravity/cli/1.5.18 (aidev_client; os_type=linux; arch=amd64; cl=1030252320; auth_method=consumer)",
     );
+  });
+
+  it("flags drift when the updater announces a version without a known build id", () => {
+    setAntigravityCliReportedVersion("9.9.9");
+    const drifted = getCliVersionStatus();
+    expect(drifted.drift).toBe(true);
+    expect(drifted.reportedVersion).toBe("9.9.9");
+
+    setAntigravityCliReportedVersion(ANTIGRAVITY_CLI_VERSION_FALLBACK);
+    expect(getCliVersionStatus().drift).toBe(false);
+    setAntigravityCliReportedVersion(null);
   });
 });
 

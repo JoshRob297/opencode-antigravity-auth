@@ -1,6 +1,6 @@
 {
   "name": "opencode-antigravity-auth",
-  "version": "2.9.14",
+  "version": "2.9.15",
   "description": "Google Antigravity IDE OAuth auth plugin for OpenCode v2 - access Gemini 4 Argon, 3.8 Flash, and Claude models using Google credentials",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -47,7 +47,8 @@
     "test:e2e:regression": "npx tsx script/test-regression.ts",
     "prepare": "npm run build",
     "bundle": "esbuild index.ts --bundle --format=esm --platform=node --target=node20 --outfile=dist/standalone.js --external:node:*",
-    "prepack": "npm run build && npm run bundle && node scripts/pack-entry.mjs"
+    "prepack": "npm run build && npm run bundle && node scripts/pack-entry.mjs",
+    "verify:live": "npx --yes tsx script/verify-live.ts"
   },
   "peerDependencies": {
     "typescript": "^5"

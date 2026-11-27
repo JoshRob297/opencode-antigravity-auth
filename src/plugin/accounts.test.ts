@@ -2082,6 +2082,50 @@ describe("AccountManager", () => {
       expect(reasons[0]?.waitMs).toBeNull();
     });
 
+    it("keeps the account usable for other families when the suspension names one", () => {
+      const stored: AccountStorageV4 = {
+        version: 4,
+        accounts: [
+          { email: "claude-blocked@example.com", refreshToken: "rb", addedAt: 1, lastUsed: 0 },
+          { email: "healthy@example.com", refreshToken: "rh", addedAt: 1, lastUsed: 0 },
+        ],
+        activeIndex: 0,
+      };
+
+      const manager = new AccountManager(undefined, stored);
+      expect(manager.markAccountSuspended(0, "Claude models are suspended", "claude")).toBe(true);
+
+      const blocked = manager.getAccounts()[0];
+      expect(blocked?.enabled).toBe(true);
+      expect(blocked?.suspended).not.toBe(true);
+      expect(blocked?.suspendedFamilies).toEqual(["claude"]);
+
+      // Claude skips it, Gemini can still use it.
+      expect(manager.getNextForFamily("claude")?.email).toBe("healthy@example.com");
+      expect(manager.getAvailableHeaderStyle(blocked!, "claude")).toBeNull();
+      expect(manager.getAvailableHeaderStyle(blocked!, "gemini")).toBe("antigravity");
+      expect(
+        manager.getAllBlockedReasons("claude").some((entry) => entry.reason.includes("suspended for claude")),
+      ).toBe(true);
+
+      // Explicit re-enable clears the family mark too.
+      expect(manager.setAccountEnabled(0, true)).toBe(true);
+      expect(manager.getAccounts()[0]?.suspendedFamilies).toBeUndefined();
+    });
+
+    it("persists a resolved managed project id on the account parts", () => {
+      const stored: AccountStorageV4 = {
+        version: 4,
+        accounts: [{ email: "a@example.com", refreshToken: "ra", addedAt: 1, lastUsed: 0 }],
+        activeIndex: 0,
+      };
+
+      const manager = new AccountManager(undefined, stored);
+      expect(manager.setManagedProjectId(0, "new-managed-project")).toBe(true);
+      expect(manager.getAccounts()[0]?.parts.managedProjectId).toBe("new-managed-project");
+      expect(manager.setManagedProjectId(0, "new-managed-project")).toBe(false);
+    });
+
     it("keeps a suspended account out of rotation even if the file says enabled", () => {
       const stored: AccountStorageV4 = {
         version: 4,

@@ -18,8 +18,11 @@ import {
   getAntigravityCliVersion,
   setAntigravityCliVersion,
   isKnownCliVersion,
+  getKnownCliVersions,
+  setAntigravityCliReportedVersion,
 } from "../constants";
 import { createLogger } from "./logger";
+import { debugLogToFile } from "./debug";
 
 const VERSION_URL = "https://antigravity-auto-updater-974169037036.us-central1.run.app";
 const CHANGELOG_URL = "https://antigravity.google/changelog";
@@ -112,8 +115,14 @@ export async function initAntigravityCliVersion(): Promise<void> {
     return;
   }
 
+  setAntigravityCliReportedVersion(version);
+
   if (!isKnownCliVersion(version)) {
-    log.info("cli-version-unknown-kept", { version, kept: fallback });
+    const known = getKnownCliVersions();
+    log.warn("cli-version-unknown-kept", { version, kept: fallback, known });
+    debugLogToFile(
+      `[version] CLI ${version} announced but its build id is unknown; keeping ${fallback}. Known pairs: ${known.join(", ")}. Add "${version}": "<cl>" to ANTIGRAVITY_CLI_BUILDS.`,
+    );
     return;
   }
 

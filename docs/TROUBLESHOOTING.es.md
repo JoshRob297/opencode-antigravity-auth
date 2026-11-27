@@ -68,6 +68,12 @@ Remove-Item "$env:USERPROFILE\.bun\install\cache\opencode-antigravity-auth*" -Re
 opencode auth login
 ```
 
+Si pasa con la última release, mira `/antigravity-stats`: imprime
+`CLI SIGNATURE: <version> | cl=<build>` y, cuando el auto-updater del CLI anuncia
+una versión cuyo build id el plugin no conoce, una nota avisando de que hay que
+actualizar la tabla. Mientras tanto el plugin sigue enviando la última pareja
+válida.
+
 ### Claude responde con bloqueo de seguridad incluso con `safety_level: "none"`
 
 `safety_level` es un control de Gemini y nunca se envía en peticiones a Claude. El backend de Antigravity ignora `safetySettings` en la línea Claude, así que Claude se filtra con el monitor propio del proveedor en la cuenta, y esa decisión no se configura desde el plugin.
@@ -307,6 +313,11 @@ Desde 2.9.13 el plugin lo detecta, saca la cuenta de la rotación, persiste
 `suspended: true` junto con `suspendedReason`, y lo reporta como `SUSPENDED` en
 `antigravity_stats`, `(suspended)` en `antigravity_quota` y `[suspended: ToS]` en
 el menú de cuentas.
+
+Si el mensaje nombra una sola familia de modelos (por ejemplo "Claude models are
+suspended"), 2.9.15 acota el bloqueo: escribe `suspendedFamilies` y la cuenta
+sigue sirviendo la otra familia. Un mensaje sin familia se trata como bloqueo de
+toda la cuenta, que es el caso observado en producción.
 
 Qué hacer:
 1. Apela con el enlace o las instrucciones que incluya el error de Google, si las hay.
