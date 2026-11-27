@@ -462,8 +462,12 @@ export function extractToSSuspensionReason(bodyText: string): string | undefined
     .split("\n")
     .map((line) => line.trim())
     .find((line) =>
+      // Wording seen in production 2026-11-25.
       /violation of terms of service/i.test(line) ||
-      /service has been disabled in this account/i.test(line),
+      /service has been disabled in this account/i.test(line) ||
+      // Account-level variants Google has used for the same block.
+      /(?:account|access)\s+(?:has been|is|was)\s+(?:disabled|suspended)/i.test(line) ||
+      /(?:disabled|suspended)\s+(?:this|the)\s+account/i.test(line),
     );
   if (!match) {
     return undefined;
@@ -2467,6 +2471,12 @@ export const createAntigravityPlugin = (providerId: string) => async (
                     shouldSwitchAccount = true;
                     break;
                   }
+
+                  // Nothing matched: keep the previous retry behaviour, but leave
+                  // the body in the debug log so a new wording is diagnosable
+                  // without a proxy capture.
+                  const bodyPreview = errorBodyText.replace(/\s+/g, " ").slice(0, 200);
+                  pushDebug(`unrecognized-403: ${bodyPreview}`);
                 }
 
                 const shouldRetryEndpoint = (
