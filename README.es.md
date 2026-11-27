@@ -226,7 +226,7 @@ que Argon. Los sufijos `-image` y `-disabled` siguen excluidos.
 
 **Esto no está validado contra un catálogo real.** La cuenta con la que se desarrolla este
 repositorio todavía no recibe Carbon: después de borrar el caché de modelos y reiniciar el
-servicio de OpenCode, el catálogo sigue respondiendo con los siete modelos de arriba — Argon
+servicio de OpenCode, el catálogo sigue respondiendo con los modelos de arriba — Argon
 presente, Carbon ausente. Tómese como *listo, no comprobado*: cuando una cuenta reciba el
 modelo debería aparecer solo, pero aquí nadie lo ha visto ocurrir.
 
