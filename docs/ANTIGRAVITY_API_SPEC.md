@@ -61,18 +61,27 @@ https://www.googleapis.com/auth/experimentsandconfigs
 
 ### Required Headers
 
+Measured 2026-11-27 against an authenticated `agy` 1.5.18: the CLI sends only
+the bearer token, JSON content type and its client signature. Anything else is
+added by the HTTP stack, not by the client.
+
 ```http
 Authorization: Bearer {access_token}
 Content-Type: application/json
-User-Agent: antigravity/1.15.8 windows/amd64
-X-Goog-Api-Client: google-cloud-sdk vscode_cloudshelleditor/0.1
-Client-Metadata: {"ideType":"ANTIGRAVITY","platform":"MACOS","pluginType":"GEMINI"}
+User-Agent: antigravity/cli/<version> (aidev_client; os_type=linux; arch=amd64; cl=<build>; auth_method=consumer)
 ```
 
-For streaming requests, also include:
+Do **not** send `x-goog-api-key`, `x-goog-user-project`, `X-Goog-Api-Client` or
+`Client-Metadata` on inference requests. The first two make the backend reject
+the request with `400 API_KEY_INVALID` / project checks, and the last two are
+artifacts of the old Electron-style client that the backend no longer expects.
+The plugin strips them defensively.
+
+For streaming requests, the plugin also sends:
 ```http
 Accept: text/event-stream
 ```
+The CLI omits it and relies on `?alt=sse`; both are accepted.
 
 ---
 
@@ -81,18 +90,36 @@ Accept: text/event-stream
 Every model is served only to the official Antigravity **CLI** signature. Requests carry:
 
 ```http
-User-Agent: antigravity/cli/<version> (aidev_client; os_type=linux; arch=amd64; cl=962369648; auth_method=consumer)
+User-Agent: antigravity/cli/<version> (aidev_client; os_type=linux; arch=amd64; cl=<build>; auth_method=consumer)
 ```
 
 The generic Electron-style UA (`Antigravity/<version> ...`) is no longer accepted. Measured 2026-11-07 on a three-account pool, for `claude-sonnet-4-6`, `claude-sonnet-5-5`, `gemini-3.8-flash` and `gemini-4-argon-*`: the generic UA returns **HTTP 200** with the body *"This version of Antigravity is no longer supported. Please download and install the latest version..."* instead of an answer. Because it is a `200` with text, it looks like a successful turn in the client, which is worse than the old `404 NOT_FOUND` those Gemini models returned in the same situation. Sending the CLI UA for the same requests returns content.
 
 The IDE-style version (`Antigravity/<version>`) is still resolved from the IDE auto-updater, but it is no longer used for content requests.
 
-`<version>` is resolved at plugin startup from the CLI auto-updater endpoint (`https://antigravity-cli-auto-updater-974169037036.us-central1.run.app`), falling back to `ANTIGRAVITY_CLI_VERSION_FALLBACK` in `src/constants.ts` when unreachable. It used to be hardcoded, which meant it silently drifted behind the real client: only the version string is spoofed, so bumping it is a one-line change once the endpoint is reachable.
+**Version and build id travel together.** `cl` is not shared across releases: each
+CLI build reports its own number. The plugin keeps one table
+(`ANTIGRAVITY_CLI_BUILDS` in `src/constants.ts`) and derives both halves from the
+same entry:
+
+| CLI version | `cl` |
+|---|---|
+| `1.5.18` | `1030252320` |
+| `1.5.17` | `4823843970351104` |
+| `1.5.14` | `1027820220` |
+| `1.5.8` | `962369648` |
+
+`<version>` is resolved at plugin startup from the CLI auto-updater endpoint
+(`https://antigravity-cli-auto-updater-974169037036.us-central1.run.app`),
+falling back to `ANTIGRAVITY_CLI_VERSION_FALLBACK` when unreachable. If the
+updater announces a version whose build id is not in the table, the plugin
+ignores it on purpose: a mismatched pair (new version, old `cl`) is a signature
+no real client emits. Update the table when a new release appears; that is the
+one-line change.
 
 Two things measured against `agy` 1.5.3 (2026-11-08) that are worth writing down before someone "fixes" them:
 
-- **Do not bump the changelist in the signature.** The 1.5.3 binary builds its own UA with `cl=1012564305`, while this plugin sends `cl=962369648`, and the backend still accepts it — a live request with the older `cl` returns content. Changing the number has no demonstrated benefit and breaks the tests that assert the signature literally.
+- **A stale `cl` is not free forever.** The 1.5.3 binary built its UA with `cl=1012564305`, and the backend accepted the older `cl=962369648` for a while, which is why the plugin sat on that pair long after it stopped being accurate. That grace is not a guarantee: every release gets a new build id, and the backend can start refusing old ones. Keep the table current (it now carries 1.5.18) and verify with a live request when you touch it.
 - **Deep-reasoning models can take longer than a minute to emit the first response header.** The 1.5.3 client retries when a request fails with `http2: timeout awaiting response headers` before any SSE chunk arrives. A fetch layer that aborts at 60 s will surface a timeout where the model was about to answer; keep the retry, or keep the timeout above the model's time-to-first-header.
 
 The web changelog is not the source of truth for this: at 2026-11-08 it documented up to 1.5.1 while 1.5.3 was already rolled out to 100% through the auto-updater. Read the updater endpoint. The IDE-style version (`Antigravity/<version>`) is resolved the same way from the IDE auto-updater endpoint.
@@ -108,6 +135,7 @@ The web changelog is not the source of truth for this: at 2026-11-08 it document
 | Gemini 3.8 Flash (Low / Medium / High) | `gemini-3.8-flash-{low,medium,high}` | Google | Verified |
 | GPT-OSS 120B Medium | `gpt-oss-120b-medium` | Other | Verified |
 | Gemini 4 (Argon) | `gemini-4-argon-{low,medium,high}` | Google | Grant is **per account**, not by plan name: measured 2026-10-31, a `free-tier` account received the real ids plus its own `Gemini 4 Argon` weekly bucket, while other accounts only get `gemini-4-argon-disabled` (no `quotaInfo`, `404` on the real id). Requires the CLI User-Agent. Registered by `model_discovery` as one model with tier variants. |
+| Gemini 4 (Hydrogen) | `gemini-4-hydrogen-{low,medium,high}` | Google | Verified 2026-11-27: `agy` 1.5.18 serves `gemini-4-hydrogen-high` with the CLI signature, and the plugin gets `200` with `modelVersion: gemini-4-hydrogen` on the same body shape. Same per-account grant model as Argon. |
 | Claude Sonnet / Opus 5.5 | `claude-sonnet-5-5-{low,medium,high}`, `claude-opus-5-5-{low,medium,high}` | Anthropic (Vertex) | Same per-account grant. Works with the generic UA. Reports 1M context / 128k output. Free accounts answer `404`; they keep Claude 4.6 quota. |
 
 > Gemini 3.7 Flash, 3.6 Flash and 3.1 Pro were reachable from consumer plans until **2026-10-13**, when they moved to Ultra / Enterprise-only. Their backend resolvers are retained for future / Enterprise use but they are no longer registered as selectable models.
@@ -148,9 +176,13 @@ the plugin maps a model to its bucket without guessing from the name.
     "tools": [...]
   },
   "userAgent": "antigravity",
-  "requestId": "{unique_id}"
+  "requestType": "agent",
+  "requestId": "agent/{conversation_id}/{turn_epoch_ms}/{turn_id}/1"
 }
 ```
+
+`requestId` follows the CLI shape `agent/<uuid>/<epoch_ms>/<uuid>/1`. The older
+`agent-<uuid>` form is still accepted; the plugin emits the CLI form since 2.9.14.
 
 ### Contents Array (REQUIRED)
 
@@ -647,7 +679,8 @@ The following Anthropic/Vertex AI features are **NOT supported**:
     }
   },
   "userAgent": "antigravity",
-  "requestId": "agent-abc123"
+  "requestType": "agent",
+  "requestId": "agent/3f6e0c1a-8f2b-4f0e-9a53-2b1c7d4e5f60/1795798847406/bf0f4456-242d-486c-bdf4-ac60e5ed6d97/1"
 }
 ```
 
@@ -666,7 +699,7 @@ The following Anthropic/Vertex AI features are **NOT supported**:
 
 | Feature | Antigravity | Vertex AI Anthropic |
 |---------|-------------|---------------------|
-| Endpoint | `cloudcode-pa.googleapis.com` | `aiplatform.googleapis.com` |
+| Endpoint | `daily-cloudcode-pa.googleapis.com` (fallbacks: prod, sandbox) | `aiplatform.googleapis.com` |
 | Request format | Gemini-style `contents` | Anthropic `messages` |
 | `anthropic_version` | Not used | Required |
 | Model names | Simple (`claude-sonnet-4-6`) | Versioned (`claude-4-5@date`) |
@@ -677,5 +710,6 @@ The following Anthropic/Vertex AI features are **NOT supported**:
 
 ## Changelog
 
+- **2026-11-27**: Verified against an authenticated `agy` 1.5.18 capture. CLI signature moved to `1.5.18` / `cl=1030252320` with a version-to-build table, `requestId` documented in the CLI shape, headers section corrected (no `x-goog-*`/`Client-Metadata` on inference), Hydrogen added.
 - **2025-12-14**: Added function calling quirks, JSON Schema support matrix, tool name rules
 - **2025-12-13**: Initial specification based on direct API testing

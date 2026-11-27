@@ -84,6 +84,13 @@ O selecciona una cuenta de la lista y elige "Enable/Disable account".
 - Siguen apareciendo en las comprobaciones de cuota (marcadas como `[disabled]`)
 - Se pueden volver a habilitar en cualquier momento
 
+**Cuentas suspendidas (403 de Terms of Service):** cuando Google responde
+`This service has been disabled in this account for violation of Terms of Service`,
+el plugin deshabilita la cuenta, la marca como `suspended` y deja de reintentarla.
+Aparece como `SUSPENDED` en `antigravity_stats`, `(suspended)` / `USABLE no` en
+`antigravity_quota` y `[suspended: ToS]` en el menú. Volver a habilitarla limpia
+la marca; hazlo solo después de que prospere una apelación.
+
 Útil cuando:
 - Una cuenta está baneada o limitada temporalmente por un periodo prolongado
 - Quieres reservar ciertas cuentas para casos de uso específicos
@@ -145,6 +152,9 @@ Las cuentas se almacenan en `~/.config/opencode/antigravity-accounts.json`:
 | `refreshToken` | Token de refresco de OAuth (gestionado automáticamente) |
 | `projectId` | ID de proyecto de Google Cloud opcional (autodescubierto). |
 | `enabled` | Opcional. Ponlo en `false` para deshabilitar la rotación de cuentas. Por defecto es `true`. |
+| `suspended` | Lo pone el plugin tras un 403 de Terms of Service. Una cuenta suspendida queda fuera de rotación aunque `enabled` sea `true`; habilitarla explícitamente limpia la marca. |
+| `suspendedAt` | Marca de tiempo de la suspensión. |
+| `suspendedReason` | Mensaje que devolvió el backend con la suspensión. |
 | `activeIndex` | Índice de la cuenta activa actualmente |
 | `activeIndexByFamily` | Cuenta activa por familia de modelos (claude/gemini se rastrean por separado) |
 

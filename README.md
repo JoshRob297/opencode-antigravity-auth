@@ -24,9 +24,10 @@
 ### What this fork changes
 
 - **OpenCode v1 and v2 in one entrypoint.** A callable v1 factory plus native v2 `.setup()`, with models, variants, tools and slash commands registered through the v2 registries.
-- **Real Antigravity model catalog.** The curated core is Gemini 3.8 Flash, the Claude 4.6 pair and GPT-OSS 120B; anything newer that your account is granted (Gemini 4 Argon, Claude 5.5) is registered by `model_discovery` from the backend catalog, one selector entry per family with `low`/`medium`/`high` variants.
-- **Official CLI client signature.** Requests present `antigravity/cli/<version> (aidev_client; ...)`, resolved at startup from the CLI auto-updater. Without it the backend answers `404 NOT_FOUND` for the newer Gemini lines - which is also why a stale signature used to look like "preview access not enabled".
+- **Real Antigravity model catalog.** The curated core is Gemini 3.8 Flash, the Claude 4.6 pair and GPT-OSS 120B; anything newer that your account is granted (Gemini 4 Argon/Hydrogen, Claude 5.5) is registered by `model_discovery` from the backend catalog, one selector entry per family with `low`/`medium`/`high` variants.
+- **Official CLI client signature.** Requests present `antigravity/cli/<version> (aidev_client; ...)`, resolved at startup from the CLI auto-updater. Without it the backend answers `404 NOT_FOUND` for the newer Gemini lines - which is also why a stale signature used to look like "preview access not enabled". Version and build id come from one table (`1.5.18` / `cl=1030252320` today); a version whose build id is unknown is ignored instead of pairing a new version with an old `cl`.
 - **Multi-account pool with entitlement-aware rotation.** Per-account quota, health and measured model catalog; failover on `429`, `403`, transport drops and `404` misses; account cooldowns and circuit breakers so a bad account cannot poison the pool.
+- **Account-level suspension handling.** A `403 violation of Terms of Service` is not retried: the account is disabled, persisted as `suspended`, excluded from rotation, and reported as `SUSPENDED` / `(suspended)` instead of a healthy 100%.
 - **Dual-window quota reporting.** `antigravity_quota` and `/antigravity-quota` show 5h and weekly windows per model family (Gemini, Claude/GPT, Gemini 4 Argon), short reset countdowns, a truthful `USABLE` flag and the measured capabilities of each account.
 - **Thinking tiers and Claude signatures.** Tiered backend ids, thinking budgets for Claude, signature caching and recovery for interrupted tool loops.
 - **Safety controls.** Configurable `safety_level`, plus `safety_shield` to surface and rotate on Google safety telemetry.
@@ -87,6 +88,8 @@ No configuration changes are required when transitioning between OpenCode v1 and
 > - This is an unofficial tool not endorsed by Google
 > - Your account may be suspended or permanently banned
 > - You assume all risks associated with using this plugin
+>
+> When Google disables an account, the plugin stops retrying it and marks it `suspended`; see [Troubleshooting](docs/TROUBLESHOOTING.md#403-this-service-has-been-disabled-in-this-account-for-violation-of-terms-of-service).
 >
 
 </details>
@@ -198,6 +201,7 @@ complaint, which is why it stays documented for setups that ship a working one.
 | `antigravity-claude-opus-4-6-thinking` | `low`, `medium`, `high`, `max` | Claude Opus 4.6 with extended thinking; 200k context |
 | `antigravity-gpt-oss-120b-medium` | `low`, `medium`, `high` | GPT-OSS 120B, open weights |
 | `antigravity-gemini-4-argon` | `low`, `medium`, `high` | **Gemini 4 Argon** — registered by `model_discovery` when the account holds the grant |
+| `antigravity-gemini-4-hydrogen` | `low`, `medium`, `high` | **Gemini 4 Hydrogen** — discovery-registered when granted; verified 2026-11-27 with the CLI signature |
 | `antigravity-claude-sonnet-5-5` | `low`, `medium`, `high`, `max` | Claude Sonnet 5.5 — 1M context / 128k output |
 | `antigravity-claude-opus-5-5` | `low`, `medium`, `high`, `max` | Claude Opus 5.5 |
 

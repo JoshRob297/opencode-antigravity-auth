@@ -117,6 +117,7 @@ Settings for managing multiple Google accounts.
 - **Both windows** (5h and weekly) with the bar, and only the windows that family actually has - Argon prints the weekly column alone.
 - **Short reset countdown** per window (`3h 54m`, `6d 22h`), taken from the timestamp the backend declares. No full date/time clutter.
 - **`USABLE` instead of a static health score**: an account is `no · <countdown>` while any window of that family sits at `0%`, because a 5h bar with quota left cannot be used once the weekly bucket is empty. Only accounts that can actually serve the family show `yes`.
+- **Suspended accounts say so**: after a `403 violation of Terms of Service` the account prints `no · suspended` and `(suspended)` next to its name, even though the quota endpoint keeps answering. The account is out of rotation, so the numbers are informational only.
 - **Account capabilities (measured)**: models each account can reach, whether it has Gemini 4 Argon (with its remaining percentage and reset countdown), **Claude 4.6 vs Claude 5.5** separately, and whether `gemini-3.8-flash` is available. Claude quota is shared by the family, so a Free account can have Claude quota and still lack 5.5: measured 2026-10-31, `claude-sonnet-4-6` answers `200` on both Free accounts while `claude-sonnet-5-5-medium` answers `404`. Accounts that were never measured say `not measured` instead of guessing.
 
 ```
@@ -128,6 +129,7 @@ QUOTA (weekly)    RESET (weekly) USABLE          ACCOUNT
 QUOTA (5h)        RESET (5h)     QUOTA (weekly)    RESET (weekly) USABLE          ACCOUNT
 [██████████] 99%  3h 53m         [██████████] 99%  6d 22h         yes             joshuaadair.hr
 [██████████] 100% 3h 38m         [░░░░░░░░░░] 0%   11h 59m        no · 11h 59m    hrjoces22
+[██████████] 100% 4h 59m         [██████████] 100% 6d 23h         no · suspended  suspended@example (suspended)
 
 ## Account capabilities (measured)
 ACCOUNT               MODELS  GEMINI 4 ARGON      CLAUDE 4.6  CLAUDE 5.5  GEMINI 3.8 FLASH

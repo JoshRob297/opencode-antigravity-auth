@@ -27,9 +27,10 @@
 ### Qué cambia este fork
 
 - **OpenCode v1 y v2 en un solo entrypoint.** Una factory invocable de v1 más `.setup()` nativo de v2, con modelos, variantes, tools y comandos registrados por los registries de v2.
-- **Catálogo real de modelos de Antigravity.** El núcleo curado es Gemini 3.8 Flash, la pareja Claude 4.6 y GPT-OSS 120B; todo lo más nuevo que tu cuenta tenga concedido (Gemini 4 Argon, Claude 5.5) lo registra `model_discovery` desde el catálogo del backend, con una entrada por familia y variantes `low`/`medium`/`high`.
-- **Firma oficial del cliente CLI.** Las peticiones presentan `antigravity/cli/<version> (aidev_client; ...)`, resuelta al arranque desde el auto-updater del CLI. Sin ella el backend responde `404 NOT_FOUND` para las líneas nuevas de Gemini, que es también por lo que una firma vieja parecía "preview access no habilitado".
+- **Catálogo real de modelos de Antigravity.** El núcleo curado es Gemini 3.8 Flash, la pareja Claude 4.6 y GPT-OSS 120B; todo lo más nuevo que tu cuenta tenga concedido (Gemini 4 Argon/Hydrogen, Claude 5.5) lo registra `model_discovery` desde el catálogo del backend, con una entrada por familia y variantes `low`/`medium`/`high`.
+- **Firma oficial del cliente CLI.** Las peticiones presentan `antigravity/cli/<version> (aidev_client; ...)`, resuelta al arranque desde el auto-updater del CLI. Sin ella el backend responde `404 NOT_FOUND` para las líneas nuevas de Gemini, que es también por lo que una firma vieja parecía "preview access no habilitado". Versión y build id salen de una sola tabla (`1.5.18` / `cl=1030252320` hoy); una versión cuyo build no se conoce se ignora en vez de emparejar una versión nueva con un `cl` viejo.
 - **Pool multi-cuenta con rotación por entitlement.** Cuota, salud y catálogo de modelos medidos por cuenta; failover en `429`, `403`, caídas de transporte y fallos `404`; cooldowns y circuit breakers para que una cuenta mala no envenene el pool.
+- **Manejo de suspensiones a nivel de cuenta.** Un `403 violation of Terms of Service` no se reintenta: la cuenta se deshabilita, se persiste como `suspended`, sale de la rotación y se reporta como `SUSPENDED` / `(suspended)` en vez de un 100% saludable.
 - **Reporte de cuota de doble ventana.** `antigravity_quota` y `/antigravity-quota` muestran las ventanas 5h y semanal por familia (Gemini, Claude/GPT, Gemini 4 Argon), cuentas regresivas cortas, un `USABLE` veraz y las capacidades medidas de cada cuenta.
 - **Tiers de thinking y firmas de Claude.** Ids del backend con tier, presupuestos de thinking para Claude, caché de firmas y recuperación de loops de tools interrumpidos.
 - **Controles de seguridad.** `safety_level` configurable, más `safety_shield` para exponer y rotar ante telemetría de seguridad de Google.
@@ -90,6 +91,8 @@ No hace falta cambiar nada de configuración al pasar de OpenCode v1 a v2.
 > - Es una herramienta no oficial y no está respaldada por Google
 > - Tu cuenta puede ser suspendida o baneada de forma permanente
 > - Asumes todos los riesgos asociados al uso del plugin
+>
+> Cuando Google deshabilita una cuenta, el plugin deja de reintentarla y la marca como `suspended`; consulta [Solución de problemas](docs/TROUBLESHOOTING.es.md#403-this-service-has-been-disabled-in-this-account-for-violation-of-terms-of-service).
 >
 
 </details>
@@ -195,10 +198,11 @@ quejarse, por eso se queda documentado para quien tenga uno que funcione.
 | Modelo | Variantes | Descripción |
 |---|---|---|
 | `antigravity-gemini-3.8-flash` | `low`, `medium`, `high` | **Gemini 3.8 Flash** — el de por defecto; 1M de contexto |
-| `antigravity-claude-sonnet-4-6` | `low`, `medium`, `high`, `max` | Claude Sonnet 4.6 — se está retirando; las cuentas con grant ya reciben "cambia a Claude Sonnet 5.5" |
+| `antigravity-claude-sonnet-4-6` | — | Claude Sonnet 4.6 — se está retirando; las cuentas con grant ya reciben "cambia a Claude Sonnet 5.5". Sin thinking: no tiene tiers |
 | `antigravity-claude-opus-4-6-thinking` | `low`, `medium`, `high`, `max` | Claude Opus 4.6 con thinking extendido; 200k de contexto |
 | `antigravity-gpt-oss-120b-medium` | `low`, `medium`, `high` | GPT-OSS 120B, pesos abiertos |
 | `antigravity-gemini-4-argon` | `low`, `medium`, `high` | **Gemini 4 Argon** — lo registra `model_discovery` cuando la cuenta tiene el grant |
+| `antigravity-gemini-4-hydrogen` | `low`, `medium`, `high` | **Gemini 4 Hydrogen** — lo registra `model_discovery` cuando hay grant; verificado el 2026-11-27 con la firma del CLI |
 | `antigravity-claude-sonnet-5-5` | `low`, `medium`, `high`, `max` | Claude Sonnet 5.5 — 1M de contexto / 128k de salida |
 | `antigravity-claude-opus-5-5` | `low`, `medium`, `high`, `max` | Claude Opus 5.5 |
 

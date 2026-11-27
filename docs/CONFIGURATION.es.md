@@ -166,6 +166,7 @@ Los modelos descubiertos se agrupan por familia: una sola entrada en el selector
 - **Ambas ventanas** (5h y semanal) con su barra, y solo las ventanas que esa familia realmente tiene; Argon imprime únicamente la columna semanal.
 - **Cuenta regresiva corta por ventana** (`3h 54m`, `6d 22h`), tomada del timestamp que declara el backend. Sin la fecha y hora completa que solo agregaba ruido.
 - **`USABLE` en lugar de un health estático**: la cuenta aparece como `no · <cuenta regresiva>` mientras cualquier ventana de esa familia esté en `0%`, porque una barra de 5h con cuota no sirve si el bucket semanal está vacío. Solo las cuentas que realmente pueden servir esa familia muestran `yes`.
+- **Las cuentas suspendidas lo dicen**: tras un `403 violation of Terms of Service` la cuenta imprime `no · suspended` y `(suspended)` junto a su nombre, aunque el endpoint de cuota siga respondiendo. La cuenta está fuera de rotación, así que los números son solo informativos.
 - **Capacidades por cuenta (medidas)**: cuántos modelos alcanza cada cuenta, si tiene Gemini 4 Argon (con su porcentaje restante y su cuenta regresiva al reset), **Claude 4.6 y Claude 5.5 por separado**, y si `gemini-3.8-flash` está disponible. La cuota de Claude es de la familia, así que una cuenta Free puede tener cuota de Claude y no tener 5.5: medido el 2026-10-31, `claude-sonnet-4-6` responde `200` en ambas cuentas Free mientras `claude-sonnet-5-5-medium` responde `404`. Las cuentas que nunca se midieron dicen `not measured` en lugar de adivinar.
 
 ```
@@ -177,6 +178,7 @@ QUOTA (weekly)    RESET (weekly) USABLE          ACCOUNT
 QUOTA (5h)        RESET (5h)     QUOTA (weekly)    RESET (weekly) USABLE          ACCOUNT
 [██████████] 99%  3h 53m         [██████████] 99%  6d 22h         yes             joshuaadair.hr
 [██████████] 100% 3h 38m         [░░░░░░░░░░] 0%   11h 59m        no · 11h 59m    hrjoces22
+[██████████] 100% 4h 59m         [██████████] 100% 6d 23h         no · suspended  suspended@example (suspended)
 
 ## Account capabilities (measured)
 ACCOUNT               MODELS  GEMINI 4 ARGON      CLAUDE 4.6  CLAUDE 5.5  GEMINI 3.8 FLASH

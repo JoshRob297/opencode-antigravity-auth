@@ -259,7 +259,7 @@ Some MCP servers have schemas incompatible with Antigravity's strict JSON format
 
 **Symptoms:**
 - Prompts hang indefinitely (200 OK in logs but no response)
-- 403 "Permission Denied" errors even with fresh accounts
+- 403 "Permission Denied" errors even with fresh accounts (if the message mentions Terms of Service, see the dedicated section below)
 - "All accounts rate-limited" but quota looks available
 - New accounts get rate-limited immediately after adding
 
