@@ -768,6 +768,22 @@ it("removes x-api-key header", () => {
       expect(result.streaming).toBe(false);
     });
 
+    it("uses the CLI requestId shape agent/<conversation>/<ms>/<turn>/1", () => {
+      const result = prepareAntigravityRequest(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:streamGenerateContent?alt=sse",
+        { method: "POST", body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "hi" }] }] }) },
+        mockAccessToken,
+        mockProjectId,
+        undefined,
+        "antigravity",
+      );
+
+      const body = JSON.parse(result.init.body as string);
+      expect(body.requestId).toMatch(
+        /^agent\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/\d{13}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/1$/,
+      );
+    });
+
     it("does not add Claude auto-caching to wrapped request by default", () => {
       const wrappedBody = {
         project: "my-project",

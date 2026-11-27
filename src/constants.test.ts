@@ -5,8 +5,21 @@ import {
   ANTIGRAVITY_ENDPOINT_DAILY,
   ANTIGRAVITY_ENDPOINT_FALLBACKS,
   ANTIGRAVITY_ENDPOINT_PROD,
+  ANTIGRAVITY_CLI_VERSION_FALLBACK,
+  getAntigravityCliUserAgent,
+  getAntigravityCliBuild,
   type HeaderSet,
 } from "./constants.ts";
+
+describe("CLI client signature", () => {
+  it("ships the version and build id agy 1.5.18 reports", () => {
+    expect(ANTIGRAVITY_CLI_VERSION_FALLBACK).toBe("1.5.18");
+    expect(getAntigravityCliBuild()).toBe("1030252320");
+    expect(getAntigravityCliUserAgent()).toBe(
+      "antigravity/cli/1.5.18 (aidev_client; os_type=linux; arch=amd64; cl=1030252320; auth_method=consumer)",
+    );
+  });
+});
 
 describe("ANTIGRAVITY_ENDPOINT_FALLBACKS", () => {
   it("tries the daily production host first and leaves the sandbox last", () => {

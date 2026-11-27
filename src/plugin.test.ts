@@ -284,6 +284,31 @@ describe("extractToSSuspensionReason", () => {
     const body = JSON.stringify({ error: { code: 429, message: "Individual quota reached" } });
     expect(extractToSSuspensionReason(body)).toBeUndefined();
   });
+
+  it("recognizes the account-disabled wording Google has also used", () => {
+    const body = JSON.stringify({
+      error: {
+        code: 403,
+        message: "Your account has been suspended. Contact support.",
+        status: "PERMISSION_DENIED",
+      },
+    });
+
+    const reason = extractToSSuspensionReason(body);
+    expect(reason).toContain("account has been suspended");
+  });
+
+  it("does not treat a project-level IAM denial as a suspension", () => {
+    const body = JSON.stringify({
+      error: {
+        code: 403,
+        message: "Permission 'cloudaicompanion.instances.completeTask' denied on resource 'projects/rising-fact-p41fc'.",
+        status: "PERMISSION_DENIED",
+      },
+    });
+
+    expect(extractToSSuspensionReason(body)).toBeUndefined();
+  });
 });
 
 describe("verifyAccountAccess (3.3)", () => {

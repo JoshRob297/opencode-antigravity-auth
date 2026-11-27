@@ -1771,7 +1771,10 @@ export function prepareAntigravityRequest(
         if (headerStyle === "antigravity") {
           wrappedBody.requestType = "agent";
           wrappedBody.userAgent = "antigravity";
-          wrappedBody.requestId = "agent-" + crypto.randomUUID();
+          // Shape the CLI sends: `agent/<conversation>/<turn-ms>/<turn>/1`.
+          // The backend accepts the older `agent-<uuid>`, but this is the value
+          // the official client reports on every turn.
+          wrappedBody.requestId = `agent/${crypto.randomUUID()}/${Date.now()}/${crypto.randomUUID()}/1`;
         }
         if (wrappedBody.request && typeof wrappedBody.request === 'object') {
           // Use stable session ID for signature caching across multi-turn conversations

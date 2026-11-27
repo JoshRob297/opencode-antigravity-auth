@@ -90,7 +90,7 @@ export function setAntigravityVersion(version: string): void {
  * signature that the backend requires for Gemini 3.7/3.8 Flash. Kept current by
  * `initAntigravityCliVersion()`; see docs/ANTIGRAVITY_API_SPEC.md.
  */
-export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.5.17";
+export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.5.18";
 
 /**
  * Build id (`cl`) reported by each CLI version in its client signature.
@@ -101,8 +101,10 @@ export const ANTIGRAVITY_CLI_VERSION_FALLBACK = "1.5.17";
  * version than the one this plugin was written against.
  */
 const ANTIGRAVITY_CLI_BUILDS: Record<string, string> = {
-  // Build id taken from the artifact agy itself downloads:
+  // Build ids taken from the User-Agent each release sends, and cross-checked
+  // against the artifact the CLI downloads:
   // antigravity-cli/1.5.17-4823843970351104/linux-x64/cli_linux_x64.tar.gz
+  "1.5.18": "1030252320",
   "1.5.17": "4823843970351104",
   "1.5.14": "1027820220",
   "1.5.8": "962369648",
