@@ -220,7 +220,7 @@ Algunos servidores MCP tienen esquemas incompatibles con el formato JSON estrict
 
 **Síntomas:**
 - Los prompts se cuelgan indefinidamente (200 OK en los logs pero sin respuesta)
-- Errores 403 "Permission Denied" incluso con cuentas nuevas
+- Errores 403 "Permission Denied" incluso con cuentas nuevas (si el mensaje menciona Terms of Service, mira la sección dedicada más abajo)
 - "All accounts rate-limited" pero la cuota parece disponible
 - Las cuentas nuevas quedan rate-limited de inmediato al añadirlas
 
@@ -294,6 +294,25 @@ Si ves un comportamiento de rate limit inusual, compártelo en un [issue de GitH
 - Códigos de estado de los logs de depuración (403, 429, etc.)
 - Cuánto tiempo persiste el estado de rate limit
 - Número de cuentas y estrategia de selección usada
+
+---
+
+## 403 "This service has been disabled in this account for violation of Terms of Service"
+
+No es un rate limit ni el flujo de `validation_required`. Google deshabilitó la
+cuenta, así que reintentar no cambia nada: el backend responde el mismo 403 para
+todos los modelos.
+
+Desde 2.9.13 el plugin lo detecta, saca la cuenta de la rotación, persiste
+`suspended: true` junto con `suspendedReason`, y lo reporta como `SUSPENDED` en
+`antigravity_stats`, `(suspended)` en `antigravity_quota` y `[suspended: ToS]` en
+el menú de cuentas.
+
+Qué hacer:
+1. Apela con el enlace o las instrucciones que incluya el error de Google, si las hay.
+2. Sigue usando otra cuenta mientras tanto; la suspendida se salta.
+3. Si Google la reinstala, vuelve a habilitarla (menú o `enabled: true` sin
+   `suspended`); el plugin limpia la marca y la prueba de nuevo.
 
 ---
 

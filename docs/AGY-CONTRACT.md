@@ -4,6 +4,11 @@ Reverse engineering de `agy` 1.5.11 (Antigravity CLI, ELF sin símbolos,
 268.841.672 bytes) para comparar lo que envía con lo que envía este plugin, y
 documentar por qué el plugin recibía `429 RESOURCE_EXHAUSTED`.
 
+Actualizado el 2026-11-27 con una captura completa de `agy` **1.5.18**
+autenticado (cabeceras y body de `:streamGenerateContent`). Las secciones
+marcadas como medidas en esa fecha sustituyen a las de 1.5.11 donde entran en
+conflicto.
+
 Todo lo marcado **medido** viene de una captura o de una matriz de respuestas
 registrada; lo marcado **estimado** es inferencia y no debe tratarse como hecho.
 
@@ -24,8 +29,13 @@ registrada; lo marcado **estimado** es inferencia y no debe tratarse como hecho.
 `User-Agent` real, tal cual lo emite la CLI:
 
 ```
-antigravity/cli/1.5.11 (aidev_client; os_type=linux; arch=amd64; cl=1024248524; auth_method=consumer)
+antigravity/cli/1.5.18 (aidev_client; os_type=linux; arch=amd64; cl=1030252320; auth_method=consumer)
 ```
+
+Medido el 2026-11-27. El par version/build de cada release vive en una sola
+tabla (`ANTIGRAVITY_CLI_BUILDS` en `src/constants.ts`); la 1.5.11 reportaba
+`cl=1024248524`, la 1.5.18 reporta `cl=1030252320`. Una versión sin build
+conocido se ignora para no emitir una pareja que ningún cliente real manda.
 
 - No envía **ninguna** cabecera `x-goog-*` ni `x-sherlog-*` en
   `:streamGenerateContent`. Esas cadenas existen en el binario pero pertenecen a
@@ -76,6 +86,12 @@ Dos cosas que importan más de lo que parecen:
 - **Host real:** `daily-cloudcode-pa.googleapis.com`. Medido también:
   `daily-cloudcode-pa.sandbox.googleapis.com` acepta los mismos bodies, y
   `cloudcode-pa.googleapis.com` (PROD) devuelve `429` a *cualquier* body.
+
+La captura de 1.5.18 (2026-11-27) confirma las mismas seis claves
+(`project`, `requestId`, `request`, `model`, `userAgent`, `requestType`) y el
+mismo `userAgent: "antigravity"`. El modelo medido ese día fue
+`gemini-4-hydrogen-high`, con `requestId` en la forma
+`agent/<uuid>/<epoch_ms>/<uuid>/1`.
 
 ## 3. El 429 no era cuota
 
@@ -137,28 +153,34 @@ comportamiento.
 
 Implementación: `neutralizeBlockedSystemInstructionLiterals()` en
 `src/plugin/request-helpers.ts`, aplicada al final sobre todo
-`systemInstruction` en `src/plugin/request.ts:1717-1733`. La lista de literales
+`systemInstruction` en `src/plugin/request.ts`. La lista de literales
 bloqueados es una tabla explícita, para que añadir otro sea un diff de una línea.
 
-## 4. Tabla de diferencias plugin ↔ CLI
+## 4. Diferencias plugin ↔ CLI (estado 2026-11-27)
 
-Solo la nº 11 cambia el status (medido, ver §3). Las demás son reales pero se
-dejan fuera de este parche por alcance: ninguna movió `200` ↔ `429` en los
-replays de variable única.
+La tabla original comparaba `agy` 1.5.11 contra el plugin de noviembre. Estos
+puntos ya están alineados y se dejan aquí para que nadie los "redescubra":
 
-| # | Diferencia | Plugin | CLI (medido) | Efecto |
+- Host por defecto: `ANTIGRAVITY_ENDPOINT_FALLBACKS[0]` es
+  `daily-cloudcode-pa.googleapis.com`, igual que la CLI.
+- Host de cuota y verificación: usan el mismo primario (antes iban a PROD).
+- Versión y `cl` del UA: pareja `1.5.18` / `1030252320` en la tabla única.
+- `requestId`: forma `agent/<uuid>/<ms>/<uuid>/1`.
+- `Client-Metadata.platform`: el plugin ya no manda esa cabecera en
+  `loadCodeAssist`; usa `User-Agent: antigravity` a propósito porque es lo que
+  resuelve el proyecto administrado.
+- Regex de familias con tier: incluye `hydrogen`.
+
+Diferencias que siguen existiendo, ninguna con efecto medido sobre el status:
+
+| # | Diferencia | Plugin | CLI (medido 2026-11-27) | Efecto |
 | --- | --- | --- | --- | --- |
-| 1 | Host por defecto | `daily-cloudcode-pa.sandbox.googleapis.com` — `src/constants.ts:35` | `daily-cloudcode-pa.googleapis.com` | ninguno (ambos 200) |
-| 2 | Host en verificación/quota | `cloudcode-pa.googleapis.com` — `src/plugin.ts:519`, `src/plugin/quota.ts:181,207` | nunca PROD para sgen | PROD da 429 a todo body |
-| 3 | `cl` en el UA | `962369648` — `src/constants.ts:95` | `1024248524` | ninguno |
-| 4 | Versión en el UA | `1.5.8` — `src/constants.ts:88` | `1.5.11` | ninguno |
-| 5 | `requestId` | `agent-<uuid>` — `src/plugin/request.ts:1744` | `agent/<uuid>/<ms>/<uuid>/1` | ninguno |
-| 6 | `request.labels` | ausente | 9 claves (`cascade_id`, `trajectory_id`, …) | ninguno |
-| 7 | Proyecto | cacheado (`managedProjectId`) — `src/plugin/request.ts:1684` | `loadCodeAssist` → `cloudaicompanionProject` | ninguno |
-| 8 | UA en otras rutas | navegador / `"antigravity"` — `src/constants.ts:113-115`, `src/plugin/project.ts:131` | UA de CLI en todo | ninguno |
-| 9 | `Client-Metadata.platform` | linux reporta `MACOS` — `src/constants.ts:114` | — | cosmético |
-| 10 | Regex de familias con tier | falta `hydrogen` — `src/plugin/transform/model-resolver.ts:229` | — | modelo sin tier |
-| 11 | `systemInstruction` | reenvía tal cual el catálogo del harness | no aplica | **causa del 429** |
+| 1 | `request.labels` | ausente | 9 claves (`cascade_id`, `trajectory_id`, `model_enum`, …) | ninguno |
+| 2 | `Accept` / `accept-encoding` | `text/event-stream` + `gzip, deflate, br, zstd` | sin `Accept`, solo `gzip` | ninguno |
+| 3 | `request.sessionId` | solo cuando el harness da una sesión | siempre presente | ninguno |
+| 4 | UA en otras rutas | `antigravity` en `loadCodeAssist` | UA de CLI en todo | ninguno; el valor del plugin es intencional |
+| 5 | Endpoints auxiliares | no los llama | `fetchAdminControls`, `fetchUserInfo`, `listExperiments`, `writeTrajectoryAcls`, `aicode fetchConfig`, `play log` | ninguno para inferencia |
+| 6 | Origen del proyecto | `managedProjectId` cacheado, resuelto por `ensureProjectContext` | `loadCodeAssist` al arrancar | ninguno |
 
 ## 5. Verificación del arreglo
 
@@ -171,3 +193,12 @@ replays de variable única.
   y 22.048 bytes, **0** ocurrencias del literal original y **2** de la forma con
   espacio en el body grande; ambas respuestas `200 OK` con `text/event-stream`.
   Antes del parche, el body grande daba 429 de forma determinista.
+
+## 6. Verificación 2.9.14 (2026-11-27)
+
+- Firma `1.5.18` / `cl=1030252320` con el endpoint primario del CLI
+  (`daily-cloudcode-pa.googleapis.com`).
+- Peticiones vivas: `gemini-3.8-flash-high` → `200`
+  (`modelVersion: gemini-3.8-flash-n`), `gemini-4-hydrogen-high` → `200`
+  (`modelVersion: gemini-4-hydrogen`), `claude-sonnet-4-6` → `200`.
+- `requestId` emitido con la forma del CLI y aceptado por el backend.
