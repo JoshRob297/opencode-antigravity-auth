@@ -225,7 +225,7 @@ suffixes stay excluded.
 
 **This has not been validated against a live catalog.** The account this repository is
 developed against does not receive Carbon yet: after clearing the model cache and restarting
-the OpenCode service, the catalog still answers with the seven models above — Argon present,
+the OpenCode service, the catalog still answers with the models listed above — Argon present,
 Carbon absent. Treat it as *ready, unproven*: when an account is granted the model it should
 appear by itself, but nobody has watched that happen here.
 
