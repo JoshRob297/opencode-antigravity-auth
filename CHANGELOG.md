@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.9.14
+
+### Fixed
+
+- **La firma de cliente se quedo en 1.5.17.** El auto-updater de agy ya publica `1.5.18` y la
+  captura de una sesion autenticada muestra `cl=1030252320`, pero la tabla de builds no conocia esa
+  pareja, asi que el plugin seguia emitiendo la anterior. Ahora la tabla incluye
+  `1.5.18 -> 1030252320` y el fallback es esa misma version.
+- **`requestId` no tenia la forma del CLI.** Pasaba `agent-<uuid>`; el cliente oficial manda
+  `agent/<conversacion>/<ms-del-turno>/<turno>/1`. Se alinea al formato real.
+- **La deteccion de suspension dependia de dos frases exactas.** Se agregan las variantes
+  `account has been suspended` / `disabled this account`, manteniendo los 403 de IAM a nivel de
+  proyecto como reintentables. Cualquier 403 que no matchee queda en el debug log con un preview del
+  cuerpo, para diagnosticar una redaccion nueva sin proxy.
+
+### Verified
+
+- Captura viva de agy 1.5.18 autenticado: headers `host`, `user-agent`, `content-length`,
+  `authorization`, `content-type`, `accept-encoding: gzip`; sin `x-goog-api-client`, sin
+  `client-metadata` y sin `x-goog-user-project`. El plugin ya coincide en lo importante.
+- Body del CLI: `project`, `requestId`, `request`, `model`, `userAgent`, `requestType`; el plugin
+  emite las mismas claves con los mismos valores.
+- Con la firma nueva y el endpoint primario del CLI (`daily-cloudcode-pa.googleapis.com`):
+  `gemini-3.8-flash-high`, `gemini-4-hydrogen-high` y `claude-sonnet-4-6` devuelven HTTP 200.
+- Diferencia conocida y sin efecto medido: el plugin envia `Accept: text/event-stream` y un
+  `accept-encoding` mas amplio que `gzip`. No se toco para no cambiar el comportamiento de streaming.
+
 ## 2.9.13
 
 ### Fixed
