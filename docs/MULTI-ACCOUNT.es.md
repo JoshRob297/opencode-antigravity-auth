@@ -91,6 +91,11 @@ Aparece como `SUSPENDED` en `antigravity_stats`, `(suspended)` / `USABLE no` en
 `antigravity_quota` y `[suspended: ToS]` en el menú. Volver a habilitarla limpia
 la marca; hazlo solo después de que prospere una apelación.
 
+Si el mensaje nombra una sola familia ("Claude models are suspended"), el bloqueo
+se acota: `suspendedFamilies` lo registra, solo esa familia sale de rotación y la
+cuenta sigue sirviendo la otra. Un mensaje sin familia se trata como bloqueo de
+toda la cuenta.
+
 Útil cuando:
 - Una cuenta está baneada o limitada temporalmente por un periodo prolongado
 - Quieres reservar ciertas cuentas para casos de uso específicos
@@ -155,6 +160,7 @@ Las cuentas se almacenan en `~/.config/opencode/antigravity-accounts.json`:
 | `suspended` | Lo pone el plugin tras un 403 de Terms of Service. Una cuenta suspendida queda fuera de rotación aunque `enabled` sea `true`; habilitarla explícitamente limpia la marca. |
 | `suspendedAt` | Marca de tiempo de la suspensión. |
 | `suspendedReason` | Mensaje que devolvió el backend con la suspensión. |
+| `suspendedFamilies` | Familias bloqueadas por una suspensión acotada (`claude`, `gemini`). La cuenta sigue habilitada para el resto. |
 | `activeIndex` | Índice de la cuenta activa actualmente |
 | `activeIndexByFamily` | Cuenta activa por familia de modelos (claude/gemini se rastrean por separado) |
 

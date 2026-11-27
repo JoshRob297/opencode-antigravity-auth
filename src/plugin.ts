@@ -475,6 +475,37 @@ export function extractToSSuspensionReason(bodyText: string): string | undefined
   return match.slice(0, 300);
 }
 
+/**
+ * 403 signature for a suspension that only names one model family. `undefined`
+ * means the block is account-level (the observed case) and the caller must
+ * disable the whole account.
+ */
+export function extractSuspendedFamily(bodyText: string): "claude" | "gemini" | undefined {
+  if (!bodyText) {
+    return undefined;
+  }
+  const decoded = decodeEscapedText(bodyText);
+  const line = decoded
+    .split("\n")
+    .map((entry) => entry.trim())
+    .find(
+      (entry) =>
+        /\b(claude|gemini|gpt)\b/i.test(entry) &&
+        /(disabled|suspended|not available|terms of service)/i.test(entry),
+    );
+  if (!line) {
+    return undefined;
+  }
+  // GPT-OSS shares the third-party quota family with Claude.
+  if (/\b(claude|gpt)\b/i.test(line)) {
+    return "claude";
+  }
+  if (/\bgemini\b/i.test(line)) {
+    return "gemini";
+  }
+  return undefined;
+}
+
 export async function verifyAccountAccess(
   account: {
     refreshToken: string;
@@ -637,16 +668,42 @@ type VerificationStoredAccount = {
   suspended?: boolean;
   suspendedAt?: number;
   suspendedReason?: string;
+  suspendedFamilies?: Array<"claude" | "gemini">;
 };
 
 /**
  * Persists a ToS suspension in the raw storage record. Mirrors
  * `markStoredAccountVerificationRequired` so a crash right after the 403 does
  * not put the suspended account back in rotation on the next start.
+ *
+ * With a family, only that family is written and the account stays enabled.
  */
-function markStoredAccountSuspended(account: VerificationStoredAccount, reason: string): boolean {
+function markStoredAccountSuspended(
+  account: VerificationStoredAccount,
+  reason: string,
+  family?: "claude" | "gemini",
+): boolean {
   let changed = false;
   const normalizedReason = reason.trim();
+
+  if (family) {
+    const families = new Set(account.suspendedFamilies ?? []);
+    families.add(family);
+    const next = [...families];
+    if (!account.suspendedFamilies || next.length !== account.suspendedFamilies.length) {
+      account.suspendedFamilies = next;
+      changed = true;
+    }
+    if (account.suspendedAt === undefined) {
+      account.suspendedAt = Date.now();
+      changed = true;
+    }
+    if (normalizedReason && account.suspendedReason !== normalizedReason) {
+      account.suspendedReason = normalizedReason;
+      changed = true;
+    }
+    return changed;
+  }
 
   if (account.suspended !== true) {
     account.suspended = true;
@@ -658,6 +715,10 @@ function markStoredAccountSuspended(account: VerificationStoredAccount, reason: 
   }
   if (normalizedReason && account.suspendedReason !== normalizedReason) {
     account.suspendedReason = normalizedReason;
+    changed = true;
+  }
+  if (account.suspendedFamilies !== undefined) {
+    account.suspendedFamilies = undefined;
     changed = true;
   }
   if (account.enabled !== false) {
@@ -1448,7 +1509,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
         const rotated = [
           ...storage.accounts.slice(startIdx),
           ...storage.accounts.slice(0, startIdx),
-        ].filter((acc) => acc.enabled !== false && !acc.verificationRequired && !!acc.refreshToken);
+        ].filter((acc) => acc.enabled !== false && acc.suspended !== true && !acc.suspendedFamilies?.includes("gemini") && !acc.verificationRequired && !!acc.refreshToken);
 
         if (rotated.length > 0) {
           return executeSearchWithRotation(
@@ -1967,6 +2028,22 @@ export const createAntigravityPlugin = (providerId: string) => async (
               }
             }
 
+            // Persist the resolved managed project so the next session does not
+            // repeat loadCodeAssist. The hardcoded fallback is shared across
+            // accounts and must never be written as if it were theirs.
+            const resolvedManagedProjectId = projectContext.effectiveProjectId?.trim();
+            if (
+              resolvedManagedProjectId &&
+              resolvedManagedProjectId !== ANTIGRAVITY_DEFAULT_PROJECT_ID &&
+              accountManager.setManagedProjectId(account.index, resolvedManagedProjectId)
+            ) {
+              try {
+                await accountManager.saveToDisk();
+              } catch (error) {
+                log.error("Failed to persist managed project id", { error: String(error) });
+              }
+            }
+
             const runThinkingWarmup = async (
               prepared: ReturnType<typeof prepareAntigravityRequest>,
               projectId: string,
@@ -2372,11 +2449,12 @@ export const createAntigravityPlugin = (providerId: string) => async (
                   const suspensionReason = extractToSSuspensionReason(errorBodyText);
 
                   if (suspensionReason) {
-                    accountManager.markAccountSuspended(account.index, suspensionReason);
+                    const suspendedFamily = extractSuspendedFamily(errorBodyText);
+                    accountManager.markAccountSuspended(account.index, suspensionReason, suspendedFamily);
                     try {
                       const stored = await loadAccounts();
                       const target = stored?.accounts[account.index];
-                      if (stored && target && markStoredAccountSuspended(target, suspensionReason)) {
+                      if (stored && target && markStoredAccountSuspended(target, suspensionReason, suspendedFamily)) {
                         await saveAccounts(stored);
                       }
                     } catch (persistError) {
@@ -2385,14 +2463,19 @@ export const createAntigravityPlugin = (providerId: string) => async (
 
                     const label = account.email || `Account ${account.index + 1}`;
                     if (accountManager.shouldShowAccountToast(account.index, 60000)) {
+                      const scope = suspendedFamily
+                        ? `for ${suspendedFamily} models`
+                        : "on this account";
                       await showToast(
-                        `[WARN] ${label} is suspended (Terms of Service). Removed from rotation; appeal at support.google.com.`,
+                        `[WARN] ${label} is suspended ${scope} (Terms of Service). Removed from that rotation; appeal at support.google.com.`,
                         "warning",
                       );
                       accountManager.markToastShown(account.index);
                     }
 
-                    pushDebug(`tos-suspension: disabled account ${account.index} (${suspensionReason})`);
+                    pushDebug(
+                      `tos-suspension: ${suspendedFamily ? `${suspendedFamily} family` : "account"} disabled for ${account.index} (${suspensionReason})`,
+                    );
                     getHealthTracker().recordFailure(account.index);
 
                     lastFailure = createFailureContext(response);
@@ -2840,6 +2923,7 @@ export const createAntigravityPlugin = (providerId: string) => async (
                     enabled: acc.enabled !== false,
                     suspended: acc.suspended === true,
                     suspendedReason: acc.suspendedReason,
+                    suspendedFamilies: acc.suspendedFamilies,
                   };
                 });
                 
@@ -2854,9 +2938,11 @@ export const createAntigravityPlugin = (providerId: string) => async (
                     const label = res.email || `Account ${res.index + 1}`;
                     const disabledStr = res.suspended
                       ? " (suspended: Terms of Service)"
-                      : res.disabled
-                        ? " (disabled)"
-                        : "";
+                      : res.suspendedFamilies?.length
+                        ? ` (suspended: ${res.suspendedFamilies.join(", ")})`
+                        : res.disabled
+                          ? " (disabled)"
+                          : "";
                     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
                     console.log(`  ${label}${disabledStr}`);
                     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);

@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.9.15
+
+### Added
+
+- **Aviso de drift de la firma del CLI.** `antigravity_stats` imprime ahora
+  `CLI SIGNATURE: <version> | cl=<build>` y, cuando el auto-updater anuncia una
+  version cuyo build id no esta en la tabla, agrega `updater reports X; add its
+  build id to ANTIGRAVITY_CLI_BUILDS`. Tambien queda un `warn` y una linea en el
+  debug log. Antes el desfase era invisible: el plugin seguia emitiendo la pareja
+  vieja sin decir nada.
+- **Suspension acotada por familia.** Si el 403 nombra una familia ("Claude models
+  are suspended"), el plugin escribe `suspendedFamilies` y saca solo esa familia de
+  rotacion; la cuenta sigue sirviendo la otra. Sin familia explicita se mantiene el
+  comportamiento conservador: cuenta completa deshabilitada. El reporte de cuota
+  muestra `(suspended: claude)` y el menu `[suspended: claude]`.
+- **Prueba de humo viva.** `script/verify-live.ts` (`npm run verify:live`) refresca
+  el token de las cuentas reales, resuelve el proyecto y comprueba la firma actual
+  contra el backend. Un `404` se trata como "sin entitlement"; `401`/`403`/`5xx`
+  fallan. Manual, nunca en CI.
+- **Test de contrato en CI.** `src/plugin/contract.test.ts` fija las seis claves del
+  body, la forma de `requestId`, el UA firmado y la ausencia de
+  `x-goog-api-key`/`x-goog-user-project`/`x-goog-api-client`/`client-metadata`.
+
+### Fixed
+
+- **El proyecto administrado resuelto no se guardaba.** `ensureProjectContext`
+  devolvia `aicode-consumers` en memoria, pero el JSON de la cuenta seguia con
+  `managedProjectId: null`, asi que cada sesion volvia a llamar `loadCodeAssist`.
+  Ahora se persiste en la cuenta (nunca el fallback compartido) y se guarda a disco.
+
+### Verified
+
+- `npm run verify:live` sobre `florecitadelcampo.gtz`: `gemini-3.8-flash-high` 200,
+  `gemini-4-hydrogen-high` 200, `claude-sonnet-4-6` 200.
+- Tests: 53 suites, 1,268 pass, 25 todo.
+
 ## 2.9.14
 
 ### Fixed

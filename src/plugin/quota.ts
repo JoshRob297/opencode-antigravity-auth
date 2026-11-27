@@ -66,6 +66,8 @@ export interface AccountQuotaResult {
   disabled?: boolean;
   /** 403 Terms of Service suspension: the account cannot serve inference at all. */
   suspended?: boolean;
+  /** Families blocked when the suspension only covers part of the account. */
+  suspendedFamilies?: Array<"claude" | "gemini">;
   groups?: GroupQuotaDisplay[];
   models?: ModelQuotaDisplay[];
   cachedQuota?: Partial<Record<QuotaGroup, QuotaGroupSummary>>;
@@ -268,6 +270,7 @@ export async function fetchAccountQuotaDetails(
 ): Promise<AccountQuotaResult> {
   const disabled = account.enabled === false;
   const suspended = account.suspended === true;
+  const suspendedFamilies = account.suspendedFamilies;
   let auth = buildAuthFromAccount(account);
   const now = Date.now();
 
@@ -367,6 +370,7 @@ export async function fetchAccountQuotaDetails(
           status: disabled ? "disabled" : "ok",
           disabled,
           suspended,
+          suspendedFamilies,
           groups,
           cachedQuota,
           modelCatalog: account.modelCatalog,
@@ -386,6 +390,7 @@ export async function fetchAccountQuotaDetails(
         status: disabled ? "disabled" : "ok",
         disabled,
         suspended,
+        suspendedFamilies,
         models: [],
         modelCatalog: account.modelCatalog,
         updatedAccount,
@@ -520,6 +525,7 @@ export async function fetchAccountQuotaDetails(
       status: disabled ? "disabled" : "ok",
       disabled,
       suspended,
+      suspendedFamilies,
       groups: groups.length > 0 ? groups : undefined,
       models,
       cachedQuota,
@@ -737,10 +743,18 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
           const email = result.email || `account-${result.index + 1}`;
           const five = formatBucketCells(group?.fiveHour);
           const week = formatBucketCells(group?.weekly);
-          const usability = result.suspended
+          const family = kind === "claude" ? "claude" : "gemini";
+          const familySuspended = result.suspendedFamilies?.includes(family) === true;
+          const usability = result.suspended || familySuspended
             ? { usable: "no · suspended".padEnd(16, " "), sortKey: 0 }
             : formatUsabilityCells(group);
-          const suffix = result.suspended ? " (suspended)" : result.disabled ? " (disabled)" : "";
+          const suffix = result.suspended
+            ? " (suspended)"
+            : result.disabled
+              ? " (disabled)"
+              : result.suspendedFamilies?.length
+                ? ` (suspended: ${result.suspendedFamilies.join(", ")})`
+                : "";
           const name = `${shortEmail(email)}${suffix}`;
           let line = "";
           if (showFiveHour) line += `${five.quota}${five.reset}`;
@@ -755,7 +769,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
     }
   } else {
     // Fallback model list format (accounts whose summary endpoint is unavailable).
-    const familyMap = new Map<string, Map<string, { percentage: number; resetIn: string; disabled?: boolean; suspended?: boolean }>>();
+    const familyMap = new Map<string, Map<string, { percentage: number; resetIn: string; disabled?: boolean; suspended?: boolean; suspendedFamilies?: Array<"claude" | "gemini"> }>>();
 
     for (const result of results) {
       if (result.status === "error" || !result.models) {
@@ -783,6 +797,7 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
             resetIn: model.timeUntilResetFormatted,
             disabled: result.disabled,
             suspended: result.suspended,
+            suspendedFamilies: result.suspendedFamilies,
           });
         }
       }
@@ -795,7 +810,16 @@ export function formatQuotaReportMarkdown(results: AccountQuotaResult[]): string
 
       const accountsList = Array.from(accountMap.entries()).map(([email, info]) => ({ email, ...info }));
       for (const acc of accountsList.sort((a, b) => b.percentage - a.percentage)) {
-        output += `${progressBar(acc.percentage).padEnd(18, " ")}${acc.resetIn.padEnd(15, " ")}${shortEmail(acc.email)}${acc.suspended ? " (suspended)" : acc.disabled ? " (disabled)" : ""}\n`;
+        const family = /claude|gpt/i.test(familyName) ? "claude" : "gemini";
+        const familySuspended = acc.suspendedFamilies?.includes(family) === true;
+        const suffix = acc.suspended || familySuspended
+          ? " (suspended)"
+          : acc.disabled
+            ? " (disabled)"
+            : acc.suspendedFamilies?.length
+              ? ` (suspended: ${acc.suspendedFamilies.join(", ")})`
+              : "";
+        output += `${progressBar(acc.percentage).padEnd(18, " ")}${acc.resetIn.padEnd(15, " ")}${shortEmail(acc.email)}${suffix}\n`;
       }
       output += "```\n";
     }

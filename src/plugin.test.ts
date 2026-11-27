@@ -126,7 +126,7 @@ vi.mock("./plugin/stats", () => ({
   },
 }));
 
-import { createAntigravityPlugin, verifyAccountAccess, extractToSSuspensionReason } from "./plugin";
+import { createAntigravityPlugin, verifyAccountAccess, extractToSSuspensionReason, extractSuspendedFamily } from "./plugin";
 
 function createMockClient() {
   return {
@@ -308,6 +308,47 @@ describe("extractToSSuspensionReason", () => {
     });
 
     expect(extractToSSuspensionReason(body)).toBeUndefined();
+  });
+});
+
+describe("extractSuspendedFamily", () => {
+  it("scopes the suspension when the message names a family", () => {
+    const body = JSON.stringify({
+      error: {
+        code: 403,
+        message: "Claude models have been suspended for this account.",
+        status: "PERMISSION_DENIED",
+      },
+    });
+
+    expect(extractSuspendedFamily(body)).toBe("claude");
+  });
+
+  it("reads gpt as the third-party (claude) family", () => {
+    const body = JSON.stringify({
+      error: { code: 403, message: "GPT models are disabled in this account." },
+    });
+
+    expect(extractSuspendedFamily(body)).toBe("claude");
+  });
+
+  it("returns undefined for an account-wide suspension", () => {
+    const body = JSON.stringify({
+      error: {
+        code: 403,
+        message: "This service has been disabled in this account for violation of Terms of Service.",
+      },
+    });
+
+    expect(extractSuspendedFamily(body)).toBeUndefined();
+  });
+
+  it("returns undefined for an IAM denial", () => {
+    const body = JSON.stringify({
+      error: { code: 403, message: "Permission 'cloudaicompanion.instances.completeTask' denied." },
+    });
+
+    expect(extractSuspendedFamily(body)).toBeUndefined();
   });
 });
 

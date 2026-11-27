@@ -115,6 +115,8 @@ const ANTIGRAVITY_CLI_BUILD_FALLBACK = ANTIGRAVITY_CLI_BUILDS[ANTIGRAVITY_CLI_VE
 let antigravityCliVersion = ANTIGRAVITY_CLI_VERSION_FALLBACK;
 let antigravityCliBuild = ANTIGRAVITY_CLI_BUILD_FALLBACK;
 let cliVersionLocked = false;
+/** Last version the auto-updater advertised, even when its pair is unknown. */
+let antigravityCliReportedVersion: string | null = null;
 
 export function getAntigravityCliVersion(): string { return antigravityCliVersion; }
 
@@ -124,6 +126,42 @@ export function getAntigravityCliBuild(): string { return antigravityCliBuild; }
 /** Whether the plugin knows the build id for a given CLI version. */
 export function isKnownCliVersion(version: string): boolean {
   return Object.prototype.hasOwnProperty.call(ANTIGRAVITY_CLI_BUILDS, version);
+}
+
+/** Versions this build can pair with a real build id. */
+export function getKnownCliVersions(): string[] {
+  return Object.keys(ANTIGRAVITY_CLI_BUILDS);
+}
+
+/**
+ * Remembers what the updater announced. `initAntigravityCliVersion()` calls this
+ * even for versions it cannot use, so the stats report can say the table is
+ * behind instead of leaving the drift invisible.
+ */
+export function setAntigravityCliReportedVersion(version: string | null): void {
+  antigravityCliReportedVersion = version;
+}
+
+export function getAntigravityCliReportedVersion(): string | null {
+  return antigravityCliReportedVersion;
+}
+
+export interface CliVersionStatus {
+  version: string;
+  build: string;
+  reportedVersion: string | null;
+  /** True when the updater advertises a version whose build id is absent. */
+  drift: boolean;
+}
+
+export function getCliVersionStatus(): CliVersionStatus {
+  const reported = antigravityCliReportedVersion;
+  return {
+    version: antigravityCliVersion,
+    build: antigravityCliBuild,
+    reportedVersion: reported,
+    drift: Boolean(reported && reported !== antigravityCliVersion),
+  };
 }
 
 export function getAntigravityCliUserAgent(): string {

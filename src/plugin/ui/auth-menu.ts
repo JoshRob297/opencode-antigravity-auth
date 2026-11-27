@@ -14,6 +14,7 @@ export interface AccountInfo {
   enabled?: boolean;
   suspended?: boolean;
   suspendedReason?: string;
+  suspendedFamilies?: Array<"claude" | "gemini">;
 }
 
 export type AuthMenuAction =
@@ -73,9 +74,12 @@ export async function showAuthMenu(accounts: AccountInfo[]): Promise<AuthMenuAct
       const disabledBadge = account.enabled === false && !account.suspended
         ? ` ${ANSI.red}[disabled]${ANSI.reset}`
         : '';
+      const familyBadge = account.suspendedFamilies?.length
+        ? ` ${ANSI.red}[suspended: ${account.suspendedFamilies.join(", ")}]${ANSI.reset}`
+        : '';
       const baseLabel = account.email || `Account ${account.index + 1}`;
       const numbered = `${account.index + 1}. ${baseLabel}`;
-      const fullLabel = `${numbered}${currentBadge}${statusBadge ? ' ' + statusBadge : ''}${disabledBadge}`;
+      const fullLabel = `${numbered}${currentBadge}${statusBadge ? ' ' + statusBadge : ''}${disabledBadge}${familyBadge}`;
 
       return {
         label: fullLabel,

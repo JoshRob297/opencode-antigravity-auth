@@ -28,7 +28,7 @@
 
 - **OpenCode v1 y v2 en un solo entrypoint.** Una factory invocable de v1 más `.setup()` nativo de v2, con modelos, variantes, tools y comandos registrados por los registries de v2.
 - **Catálogo real de modelos de Antigravity.** El núcleo curado es Gemini 3.8 Flash, la pareja Claude 4.6 y GPT-OSS 120B; todo lo más nuevo que tu cuenta tenga concedido (Gemini 4 Argon/Hydrogen, Claude 5.5) lo registra `model_discovery` desde el catálogo del backend, con una entrada por familia y variantes `low`/`medium`/`high`.
-- **Firma oficial del cliente CLI.** Las peticiones presentan `antigravity/cli/<version> (aidev_client; ...)`, resuelta al arranque desde el auto-updater del CLI. Sin ella el backend responde `404 NOT_FOUND` para las líneas nuevas de Gemini, que es también por lo que una firma vieja parecía "preview access no habilitado". Versión y build id salen de una sola tabla (`1.5.18` / `cl=1030252320` hoy); una versión cuyo build no se conoce se ignora en vez de emparejar una versión nueva con un `cl` viejo.
+- **Firma oficial del cliente CLI.** Las peticiones presentan `antigravity/cli/<version> (aidev_client; ...)`, resuelta al arranque desde el auto-updater del CLI. Sin ella el backend responde `404 NOT_FOUND` para las líneas nuevas de Gemini, que es también por lo que una firma vieja parecía "preview access no habilitado". Versión y build id salen de una sola tabla (`1.5.18` / `cl=1030252320` hoy); una versión cuyo build no se conoce se ignora en vez de emparejar una versión nueva con un `cl` viejo, y `/antigravity-stats` avisa cuando la tabla se queda atrás del CLI.
 - **Pool multi-cuenta con rotación por entitlement.** Cuota, salud y catálogo de modelos medidos por cuenta; failover en `429`, `403`, caídas de transporte y fallos `404`; cooldowns y circuit breakers para que una cuenta mala no envenene el pool.
 - **Manejo de suspensiones a nivel de cuenta.** Un `403 violation of Terms of Service` no se reintenta: la cuenta se deshabilita, se persiste como `suspended`, sale de la rotación y se reporta como `SUSPENDED` / `(suspended)` en vez de un 100% saludable.
 - **Reporte de cuota de doble ventana.** `antigravity_quota` y `/antigravity-quota` muestran las ventanas 5h y semanal por familia (Gemini, Claude/GPT, Gemini 4 Argon), cuentas regresivas cortas, un `USABLE` veraz y las capacidades medidas de cada cuenta.
@@ -146,6 +146,13 @@ OpenCode **v1 lee `plugin`, v2 lee `plugins`** — el instalador detecta cuál t
 ```bash
 git clone https://github.com/JoshRob297/opencode-antigravity-auth.git /path/to/plugin
 cd /path/to/plugin && npm install && npm run build
+```
+
+Prueba de humo viva (manual, usa tus cuentas OAuth, nunca en CI):
+
+```bash
+npm run verify:live                      # primera cuenta habilitada, 3 modelos
+npm run verify:live -- --all --model gemini-3.8-flash-high
 ```
 
 ```json
